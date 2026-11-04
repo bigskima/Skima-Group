@@ -10,7 +10,7 @@ import { radii, typography } from "../theme/tokens";
 type Workspace = "customer" | "company";
 type Step = { route: string; targetKey: string; title: string; body: string };
 type Rect = { x:number;y:number;width:number;height:number };
-type GuideContextValue = { active:boolean; startNow:(workspace:Workspace)=>void; register:(key:string,node:View|null,route:string)=>void };
+type GuideContextValue = { active:boolean; startNow:(workspace:Workspace)=>void; register:(key:string,node:View|null,route:string)=>void; registerScroller:(route:string,scroll:(target:View)=>void)=>()=>void };
 const GuideContext=createContext<GuideContextValue|null>(null);
 
 const STEPS:Record<Workspace,Step[]>={
@@ -27,7 +27,7 @@ const STEPS:Record<Workspace,Step[]>={
  ],
 };
 
-function normalizeGuideRoute(route:string|readonly string[]){
+export function normalizeGuideRoute(route:string|readonly string[]){
  const parts=(typeof route==="string"?route.split("/"):Array.from(route))
   .map((segment)=>segment.trim().replace(/^\([^/]+\)$/,""))
   .filter((segment)=>segment.length>0&&segment!=="index");
@@ -47,12 +47,18 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
  const [rect,setRect]=useState<Rect|null>(null);
  const [remind,setRemind]=useState(false);
  const targets=useRef(new Map<string,View>());
+ const scrollers=useRef(new Map<string,(target:View)=>void>());
  const steps=workspace?STEPS[workspace]:[];
  const step=steps[stepIndex]??null;
 
  const register=useCallback((key:string,node:View|null,targetRoute:string)=>{
   const mapKey=`${targetRoute}::${key}`;
   if(node)targets.current.set(mapKey,node);else targets.current.delete(mapKey);
+ },[]);
+
+ const registerScroller=useCallback((targetRoute:string,scroll:(target:View)=>void)=>{
+  scrollers.current.set(targetRoute,scroll);
+  return ()=>{if(scrollers.current.get(targetRoute)===scroll)scrollers.current.delete(targetRoute);};
  },[]);
 
  const finish=useCallback(async()=>{
@@ -90,13 +96,20 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
    else if(requiredRoute==="/workspace")router.navigate("/(provider)/workspace" as never);
    return;
   }
-  let cancelled=false;let attempt=0;let timer:ReturnType<typeof setTimeout>|null=null;
+  let cancelled=false;let attempt=0;let hasScrolled=false;let timer:ReturnType<typeof setTimeout>|null=null;
   const measure=()=>{
    timer=setTimeout(()=>{
     if(cancelled)return;
     const target=targets.current.get(`${requiredRoute}::${step.targetKey}`);
     if(!target){
      if(attempt++<16)measure();else setRect(null);
+     return;
+    }
+    const scrollTarget=scrollers.current.get(requiredRoute);
+    if(scrollTarget && !hasScrolled){
+     hasScrolled=true;
+     scrollTarget(target);
+     timer=setTimeout(()=>measure(),280);
      return;
     }
     target.measureInWindow((x,y,w,h)=>{
@@ -126,7 +139,7 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
   setActive(false);setRemind(false);setRect(null);
  };
 
- return <GuideContext.Provider value={{active,startNow,register}}>
+ return <GuideContext.Provider value={{active,startNow,register,registerScroller}}>
   {children}
   <Modal visible={active&&Boolean(step)} transparent animationType="fade" statusBarTranslucent onRequestClose={()=>setRemind(true)}>
    <View style={[styles.overlay, !rect && styles.fullDim]}>
@@ -160,6 +173,7 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
  </GuideContext.Provider>;
 }
 
+export function useOptionalLogisticsGuide(){return useContext(GuideContext);}
 export function useLogisticsGuide(){const value=useContext(GuideContext);if(!value)throw new Error("useLogisticsGuide must be used inside LogisticsGuideProvider");return value;}
 
 export function GuideTarget({targetKey,style,children}:{targetKey:string;style?:StyleProp<ViewStyle>;children:ReactNode}){

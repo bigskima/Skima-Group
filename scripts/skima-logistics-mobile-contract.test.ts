@@ -199,10 +199,14 @@ Deno.test("Authentication, deep links and app lifecycle are isolated from LPG mo
   requireText(routes, "CustomerTabs", "customer-only navigation");
 });
 
-Deno.test("Customer account keeps its preferences and sign-out controls interactive", () => {
+Deno.test("Customer account keeps preferences and browser/native sign-out interactive", () => {
   requireText(account, "<Pressable", "interactive preference rows");
   requireText(account, "void toggle()", "working appearance toggle");
-  requireText(account, "void signOut()", "working secure sign-out");
+  requireText(account, "setLogoutOpen(true)", "cross-platform sign-out confirmation");
+  requireText(account, "await signOut()", "awaited secure sign-out");
+  requireText(account, "client.clear()", "clear cached user data after sign-out");
+  requireText(session, 'signOut({ scope: "local" })', "revoke the current device session");
+  requireText(account, 'router.replace("/(auth)/sign-in"', "return to the signed-out route");
 });
 
 Deno.test("Provider workspace has separate company, opportunities and jobs routes", () => {
@@ -594,7 +598,7 @@ Deno.test("Customer and company workspaces keep phone, tablet and desktop respon
   requireText(providerNavigation, 'tabBarPosition: desktop ? "left" : "bottom"', "company desktop side navigation");
   requireText(providerWorkspace, "const desktop = width >= 720", "company workspace tablet card layout");
   requireText(home, 'width: width >= 1120 ? "31.5%" : width >= 680 ? "48.5%" : "48.5%"', "responsive customer service cards");
-  requireText(storeScreen, 'width>=1100?"23.5%":width>=700?"31.5%":"48.5%"', "responsive Store product grid");
+  requireText(storeScreen, 'width >= 1100 ? "23.5%" : width >= 700 ? "31.5%" : "48.5%"', "responsive Store product grid");
 });
 
 Deno.test("Logistics notification inbox is Store/Logistics-scoped and company invites are accepted in app", () => {

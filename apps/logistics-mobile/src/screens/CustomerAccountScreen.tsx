@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { ChevronRight, CircleHelp, LogOut, MailCheck, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,9 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
   const client = useQueryClient();
   const [invitationNotice, setInvitationNotice] = useState<string | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const invitations = useLogisticsQuery(["my-logistics-invitations"], "/runtime/organization-invitations", true, 60_000);
   const driverProfile = useLogisticsRecordQuery(["my-driver-profile"], "/runtime/logistics/driver/profile", true);
   const pendingInvitations = useMemo(() => {
@@ -60,6 +63,22 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
     },
     onError: (cause) => setInvitationError(cause instanceof Error ? cause.message : "The invitation response could not be completed."),
   });
+  const confirmSignOut = async () => {
+    if (logoutPending) return;
+    setLogoutPending(true);
+    setLogoutError(null);
+    try {
+      await signOut();
+      await client.cancelQueries();
+      client.clear();
+      setLogoutOpen(false);
+      router.replace("/(auth)/sign-in" as never);
+    } catch (cause) {
+      setLogoutError(cause instanceof Error ? cause.message : "Sign out could not be completed. Please try again.");
+    } finally {
+      setLogoutPending(false);
+    }
+  };
   const name = context?.profile?.display_name ?? (typeof session?.user.user_metadata?.display_name === "string" ? session.user.user_metadata.display_name : "SKIMA customer");
   const email = session?.user.email ?? "Signed-in account";
   return (
@@ -164,11 +183,57 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
         <Text style={[styles.securityCopy, { color: palette.muted }]}>Your account is secured through SKIMA authentication. Job and payment details are shared only with the participants authorised to see them.</Text>
       </Card>
 
-      <AppButton label="Sign out" variant="secondary" fullWidth icon={<LogOut color={palette.ink} size={16} />} onPress={() => Alert.alert("Sign out?", "You can sign back in at any time.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign out", style: "destructive", onPress: () => { void signOut().then(() => router.replace("/(auth)/sign-in" as never)); } },
-      ])} />
+      <AppButton
+        label="Sign out"
+        variant="secondary"
+        fullWidth
+        icon={<LogOut color={palette.ink} size={16} />}
+        onPress={() => { setLogoutError(null); setLogoutOpen(true); }}
+      />
       <Text style={[styles.version, { color: palette.muted }]}>SKIMA Logistics · {workspace === "customer" ? "Customer app" : workspace === "driver" ? "Driver workspace" : "Company workspace"}</Text>
+      <Modal
+        visible={logoutOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => { if (!logoutPending) setLogoutOpen(false); }}
+      >
+        <View style={styles.logoutOverlay}>
+          <View style={[styles.logoutDialog, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.logoutIcon, { backgroundColor: palette.dangerSoft }]}>
+              <LogOut color={palette.danger} size={22} />
+            </View>
+            <Text style={[styles.logoutTitle, { color: palette.ink }]}>Sign out of SKIMA Logistics?</Text>
+            <Text style={[styles.logoutBody, { color: palette.muted }]}>
+              This will securely sign out this device. You can sign in again at any time.
+            </Text>
+            {logoutError ? (
+              <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{logoutError}</Text>
+            ) : null}
+            <View style={styles.logoutActions}>
+              <View style={styles.logoutAction}>
+                <AppButton
+                  label="Cancel"
+                  fullWidth
+                  variant="secondary"
+                  disabled={logoutPending}
+                  onPress={() => setLogoutOpen(false)}
+                />
+              </View>
+              <View style={styles.logoutAction}>
+                <AppButton
+                  label="Sign out"
+                  fullWidth
+                  variant="danger"
+                  loading={logoutPending}
+                  disabled={logoutPending}
+                  onPress={() => void confirmSignOut()}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -221,4 +286,11 @@ const styles = StyleSheet.create({
   securityTitle: { ...typography.bodyStrong, fontSize: 13 },
   securityCopy: { ...typography.caption, lineHeight: 18, fontSize: 10 },
   version: { ...typography.caption, fontSize: 9, textAlign: "center" },
+  logoutOverlay: { flex: 1, justifyContent: "center", alignItems: "center", padding: 22, backgroundColor: "rgba(0,0,0,.58)" },
+  logoutDialog: { width: "100%", maxWidth: 420, borderWidth: StyleSheet.hairlineWidth, borderRadius: 24, padding: 22, alignItems: "center", gap: 12 },
+  logoutIcon: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  logoutTitle: { ...typography.heading, fontSize: 18, textAlign: "center" },
+  logoutBody: { ...typography.caption, lineHeight: 18, textAlign: "center" },
+  logoutActions: { width: "100%", flexDirection: "row", gap: 9, marginTop: 4 },
+  logoutAction: { flex: 1 },
 });

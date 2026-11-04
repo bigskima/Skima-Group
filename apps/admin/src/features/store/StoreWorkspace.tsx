@@ -213,10 +213,13 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       if (mediaFiles.some((file) => !file.type.startsWith("image/") && !file.type.startsWith("video/"))) throw new Error("Store media must be an image or video file.");
       if (mediaFiles.some((file) => file.size <= 0 || file.size > 50 * 1024 * 1024)) throw new Error("Each Store photo or video must be no larger than 50 MB.");
 
+      const itemKey = editingItem
+        ? catalogText(editingItem, "key") || catalogText(editingItem, "item_key") || catalogText(editingItem, "itemKey") || `store.item.${catalogSlug(productName)}`
+        : `store.item.${catalogSlug(productName)}.${Date.now()}`;
       let result: Record<string, unknown>;
       if (editingItem) {
         result = await api.post("/runtime/storefront/products", {
-          operation: "update", itemId: catalogText(editingItem, "id"),
+          operation: "update", itemId: catalogText(editingItem, "id"), itemKey,
           displayName: productName.trim(), description: description.trim(), categoryKey, categoryName: categoryName.trim() || "General",
           amount: parsedAmount, compareAtAmount: parsedCompareAt, stockQuantity: parsedStock,
           status: listingStatus,
@@ -228,7 +231,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         result = await api.post("/runtime/storefront/products", {
           displayName: productName.trim(), description: description.trim(),
           categoryKey: catalogSlug(categoryKey) ? categoryKey : "store.category.general",
-          categoryName: categoryName.trim() || "General", itemKey: `store.item.${slug}.${Date.now()}`,
+          categoryName: categoryName.trim() || "General", itemKey,
           amount: parsedAmount, compareAtAmount: parsedCompareAt, stockQuantity: parsedStock,
           status: listingStatus, idempotencyKey: createClientIdempotencyKey("admin.storefront.product"),
           metadata: { productOrigin: "skima_store_admin" },
@@ -245,6 +248,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           display_name: productName.trim(),
           description: description.trim(),
           status: listingStatus,
+          key: itemKey,
         } as CatalogRecord);
       }
       for (let index = 0; index < mediaFiles.length; index += 1) {

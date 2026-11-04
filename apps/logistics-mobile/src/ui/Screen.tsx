@@ -1,8 +1,10 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import type { PropsWithChildren, ReactElement, ReactNode } from "react";
+import { useCallback, useEffect, useRef, type PropsWithChildren, type ReactElement, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions, type RefreshControlProps } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
+import { useSegments } from "expo-router";
+import { normalizeGuideRoute, useOptionalLogisticsGuide } from "../onboarding/LogisticsGuideProvider";
 
 export function Screen({ children, title, eyebrow, subtitle, action, refreshControl, denseHeader = false }: PropsWithChildren<{
   title: string; eyebrow?: string; subtitle?: string; action?: ReactNode;
@@ -11,10 +13,36 @@ export function Screen({ children, title, eyebrow, subtitle, action, refreshCont
 }>) {
   const { palette } = useAppTheme();
   const network = useNetInfo();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const guide = useOptionalLogisticsGuide();
+  const segments = useSegments();
+  const route = normalizeGuideRoute(segments);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollOffset = useRef(0);
   const compact = width < 600;
+  const scrollTargetIntoView = useCallback((target: View) => {
+    target.measureInWindow((_x, y, _targetWidth, targetHeight) => {
+      const safeTop = 86;
+      const safeBottom = height - 250;
+      const delta = y < safeTop
+        ? y - safeTop
+        : y + targetHeight > safeBottom
+          ? y + targetHeight - safeBottom
+          : 0;
+      if (Math.abs(delta) > 14) {
+        scrollRef.current?.scrollTo({ y: Math.max(0, scrollOffset.current + delta), animated: true });
+      }
+    });
+  }, [height]);
+  useEffect(() => {
+    if (!guide) return;
+    return guide.registerScroller(route, scrollTargetIntoView);
+  }, [guide, route, scrollTargetIntoView]);
   return (
     <ScrollView
+      ref={scrollRef}
+      onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; }}
+      scrollEventThrottle={16}
       automaticallyAdjustKeyboardInsets
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="interactive"

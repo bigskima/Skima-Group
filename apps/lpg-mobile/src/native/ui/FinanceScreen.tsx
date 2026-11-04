@@ -86,7 +86,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
         <View style={styles.heroTop}>
           <View style={styles.heroCopy}>
             <Text style={styles.heroEyebrow}>AVAILABLE TO WITHDRAW</Text>
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.heroAmount}>{money(available, currency)}</Text>
+            <Text adjustsFontSizeToFit minimumFontScale={0.5} maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.heroAmount}>{money(available, currency)}</Text>
           </View>
           <View style={styles.heroIcon}><WalletCards color="#FFFFFF" size={27} /></View>
         </View>
@@ -269,7 +269,7 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 
 function money(value: number, currency: string) {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
+    return new Intl.NumberFormat("en-NG", { style: "currency", currency, currencyDisplay: "narrowSymbol", maximumFractionDigits: 2 }).format(value);
   } catch {
     return `${currency} ${value.toFixed(2)}`;
   }
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
   heroCopy: { flex: 1 },
   heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 9 },
-  heroAmount: { color: "#FFFFFF", fontSize: 37, lineHeight: 44, fontWeight: "900", letterSpacing: -1, marginTop: 5 },
+  heroAmount: { color: "#FFFFFF", fontSize: 31, lineHeight: 38, fontWeight: "900", letterSpacing: -0.75, marginTop: 4, flexShrink: 1 },
   heroIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
   heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
