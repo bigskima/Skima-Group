@@ -260,11 +260,11 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           displayOrder: (media.data ?? []).filter((entry) => catalogText(entry, "item_id") === itemId).length + index,
           status: "active", idempotencyKey: `${key}:attach`,
           metadata: { mediaType: contentType.startsWith("video/") ? "video" : "image", originalFileName: file.name },
-        }, StoreProductSchema);
+        }, StoreSettingsSchema);
         await api.post("/runtime/storefront/media/approve", {
           itemId,
           mediaAssetId: assetId,
-        }, StoreProductSchema);
+        }, StoreSettingsSchema);
       }
       return result;
     },
