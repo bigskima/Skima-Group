@@ -243,7 +243,7 @@ export function LogisticsCompanyApplicationPanel({
         payload: nextPayload,
         idempotencyKey: createClientIdempotencyKey(
           "logistics.company.application.update",
-          `${applicationId}:${activeVersion}:${fullName}:${registrationStatus}`,
+          `${applicationId}:${activeVersion}:${Date.now()}`,
         ),
         metadata: {
           productModule: "logistics_network",
