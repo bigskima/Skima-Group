@@ -51,7 +51,7 @@ export function LogisticsCompanyApplicationPanel({
   registrationStatus: RegistrationStatus;
 }) {
   const { palette } = useAppTheme();
-  const { api, session } = useSession();
+  const { api, session, supabase } = useSession();
   const client = useQueryClient();
   const types = useLogisticsQuery(["application-types"], "/runtime/application-types", true, 120_000);
   const applications = useLogisticsQuery(["applications"], "/runtime/applications", true, 30_000);
@@ -124,7 +124,7 @@ export function LogisticsCompanyApplicationPanel({
     queryKey: ["logistics-company-policy", applicationId ?? "none"],
     enabled: Boolean(applicationId) && Boolean(session?.user.id),
     queryFn: async () => {
-      const { data, error: policyError } = await session!.supabase.rpc("read_current_policy", {
+      const { data, error: policyError } = await supabase.rpc("read_current_policy", {
         target_policy_key: "policy.partner.participation",
       });
       if (policyError) throw policyError;
@@ -136,7 +136,7 @@ export function LogisticsCompanyApplicationPanel({
     queryKey: ["logistics-company-policy-accepted", applicationId ?? "none"],
     enabled: Boolean(applicationId) && Boolean(session?.user.id),
     queryFn: async () => {
-      const { data, error: acceptanceError } = await session!.supabase.rpc("has_accepted_current_policy", {
+      const { data, error: acceptanceError } = await supabase.rpc("has_accepted_current_policy", {
         target_policy_key: "policy.partner.participation",
         target_application_id: applicationId,
       });
@@ -342,7 +342,7 @@ export function LogisticsCompanyApplicationPanel({
       if (!applicationId || !versionId || !statement || !policyConfirmed) {
         throw new Error("Open the current partner terms and confirm that you agree before continuing.");
       }
-      const { data, error: acceptanceError } = await session!.supabase.rpc("accept_policy", {
+      const { data, error: acceptanceError } = await supabase.rpc("accept_policy", {
         target_policy_key: "policy.partner.participation",
         target_policy_version_id: versionId,
         target_application_id: applicationId,
