@@ -40,6 +40,8 @@ export function CustomerTabs() {
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <UserRound color={String(color)} size={size} /> }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="wallet" options={{ href: null }} />
+      <Tabs.Screen name="wallet/top-up" options={{ href: null }} />
+      <Tabs.Screen name="wallet/withdraw" options={{ href: null }} />
       <Tabs.Screen name="store" options={{ href: null }} />
       <Tabs.Screen name="jobs/[id]" options={{ href: null }} />
       <Tabs.Screen name="bookings/[id]" options={{ href: null }} />

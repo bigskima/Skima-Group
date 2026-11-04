@@ -40,10 +40,6 @@ on:
     paths: *build_paths
   workflow_dispatch:
 
-concurrency:
-  group: production-build-gate-${{ github.event.pull_request.head.ref || github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
