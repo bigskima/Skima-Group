@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store, X } from "lucide-react-native";
-import { Alert, ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Alert, ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { z } from "zod";
 import { useLogisticsQuery, asString, asNumber } from "../api/logistics";
 import { useLogisticsStorefrontData } from "../api/store";
@@ -15,7 +15,8 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
 
 type CartLine = { itemId: string; variantId: string | null; name: string; variantName: string | null; quantity: number; unitAmount: number; currencyCode: string };
-type Product = { item: Record<string, unknown>; id: string; variantId: string | null; name: string; variantName: string | null; description: string | null; amount: number; compareAtAmount: number | null; currency: string; stock: number | null; imageAssetId: string | null };
+type ProductMedia = { assetId: string; mediaType: "image" | "video"; displayOrder: number };
+type Product = { item: Record<string, unknown>; id: string; variantId: string | null; name: string; variantName: string | null; description: string | null; amount: number; compareAtAmount: number | null; currency: string; stock: number | null; imageAssetId: string | null; media: ProductMedia[] };
 const OrderSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
 const MediaReadSchema = z.object({ assetId:z.string(), contentType:z.string().nullable(), expiresInSeconds:z.number().positive(), signedUrl:z.string().url() });
 const money = (amount: number, currency: string) => new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
@@ -27,13 +28,6 @@ const effective = (value: Record<string, unknown>, now: number) => {
   return (from === null || !Number.isFinite(from) || from <= now) && (until === null || !Number.isFinite(until) || until > now);
 };
 const metadataValue = (value: Record<string, unknown>, key: string) => record(value.metadata)[key];
-const distanceKm = (aLat: number, aLng: number, bLat: number, bLng: number) => {
-  const rad = (degree: number) => degree * Math.PI / 180;
-  const dLat = rad(bLat-aLat), dLng = rad(bLng-aLng);
-  const a = Math.sin(dLat/2)**2 + Math.cos(rad(aLat))*Math.cos(rad(bLat))*Math.sin(dLng/2)**2;
-  return 6371.0088 * 2 * Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-};
-
 export function LogisticsStoreScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
@@ -44,16 +38,34 @@ export function LogisticsStoreScreen() {
   const wallets = useLogisticsQuery(["store", "wallets"], "/runtime/wallets");
   const balances = useLogisticsQuery(["store", "wallet-balances"], "/runtime/wallet-balances");
   const locations = useLogisticsQuery(["store", "locations"], "/lpg/locations");
+  const storeOrders = useLogisticsQuery(["store", "orders"], "/runtime/storefront/orders", true, 15_000);
   const cartStorageKey = `skima:logistics:store:v1:${userId}:${asString(store.storeModule,"id")??"pending"}`;
   const [cartReady,setCartReady]=useState(false);
   const [loadedCartKey,setLoadedCartKey]=useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [fulfillment, setFulfillment] = useState<"delivery" | "pickup">("delivery");
   const [locationId, setLocationId] = useState("");
   const [note, setNote] = useState("");
   const [checkoutKey, setCheckoutKey] = useState(idempotency());
+
+  const confirmReceipt = useMutation({
+    mutationFn: async (orderId: string) => session.api.post(
+      "/runtime/storefront/orders/confirm-receipt",
+      { orderId, idempotencyKey: `logistics-store-receipt:${orderId}` },
+      z.record(z.string(), z.unknown()),
+    ),
+    onSuccess: async () => {
+      await Promise.all([
+        storeOrders.refetch(),
+        wallets.refetch(),
+        balances.refetch(),
+      ]);
+      Alert.alert("Receipt confirmed", "Your Store receipt has been recorded and the order settlement is complete.");
+    },
+  });
 
   useEffect(()=>{
     let active=true;
@@ -131,7 +143,11 @@ export function LogisticsStoreScreen() {
           name:asString(item,"display_name","name","title")??"Store item",
           variantName:variant?asString(variant,"display_name","name","label"):null,
           description:asString(item,"description"),amount,compareAtAmount:asNumber(price,"compare_at_amount"),currency,stock:remaining,
-          imageAssetId:asString((store.media.data??[]).filter((media)=>asString(media,"item_id")===itemId&&asString(media,"status")==="active").sort((left,right)=>(asNumber(left,"display_order")??0)-(asNumber(right,"display_order")??0))[0],"media_asset_id")
+          imageAssetId:asString((store.media.data??[]).filter((media)=>asString(media,"item_id")===itemId&&asString(media,"status")==="active"&&metadataValue(media,"mediaType")!=="video").sort((left,right)=>(asNumber(left,"display_order")??0)-(asNumber(right,"display_order")??0))[0],"media_asset_id"),
+          media:(store.media.data??[])
+            .filter((media)=>asString(media,"item_id")===itemId&&asString(media,"status")==="active")
+            .sort((left,right)=>(asNumber(left,"display_order")??0)-(asNumber(right,"display_order")??0))
+            .flatMap((media)=>{const assetId=asString(media,"media_asset_id");return assetId?[{assetId,mediaType:metadataValue(media,"mediaType")==="video"?"video" as const:"image" as const,displayOrder:asNumber(media,"display_order")??0}]:[]})
         });
       }
     }
@@ -142,21 +158,16 @@ export function LogisticsStoreScreen() {
   const filtered=products.filter((product)=>(category==="all" || asString(product.item,"category_id")===category) && `${product.name} ${product.variantName??""} ${product.description??""}`.toLowerCase().includes(search.trim().toLowerCase()));
   const cartTotal=cart.reduce((sum,line)=>sum+line.unitAmount*line.quantity,0);
   const cartCurrency=cart[0]?.currencyCode??currency;
-  const selectedLocation=availableLocations.find((location)=>asString(location,"id")===locationId)??null;
-  const originLat=asNumber(settings,"delivery_origin_latitude"), originLng=asNumber(settings,"delivery_origin_longitude");
-  const destLat=asNumber(selectedLocation,"latitude"), destLng=asNumber(selectedLocation,"longitude");
-  const deliveryDistance=fulfillment==="delivery" && originLat!==null && originLng!==null && destLat!==null && destLng!==null ? distanceKm(originLat,originLng,destLat,destLng) : null;
-  const radius=asNumber(settings,"delivery_radius_km");
-  const withinRadius=fulfillment==="pickup" || (deliveryDistance!==null && Number.isFinite(deliveryDistance) && radius!==null && deliveryDistance<=radius);
-  const baseFee=asNumber(settings,"delivery_base_fee_amount")??0;
-  const perKm=asNumber(settings,"delivery_per_km_fee_amount")??0;
+  const flatDeliveryFee=asNumber(settings,"delivery_base_fee_amount")??0;
+  const deliveryEtaMin=asNumber(settings,"delivery_eta_min_business_days")??2;
+  const deliveryEtaMax=asNumber(settings,"delivery_eta_max_business_days")??5;
   const freeMinimum=asNumber(settings,"free_delivery_minimum_amount");
-  const deliveryFee=fulfillment==="pickup"?0:deliveryDistance===null?null:freeMinimum!==null && cartTotal>=freeMinimum?0:Math.round((baseFee+perKm*deliveryDistance)*100)/100;
+  const deliveryFee=fulfillment==="pickup"?0:freeMinimum!==null && cartTotal>=freeMinimum?0:flatDeliveryFee;
   const minimumOrder=asNumber(settings,"minimum_order_amount")??0;
-  const total=deliveryFee===null?null:cartTotal+deliveryFee;
+  const total=cartTotal+deliveryFee;
   const walletEnough=cartCurrency===currency && total!==null && walletBalance>=total;
   const currenciesMatch=cart.every((line)=>line.currencyCode===currency);
-  const canCheckout=Boolean(settings&&cartReady&&walletId&&cart.length&&walletEnough&&currenciesMatch&&total!==null&&total>0&&cartTotal>=minimumOrder&&withinRadius&&(fulfillment==="pickup"||Boolean(locationId)));
+  const canCheckout=Boolean(settings&&cartReady&&walletId&&cart.length&&walletEnough&&currenciesMatch&&total>0&&cartTotal>=minimumOrder&&(fulfillment==="pickup"||Boolean(locationId)));
 
   const checkout=useMutation({
     mutationFn:async()=>{
@@ -174,7 +185,11 @@ export function LogisticsStoreScreen() {
       await Promise.all([wallets.refetch(),balances.refetch(),queryClient.invalidateQueries({queryKey:["skima-logistics","store"]})]);
       Alert.alert("Payment reserved",`Your SKIMA Store order ${orderId==="received"?"has been received":`(${orderId.slice(0,8).toUpperCase()}) is confirmed`}. ${money(total??cartTotal,currency)} has been reserved in SKIMA checkout escrow.`);
     },
-    onError:(error)=>Alert.alert("Checkout failed",error instanceof Error?error.message:"Please review your basket and try again.")
+    onError:(error)=>{
+      const message=error instanceof Error?error.message:"Please review your basket and try again.";
+      if(/checkout_order_closed|outside_delivery_area|delivery_coordinates_required|invalid_checkout_snapshot|insufficient_wallet_balance/i.test(message)) setCheckoutKey(idempotency());
+      Alert.alert("Checkout failed",message);
+    }
   });
 
   function add(product:Product){
@@ -197,9 +212,9 @@ export function LogisticsStoreScreen() {
         <>
           <View style={[styles.hero,{backgroundColor:palette.surface,borderColor:palette.border}]}>
         <View style={styles.heroCopy}>
-          <Text style={[styles.heroEyebrow,{color:palette.brand}]}>MORE THAN LOGISTICS</Text>
-          <Text style={[styles.heroTitle,{color:palette.ink}]}>Everyday essentials, in one place.</Text>
-          <Text style={[styles.heroBody,{color:palette.muted}]}>Shop cylinders and other products published by SKIMA. Catalogue prices and availability stay connected to the shared SKIMA Store.</Text>
+          <Text style={[styles.heroEyebrow,{color:palette.brand}]}>SKIMA STORE</Text>
+          <Text style={[styles.heroTitle,{color:palette.ink}]}>Shop essentials.</Text>
+          <Text style={[styles.heroBody,{color:palette.muted}]}>Cylinders and more, all in one store.</Text>
         </View>
         <View style={[styles.heroIcon,{backgroundColor:palette.brandSoft}]}><ShoppingBag color={palette.brand} size={29}/></View>
       </View>
@@ -226,6 +241,7 @@ export function LogisticsStoreScreen() {
               <Text style={[styles.productName,{color:palette.ink}]} numberOfLines={2}>{product.name}</Text>
               {product.variantName?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={1}>{product.variantName}</Text>:null}
               {product.description?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={2}>{product.description}</Text>:null}
+              <Pressable onPress={()=>setSelectedProduct(product)}><Text style={{color:palette.brand,fontSize:10,fontWeight:"900"}}>View product details</Text></Pressable>
               <View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(product.amount,product.currency)}</Text>{product.compareAtAmount!==null&&product.compareAtAmount>product.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(product.compareAtAmount,product.currency)}</Text>:null}</View>
               <Pressable onPress={()=>add(product)} style={[styles.add,{backgroundColor:palette.brand}]}><Plus color="#fff" size={15}/><Text style={styles.addText}>Add</Text></Pressable>
             </View>)}
@@ -238,18 +254,79 @@ export function LogisticsStoreScreen() {
               <View style={styles.options}>{allowedMethods.includes("delivery")?<Filter label="Delivery" active={fulfillment==="delivery"} onPress={()=>setFulfillment("delivery")}/>:null}{allowedMethods.includes("pickup")?<Filter label="Pickup" active={fulfillment==="pickup"} onPress={()=>setFulfillment("pickup")}/>:null}</View>
               {fulfillment==="delivery"?<View style={styles.locationChoices}><Text style={[styles.formLabel,{color:palette.ink}]}>Delivery address</Text>{availableLocations.length?availableLocations.slice(0,6).map(location=>{const id=asString(location,"id")??"";return <Pressable key={id} onPress={()=>setLocationId(id)} style={[styles.location,{borderColor:locationId===id?palette.brand:palette.border,backgroundColor:locationId===id?palette.brandSoft:palette.surface}]}><Text style={[styles.locationText,{color:palette.ink}]} numberOfLines={2}>{asString(location,"formatted_address","display_name","address")??"Saved address"}</Text></Pressable>;}) : <Text style={[styles.productDescription,{color:palette.muted}]}>Add a saved address or choose pickup.</Text>}</View>:null}
               <TextInput value={note} onChangeText={setNote} placeholder="Order note (optional)" placeholderTextColor={palette.muted} style={[styles.note,{color:palette.ink,borderColor:palette.border}]}/>
-              {fulfillment==="delivery"&&deliveryFee!==null?<Text style={[styles.productDescription,{color:palette.muted}]}>Estimated delivery: {money(deliveryFee,currency)}{deliveryDistance!==null? ` · ${deliveryDistance.toFixed(1)} km`:""}</Text>:null}
+              {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Flat delivery fee: {money(deliveryFee,currency)}</Text>:null}
+              {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Estimated delivery: {deliveryEtaMin===deliveryEtaMax?`${deliveryEtaMin} business days`:`${deliveryEtaMin}–${deliveryEtaMax} business days`} after SKIMA accepts your order and confirms it can serve your address.</Text>:null}
               <Pressable onPress={()=>router.push("/(customer)/wallet" as never)}><Text style={[styles.productDescription,{color:palette.brand,fontWeight:"800"}]}>View shared SKIMA Wallet · Add funds</Text></Pressable>
-              {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your shared SKIMA customer wallet is unavailable.</Text>:!withinRadius?<Text style={[styles.error,{color:palette.danger}]}>This address is outside the Store delivery coverage.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} customer wallet cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
+              {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your shared SKIMA customer wallet is unavailable.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} customer wallet cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
+              {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Orders are accepted nationwide in Nigeria. SKIMA Store reviews serviceability after checkout; locations we cannot serve will be cancelled and refunded.</Text>:null}
               <Pressable disabled={checkout.isPending||!cartReady||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!cartReady||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
             </>:<Text style={[styles.productDescription,{color:palette.muted}]}>Add a product to your basket to continue.</Text>}
           </View> : null}
+          <View style={styles.sectionHead}>
+            <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>Your Store orders</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>Track fulfilment and confirm receipt</Text></View>
+          </View>
+          {storeOrders.isPending ? <ScreenSkeleton cards={1}/> : storeOrders.error ? (
+            <StatePanel title="Store orders could not load" description="Refresh to check your purchase status." retry={()=>void storeOrders.refetch()}/>
+          ) : (storeOrders.data??[]).length ? (storeOrders.data??[]).slice(0,5).map(order=>{
+            const orderId=asString(order,"id")??"";
+            const status=asString(order,"status")??"received";
+            const payload=record(order.order_payload);
+            const snapshot=record(payload.store_checkout_snapshot);
+            const etaMin=asNumber(snapshot,"deliveryEtaMinBusinessDays","delivery_eta_min_business_days");
+            const etaMax=asNumber(snapshot,"deliveryEtaMaxBusinessDays","delivery_eta_max_business_days");
+            return <View key={orderId} style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
+              <View style={styles.cartHead}>
+                <Text style={[styles.cartTitle,{color:palette.ink}]}>Order {orderId.slice(0,8).toUpperCase()}</Text>
+                <Text style={[styles.productDescription,{color:palette.brand,fontWeight:"900"}]}>{status.replace(/[_-]+/g," ")}</Text>
+              </View>
+              <Text style={[styles.productDescription,{color:palette.muted}]}>
+                {fulfillmentLabel(asString(order,"fulfillment_method")??"delivery")} · {money(asNumber(order,"total_amount")??0,asString(order,"currency_code")??currency)}
+              </Text>
+              {etaMin!==null && etaMax!==null && asString(order,"status")!=="completed" ? (
+                <Text style={[styles.productDescription,{color:palette.muted}]}>
+                  Estimated delivery: {etaMin===etaMax?`${etaMin} business days`:`${etaMin}–${etaMax} business days`} after order acceptance
+                </Text>
+              ):null}
+              {status==="fulfilled" ? <Pressable disabled={confirmReceipt.isPending} onPress={()=>confirmReceipt.mutate(orderId)} style={[styles.checkout,{backgroundColor:palette.brand,opacity:confirmReceipt.isPending?0.55:1}]}>
+                {confirmReceipt.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>I have received my items</Text>}
+              </Pressable> : status==="completed" ? <Text style={[styles.productDescription,{color:palette.success,fontWeight:"800"}]}>Receipt confirmed · settlement completed</Text> : null}
+            </View>;
+          }) : <StatePanel title="No Store orders yet" description="Your Store purchases and delivery updates will appear here."/>}
+          {confirmReceipt.error ? <Text style={[styles.error,{color:palette.danger}]}>{confirmReceipt.error.message}</Text> : null}
         </>
       )}
+      <Modal transparent animationType="slide" visible={Boolean(selectedProduct)} onRequestClose={()=>setSelectedProduct(null)}>
+        <View style={styles.detailBackdrop}>
+          <View style={[styles.detailPanel,{backgroundColor:palette.surface}]}>
+            <View style={styles.detailHandle}/>
+            <View style={styles.detailHeader}>
+              <View style={{flex:1,minWidth:0}}>
+                <Text style={[styles.detailTitle,{color:palette.ink}]}>{selectedProduct?.name??"Product details"}</Text>
+                {selectedProduct?.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{selectedProduct.variantName}</Text>:null}
+              </View>
+              <Pressable onPress={()=>setSelectedProduct(null)} style={[styles.detailClose,{backgroundColor:palette.brandSoft}]}><X color={palette.ink} size={19}/></Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{gap:12,paddingBottom:12}}>
+              {selectedProduct?.media.length?(
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:9}}>
+                  {selectedProduct.media.map(media=><StoreProductMedia key={media.assetId} assetId={media.assetId} label={selectedProduct.name} isVideo={media.mediaType==="video"}/>)}
+                </ScrollView>
+              ):selectedProduct?<ProductImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/>:null}
+              {selectedProduct?.description?<Text style={[styles.detailDescription,{color:palette.muted}]}>{selectedProduct.description}</Text>:null}
+              {selectedProduct?<View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(selectedProduct.amount,selectedProduct.currency)}</Text>{selectedProduct.compareAtAmount!==null&&selectedProduct.compareAtAmount>selectedProduct.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(selectedProduct.compareAtAmount,selectedProduct.currency)}</Text>:null}</View>:null}
+              {selectedProduct?<Pressable onPress={()=>{add(selectedProduct);setSelectedProduct(null);}} style={[styles.add,{backgroundColor:palette.brand,height:44}]}><Plus color="#fff" size={16}/><Text style={styles.addText}>Add to basket</Text></Pressable>:null}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
 
+
+function fulfillmentLabel(value:string){
+ return value==="pickup"?"Customer pickup":"Delivery";
+}
 
 function isCartLine(value:unknown):value is CartLine{
  const line=record(value);
@@ -258,6 +335,23 @@ function isCartLine(value:unknown):value is CartLine{
   typeof line.quantity==="number" && Number.isInteger(line.quantity) && line.quantity>0 && line.quantity<=99 &&
   typeof line.unitAmount==="number" && Number.isFinite(line.unitAmount) && line.unitAmount>0 &&
   typeof line.currencyCode==="string";
+}
+
+function StoreProductMedia({assetId,label,isVideo}:{assetId:string;label:string;isVideo:boolean}){
+ const {palette}=useAppTheme();
+ const {session,api,status}=useSession();
+ const media=useQuery({
+  queryKey:["logistics-store-media-detail",assetId,session?.user.id??"anonymous"],
+  enabled:Boolean(isVideo&&status==="authenticated"),
+  staleTime:10*60*1000,
+  queryFn:()=>api.post("/runtime/media/read-sessions",{assetId,idempotencyKey:`logistics-store-video:${assetId}`},MediaReadSchema),
+ });
+ if(!isVideo) return <View style={{width:220}}><ProductImage assetId={assetId} label={label}/></View>;
+ return <Pressable disabled={!media.data?.signedUrl} onPress={()=>{if(media.data?.signedUrl)void Linking.openURL(media.data.signedUrl);}} style={{width:220,height:150,borderRadius:radii.md,borderWidth:1,borderColor:palette.border,backgroundColor:palette.brandSoft,alignItems:"center",justifyContent:"center",padding:12}}>
+  <ShoppingBag color={palette.brand} size={28}/>
+  <Text style={{color:palette.ink,fontSize:12,fontWeight:"900",marginTop:8}}>Watch product video</Text>
+  <Text style={{color:palette.muted,fontSize:10,marginTop:3}}>{media.isPending?"Loading video…":media.error?"Video unavailable":"Tap to play"}</Text>
+ </Pressable>;
 }
 
 function ProductImage({assetId,label}:{assetId:string|null;label:string}){
@@ -280,8 +374,8 @@ function Filter({label,active,onPress}:{label:string;active:boolean;onPress:()=>
 }
 const styles=StyleSheet.create({
  back:{flexDirection:"row",alignItems:"center",gap:7,marginBottom:5},backText:{fontSize:11,fontWeight:"800"},
-  hero:{minHeight:126,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:14,flexDirection:"row",alignItems:"center",gap:10},
-  heroCopy:{flex:1,gap:5},heroEyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1},heroTitle:{fontSize:18,lineHeight:22,fontWeight:"900"},heroBody:{fontSize:10,lineHeight:15},
+  hero:{minHeight:104,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:12,flexDirection:"row",alignItems:"center",gap:10},
+  heroCopy:{flex:1,gap:4},heroEyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1},heroTitle:{fontSize:17,lineHeight:20,fontWeight:"900"},heroBody:{fontSize:9,lineHeight:13},
   heroIcon:{width:50,height:50,borderRadius:16,alignItems:"center",justifyContent:"center"},
   sectionHead:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginTop:6},sectionTitle:{fontSize:15,fontWeight:"900"},sectionSubtitle:{fontSize:10,lineHeight:15,fontWeight:"600"},
  toolbar:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:8,flexDirection:"row",alignItems:"center",gap:8},
@@ -300,4 +394,11 @@ const styles=StyleSheet.create({
  location:{borderWidth:1,borderRadius:radii.md,padding:9},locationText:{fontSize:10,fontWeight:"700"},
  note:{minHeight:39,borderWidth:1,borderRadius:radii.md,paddingHorizontal:10,fontSize:11},error:{fontSize:10,fontWeight:"800"},
  checkout:{minHeight:43,borderRadius:radii.md,alignItems:"center",justifyContent:"center"},checkoutText:{color:"#fff",fontSize:12,fontWeight:"900"},
+ detailBackdrop:{flex:1,justifyContent:"flex-end",backgroundColor:"rgba(0,0,0,.5)"},
+ detailPanel:{maxHeight:"88%",borderTopLeftRadius:24,borderTopRightRadius:24,padding:16,gap:12},
+ detailHandle:{width:42,height:4,borderRadius:3,backgroundColor:"#A5A5AB",alignSelf:"center"},
+ detailHeader:{flexDirection:"row",alignItems:"center",gap:10},
+ detailTitle:{fontSize:18,fontWeight:"900"},
+ detailClose:{width:36,height:36,borderRadius:12,alignItems:"center",justifyContent:"center"},
+ detailDescription:{fontSize:12,lineHeight:18},
 });
