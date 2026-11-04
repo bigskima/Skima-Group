@@ -598,7 +598,7 @@ Deno.test("Customer and company workspaces keep phone, tablet and desktop respon
   requireText(providerNavigation, 'tabBarPosition: desktop ? "left" : "bottom"', "company desktop side navigation");
   requireText(providerWorkspace, "const desktop = width >= 720", "company workspace tablet card layout");
   requireText(home, 'width: width >= 1120 ? "31.5%" : width >= 680 ? "48.5%" : "48.5%"', "responsive customer service cards");
-  requireText(storeScreen, 'width>=1100?"23.5%":width>=700?"31.5%":"48.5%"', "responsive Store product grid");
+  requireText(storeScreen, 'width >= 1100 ? "23.5%" : width >= 700 ? "31.5%" : "48.5%"', "responsive Store product grid");
 });
 
 Deno.test("Logistics notification inbox is Store/Logistics-scoped and company invites are accepted in app", () => {
