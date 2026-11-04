@@ -12,7 +12,10 @@ import { Screen } from "../ui/Screen";
 import { StatePanel } from "../ui/StatePanel";
 
 const RecordSchema = z.record(z.string(), z.unknown());
-const money = (value: number, currency: string) => new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(value);
+const money = (value: number, currency: string) => {
+  try { return new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 2 }).format(value); }
+  catch { return `${currency} ${value.toFixed(2)}`; }
+};
 const nested = (value: Record<string, unknown>) => value.data && typeof value.data === "object" ? value.data as Record<string, unknown> : {};
 export function CustomerWalletTopUpScreen() {
   const { palette } = useAppTheme();
@@ -21,7 +24,7 @@ export function CustomerWalletTopUpScreen() {
   const walletIdParam = Array.isArray(params.walletId) ? params.walletId[0] : params.walletId;
   const wallets = useLogisticsQuery(["customer-wallets"], "/runtime/wallets", true, 30000);
   const balances = useLogisticsQuery(["customer-wallet-balances"], "/runtime/wallet-balances", true, 30000);
-  const wallet = (wallets.data ?? []).find(w => asString(w, "wallet_type") === "customer" && asString(w, "owner_entity_type") === "user" && asString(w, "owner_entity_id") === session?.user.id && (!walletIdParam || asString(w, "id") === walletIdParam)) ?? null;
+  const wallet = (wallets.data ?? []).find(w => asString(w, "wallet_type") === "customer" && asString(w, "owner_entity_type") === "user" && asString(w, "owner_entity_id") === session?.user.id && (!walletIdParam || asString(w, "id", "wallet_id", "walletId") === walletIdParam)) ?? null;
   const walletId = asString(wallet, "id", "wallet_id");
   const currency = asString(wallet, "currency_code") ?? "NGN";
   const balance = asNumber((balances.data ?? []).find(b => asString(b, "wallet_id") === walletId), "balance") ?? asNumber(wallet, "available_balance", "balance") ?? 0;
