@@ -140,4 +140,22 @@ export function CustomerWalletTopUpScreen() {
       </Modal>
     </>;
 }
-const styles = StyleSheet.create({ hero: { borderRadius: radii.lg, padding: 16, gap: 7 }, kicker: { color: "rgba(255,255,255,.8)", fontSize: 9, fontWeight: "900", letterSpacing: 1 }, balance: { color: "#fff", fontSize: 27, fontWeight: "900" }, hint: { color: "rgba(255,255,255,.85)", fontSize: 11 }, card: { borderWidth: 1, borderRadius: radii.lg, padding: 14, gap: 12 }, input: { height: 46, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 12, fontSize: 16 }, row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 8 }, button: { minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: radii.md }, buttonText: { color: "#fff", fontWeight: "900", fontSize: 12 } });
+const styles = StyleSheet.create({
+ hero:{borderRadius:radii.lg,padding:16,gap:7},
+ kicker:{color:"rgba(255,255,255,.8)",fontSize:9,fontWeight:"900",letterSpacing:1},
+ balance:{color:"#fff",fontSize:27,fontWeight:"900",flexShrink:1},
+ hint:{color:"rgba(255,255,255,.85)",fontSize:11},
+ card:{borderWidth:1,borderRadius:radii.lg,padding:14,gap:12},
+ input:{height:46,borderWidth:1,borderRadius:radii.md,paddingHorizontal:12,fontSize:16},
+ row:{flexDirection:"row",flexWrap:"wrap",justifyContent:"space-between",gap:8},
+ button:{minHeight:44,alignItems:"center",justifyContent:"center",borderRadius:radii.md},
+ buttonText:{color:"#fff",fontWeight:"900",fontSize:12},
+ checkoutScreen:{flex:1},
+ checkoutHeader:{minHeight:64,paddingHorizontal:16,paddingTop:42,paddingBottom:10,borderBottomWidth:StyleSheet.hairlineWidth,flexDirection:"row",alignItems:"center",gap:12},
+ close:{width:38,height:38,borderRadius:12,alignItems:"center",justifyContent:"center"},
+ checkoutAmount:{minHeight:58,margin:12,paddingHorizontal:14,paddingVertical:8,borderRadius:radii.md,borderWidth:StyleSheet.hairlineWidth,gap:2,justifyContent:"center"},
+ checkoutError:{flex:1,alignItems:"center",justifyContent:"center",padding:24,gap:10},
+ webLoading:{flex:1,alignItems:"center",justifyContent:"center",backgroundColor:"#fff"},
+ checkoutFooter:{minHeight:68,paddingHorizontal:14,paddingVertical:10,borderTopWidth:StyleSheet.hairlineWidth,flexDirection:"row",alignItems:"center",gap:10},
+ checkButton:{borderWidth:1,borderRadius:radii.md,paddingHorizontal:12,paddingVertical:10},
+});
