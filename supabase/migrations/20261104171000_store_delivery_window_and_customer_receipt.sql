@@ -133,7 +133,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   settings_id uuid;
   delivery_window_id uuid;
@@ -180,7 +180,7 @@ begin
     'deliveryWindowId', delivery_window_id
   );
 end;
-$;
+$$;
 
 revoke all on function public.configure_storefront_full_settings(
   uuid, uuid, text, text, text[], text, text, jsonb, text, text, numeric, numeric,
