@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Building2, CheckCircle2, ChevronRight, Plus, Search, ShieldCheck } from "lucide-react-native";
+import { Building2, CheckCircle2, ChevronRight, Plus, ShieldCheck } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
@@ -14,7 +14,10 @@ import { StatePanel } from "../ui/StatePanel";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 const ArraySchema = z.array(RecordSchema);
-const money = (value: number, currency: string) => new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
+const money = (value: number, currency: string) => {
+  try { return new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 2 }).format(value); }
+  catch { return `${currency} ${value.toFixed(2)}`; }
+};
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const banksFrom = (value: Record<string, unknown> | undefined) => {
   const source = Array.isArray(value?.banks) ? value.banks : [];
@@ -57,7 +60,6 @@ export function CustomerWalletWithdrawScreen() {
   const retry = useLogisticsFinanceMutation({ path: "/withdrawals/retry", schema: RecordSchema });
 
   const filteredBanks = bankList.filter(b => !bankSearch.trim() || b.name.toLowerCase().includes(bankSearch.trim().toLowerCase()) || b.code.includes(bankSearch.trim()));
-  const selected = beneficiaries.find(b => asString(b, "id") === destination);
   const fee = asNumber(feePreview, "calculatedFeeAmount", "calculated_fee_amount") ?? 0;
   const debit = asNumber(feePreview, "totalDebitAmount", "total_debit_amount") ?? Number(amount) + fee;
   const amountValue = Number(amount);
