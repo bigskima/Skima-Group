@@ -174,6 +174,7 @@ const ROUTES = new Set([
   "/runtime/storefront/products",
   "/runtime/storefront/media/approve",
   "/runtime/storefront/orders",
+  "/runtime/storefront/orders/confirm-receipt",
   "/runtime/storefront/orders/refund",
   "/runtime/storefront/checkout",
   "/runtime/session-context",
@@ -3507,31 +3508,46 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
     const payload = body.value;
-    return rpcResponse(
-      supabase.rpc("configure_storefront_fulfillment_settings", {
-        target_branch_id: optionalUuid(payload.branchId, "branchId"),
-        target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
-        target_delivery_base_fee_amount: requireNumber(payload.deliveryBaseFeeAmount, "deliveryBaseFeeAmount"),
-        target_delivery_origin_formatted_address: optionalString(payload.deliveryOriginFormattedAddress),
-        target_delivery_origin_label: optionalString(payload.deliveryOriginLabel),
-        target_delivery_origin_latitude: optionalNumber(payload.deliveryOriginLatitude, "deliveryOriginLatitude"),
-        target_delivery_origin_longitude: optionalNumber(payload.deliveryOriginLongitude, "deliveryOriginLongitude"),
-        target_delivery_per_km_fee_amount: requireNumber(payload.deliveryPerKmFeeAmount, "deliveryPerKmFeeAmount"),
-        target_delivery_radius_km: optionalNumber(payload.deliveryRadiusKm, "deliveryRadiusKm"),
-        target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
-        target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ?? ["delivery", "pickup"],
-        target_free_delivery_minimum_amount: optionalNumber(payload.freeDeliveryMinimumAmount, "freeDeliveryMinimumAmount"),
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_metadata: optionalRecord(payload.metadata) ?? {},
-        target_minimum_order_amount: requireNumber(payload.minimumOrderAmount, "minimumOrderAmount"),
-        target_organization_id: requireUuid(payload.organizationId, "organizationId"),
-        target_pickup_formatted_address: optionalString(payload.pickupFormattedAddress),
-        target_pickup_instructions: optionalString(payload.pickupInstructions),
-        target_pickup_location_label: optionalString(payload.pickupLocationLabel),
-        target_status: optionalString(payload.status) ?? "active",
-      }),
-      id,
-    );
+    const settingsResult = await supabase.rpc("configure_storefront_fulfillment_settings", {
+      target_branch_id: optionalUuid(payload.branchId, "branchId"),
+      target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+      target_delivery_base_fee_amount: requireNumber(payload.deliveryBaseFeeAmount, "deliveryBaseFeeAmount"),
+      target_delivery_origin_formatted_address: optionalString(payload.deliveryOriginFormattedAddress),
+      target_delivery_origin_label: optionalString(payload.deliveryOriginLabel),
+      target_delivery_origin_latitude: optionalNumber(payload.deliveryOriginLatitude, "deliveryOriginLatitude"),
+      target_delivery_origin_longitude: optionalNumber(payload.deliveryOriginLongitude, "deliveryOriginLongitude"),
+      target_delivery_per_km_fee_amount: requireNumber(payload.deliveryPerKmFeeAmount, "deliveryPerKmFeeAmount"),
+      target_delivery_radius_km: optionalNumber(payload.deliveryRadiusKm, "deliveryRadiusKm"),
+      target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
+      target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ?? ["delivery", "pickup"],
+      target_free_delivery_minimum_amount: optionalNumber(payload.freeDeliveryMinimumAmount, "freeDeliveryMinimumAmount"),
+      target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      target_metadata: optionalRecord(payload.metadata) ?? {},
+      target_minimum_order_amount: requireNumber(payload.minimumOrderAmount, "minimumOrderAmount"),
+      target_organization_id: requireUuid(payload.organizationId, "organizationId"),
+      target_pickup_formatted_address: optionalString(payload.pickupFormattedAddress),
+      target_pickup_instructions: optionalString(payload.pickupInstructions),
+      target_pickup_location_label: optionalString(payload.pickupLocationLabel),
+      target_status: optionalString(payload.status) ?? "active",
+    });
+    if (settingsResult.error) return databaseError(settingsResult.error, id);
+
+    const etaMinimum = requireBoundedInteger(payload.deliveryEtaMinBusinessDays ?? 2, "deliveryEtaMinBusinessDays", 1, 60);
+    const etaMaximum = requireBoundedInteger(payload.deliveryEtaMaxBusinessDays ?? 5, "deliveryEtaMaxBusinessDays", etaMinimum, 90);
+    const etaResult = await supabase.rpc("configure_storefront_delivery_window", {
+      target_organization_id: requireUuid(payload.organizationId, "organizationId"),
+      target_min_business_days: etaMinimum,
+      target_max_business_days: etaMaximum,
+      target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey") + ":delivery-window",
+      target_metadata: optionalRecord(payload.metadata) ?? {},
+    });
+    if (etaResult.error) return databaseError(etaResult.error, id);
+
+    return jsonResponse({
+      ok: true,
+      data: { settingsId: settingsResult.data, deliveryWindowId: etaResult.data },
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/storefront/orders" && request.method === "GET") {
@@ -3554,6 +3570,30 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const requestedOrderId = url.searchParams.get("orderId");
     if (requestedOrderId) orderQuery = orderQuery.eq("id", requireUuid(requestedOrderId, "orderId"));
     return selectRecords(orderQuery, id);
+  }
+
+  if (routePath === "/runtime/storefront/orders/confirm-receipt" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const orderId = requireUuid(body.value.orderId, "orderId");
+    const idempotencyKey = requireString(body.value.idempotencyKey, "idempotencyKey");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Store receipt confirmation is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const result = await serviceClient.rpc("confirm_store_order_receipt", {
+      target_order_id: orderId,
+      target_actor_user_id: authResult.user.id,
+      target_idempotency_key: idempotencyKey,
+    });
+    if (result.error) return databaseError(result.error, id);
+    return jsonResponse({ ok: true, data: result.data, requestId: id });
   }
 
   if (routePath === "/runtime/storefront/checkout" && request.method === "POST") {
@@ -3594,7 +3634,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
     const settingsResult = await supabase
       .from("storefront_settings")
-      .select("id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,delivery_origin_label,delivery_origin_formatted_address,delivery_origin_latitude,delivery_origin_longitude,delivery_base_fee_amount,delivery_per_km_fee_amount,delivery_radius_km,free_delivery_minimum_amount,minimum_order_amount,pickup_location_label,pickup_formatted_address,pickup_instructions")
+      .select("id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,delivery_origin_label,delivery_origin_formatted_address,delivery_origin_latitude,delivery_origin_longitude,delivery_base_fee_amount,delivery_per_km_fee_amount,delivery_radius_km,free_delivery_minimum_amount,minimum_order_amount,delivery_eta_min_business_days,delivery_eta_max_business_days,pickup_location_label,pickup_formatted_address,pickup_instructions")
       .eq("module_id", moduleResult.data.id)
       .eq("status", "active")
       .maybeSingle();
@@ -3802,6 +3842,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         fulfillmentMethod,
         deliveryLocation: locationSnapshot,
         pickupLocation: defaultOrderPayload.pickup_location,
+        deliveryEtaMinBusinessDays: Number(settings.delivery_eta_min_business_days ?? 2),
+        deliveryEtaMaxBusinessDays: Number(settings.delivery_eta_max_business_days ?? 5),
+        deliveryEtaUnit: "business_days",
+        deliveryEtaStartsAt: "order_accepted",
         pricingCapturedAt: new Date().toISOString(),
       };
     }
