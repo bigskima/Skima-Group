@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store, X } from "lucide-react-native";
 import { Alert, ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
@@ -31,6 +31,8 @@ const metadataValue = (value: Record<string, unknown>, key: string) => record(va
 export function LogisticsStoreScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
+  const params = useLocalSearchParams<{ itemId?: string | string[] }>();
+  const requestedItemId = Array.isArray(params.itemId) ? params.itemId[0] : params.itemId;
   const { width } = useWindowDimensions();
   const queryClient = useQueryClient();
   const store = useLogisticsStorefrontData();
@@ -156,6 +158,16 @@ export function LogisticsStoreScreen() {
 
   const activeCategories=(store.categories.data??[]).filter((item)=>asString(item,"status")==="active" && asString(item,"module_id")===storeModuleId);
   const filtered=products.filter((product)=>(category==="all" || asString(product.item,"category_id")===category) && `${product.name} ${product.variantName??""} ${product.description??""}`.toLowerCase().includes(search.trim().toLowerCase()));
+  useEffect(()=>{
+    if(!requestedItemId || store.items.isPending) return;
+    const requestedProduct=filtered.find((product)=>product.id===requestedItemId);
+    if(requestedProduct && selectedProduct?.id!==requestedItemId) setSelectedProduct(requestedProduct);
+  },[requestedItemId,store.items.isPending,filtered,selectedProduct?.id]);
+
+  function closeSelectedProduct(){
+    setSelectedProduct(null);
+    if(requestedItemId) router.replace("/(customer)/store" as never);
+  }
   const cartTotal=cart.reduce((sum,line)=>sum+line.unitAmount*line.quantity,0);
   const cartCurrency=cart[0]?.currencyCode??currency;
   const flatDeliveryFee=asNumber(settings,"delivery_base_fee_amount")??0;
@@ -301,7 +313,7 @@ export function LogisticsStoreScreen() {
           {confirmReceipt.error ? <Text style={[styles.error,{color:palette.danger}]}>{confirmReceipt.error.message}</Text> : null}
         </>
       )}
-      <Modal transparent animationType="slide" visible={Boolean(selectedProduct)} onRequestClose={()=>setSelectedProduct(null)}>
+      <Modal transparent animationType="slide" visible={Boolean(selectedProduct)} onRequestClose={closeSelectedProduct}>
         <View style={styles.detailBackdrop}>
           <View style={[styles.detailPanel,{backgroundColor:palette.surface}]}>
             <View style={styles.detailHandle}/>
@@ -310,7 +322,7 @@ export function LogisticsStoreScreen() {
                 <Text style={[styles.detailTitle,{color:palette.ink}]}>{selectedProduct?.name??"Product details"}</Text>
                 {selectedProduct?.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{selectedProduct.variantName}</Text>:null}
               </View>
-              <Pressable onPress={()=>setSelectedProduct(null)} style={[styles.detailClose,{backgroundColor:palette.brandSoft}]}><X color={palette.ink} size={19}/></Pressable>
+              <Pressable onPress={closeSelectedProduct} style={[styles.detailClose,{backgroundColor:palette.brandSoft}]}><X color={palette.ink} size={19}/></Pressable>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{gap:12,paddingBottom:12}}>
               {selectedProduct?.media.length?(
@@ -320,7 +332,7 @@ export function LogisticsStoreScreen() {
               ):selectedProduct?<ProductImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/>:null}
               {selectedProduct?.description?<Text style={[styles.detailDescription,{color:palette.muted}]}>{selectedProduct.description}</Text>:null}
               {selectedProduct?<View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(selectedProduct.amount,selectedProduct.currency)}</Text>{selectedProduct.compareAtAmount!==null&&selectedProduct.compareAtAmount>selectedProduct.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(selectedProduct.compareAtAmount,selectedProduct.currency)}</Text>:null}</View>:null}
-              {selectedProduct?<Pressable onPress={()=>{add(selectedProduct);setSelectedProduct(null);}} style={[styles.add,{backgroundColor:palette.brand,height:44}]}><Plus color="#fff" size={16}/><Text style={styles.addText}>Add to basket</Text></Pressable>:null}
+              {selectedProduct?<Pressable onPress={()=>{add(selectedProduct);closeSelectedProduct();}} style={[styles.add,{backgroundColor:palette.brand,height:44}]}><Plus color="#fff" size={16}/><Text style={styles.addText}>Add to basket</Text></Pressable>:null}
             </ScrollView>
           </View>
         </View>
