@@ -19,14 +19,14 @@ The intended public host pattern is expressed relative to a configurable root do
 
 | Product | Intended host | Product boundary |
 |---|---|---|
-| Public SKIMA website | \`https://<root-domain>\` | Company information, product discovery, content, support, contact, partnerships and download links |
-| SKIMA Admin | \`https://admin.<root-domain>\` | General administration web workspace; no separate customer-facing Admin mobile app is planned |
-| SKIMA Refill | \`https://refill.<root-domain>\` | LPG and other supported energy products such as fuel, diesel and kerosene |
-| SKIMA Store | \`https://store.<root-domain>\` | Standalone, complete Store shopping experience |
-| SKIMA Logistics | \`https://logistics.<root-domain>\` | Logistics marketplace, service-provider workflows, bookings and fulfillment |
-| SKIMA Bills | \`https://bills.<root-domain>\` | Standalone, complete utility and bill-payment experience |
+| Public SKIMA website | `https://<root-domain>` | Company information, product discovery, content, support, contact, partnerships and download links |
+| SKIMA Admin | `https://admin.<root-domain>` | General administration web workspace; no separate customer-facing Admin mobile app is planned |
+| SKIMA Refill | `https://refill.<root-domain>` | LPG and other supported energy products such as fuel, diesel and kerosene |
+| SKIMA Store | `https://store.<root-domain>` | Standalone, complete Store shopping experience |
+| SKIMA Logistics | `https://logistics.<root-domain>` | Logistics marketplace, service-provider workflows, bookings and fulfillment |
+| SKIMA Bills | `https://bills.<root-domain>` | Standalone, complete utility and bill-payment experience |
 
-The host names are logical roles, not purchased-domain claims. The actual root domain has not yet been selected or verified. Do not assume that \`.online\` is available, and do not commit \`.online\` as a required suffix. A purchased and controlled \`.com\`, \`.online\`, \`.xyz\`, \`.org\`, or other suitable domain must work without changing product identities or rewriting application logic.
+The host names are logical roles, not purchased-domain claims. The actual root domain has not yet been selected or verified. Do not assume that `.online` is available, and do not commit `.online` as a required suffix. A purchased and controlled `.com`, `.online`, `.xyz`, `.org`, or other suitable domain must work without changing product identities or rewriting application logic.
 
 The product family initially targets four customer mobile applications: Refill, Store, Logistics and Bills. The public website and Admin are web surfaces.
 
@@ -105,8 +105,8 @@ Repository audit on 2026-11-04 found these existing native identities:
 
 | Existing app | Android package | iOS bundle identifier | Existing scheme |
 |---|---|---|---|
-| Refill / LPG | \`com.skima.lpg\` | \`com.skima.lpg\` | \`skima-lpg\` |
-| Logistics | \`com.skima.logistics\` | \`com.skima.logistics\` | \`skima-logistics\` |
+| Refill / LPG | `com.skima.lpg` | `com.skima.lpg` | `skima-lpg` |
+| Logistics | `com.skima.logistics` | `com.skima.logistics` | `skima-logistics` |
 
 Treat those existing IDs as established identities. Do not rename them merely to match a future domain. A package/bundle identifier is a long-lived store identity; changing it creates a new app identity and can break update continuity.
 
@@ -118,17 +118,17 @@ All public hosts must come from one centrally managed, validated configuration c
 
 The deployment configuration should provide the equivalent of:
 
-- \`SKIMA_ROOT_DOMAIN\`
-- \`SKIMA_PUBLIC_BASE_URL\`
-- \`SKIMA_ADMIN_BASE_URL\`
-- \`SKIMA_REFILL_BASE_URL\`
-- \`SKIMA_STORE_BASE_URL\`
-- \`SKIMA_LOGISTICS_BASE_URL\`
-- \`SKIMA_BILLS_BASE_URL\`
+- `SKIMA_ROOT_DOMAIN`
+- `SKIMA_PUBLIC_BASE_URL`
+- `SKIMA_ADMIN_BASE_URL`
+- `SKIMA_REFILL_BASE_URL`
+- `SKIMA_STORE_BASE_URL`
+- `SKIMA_LOGISTICS_BASE_URL`
+- `SKIMA_BILLS_BASE_URL`
 
 Client-safe build configuration may expose only the public base URLs needed by that application. Private secrets must never use public/mobile-prefixed environment variables.
 
-Do not scatter literals such as \`skima.online\` through components, API handlers, email templates, notification payloads, QR codes or app configuration. Build canonical links through a shared URL resolver.
+Do not scatter literals such as `skima.online` through components, API handlers, email templates, notification payloads, QR codes or app configuration. Build canonical links through a shared URL resolver.
 
 Changing the purchased domain should require configuration, DNS, TLS, redirect and website-association updates—not source-code rewrites. The detailed contract is in [Application URLs and Deep Links](52-skima-domain-and-deep-link-contract.md).
 
@@ -145,10 +145,10 @@ Use verified HTTPS links as the canonical cross-product address. Each app should
 
 Examples of canonical destinations are:
 
-- \`https://store.<root-domain>/products/<product-id>\`
-- \`https://bills.<root-domain>/electricity\`
-- \`https://logistics.<root-domain>/services/<service-id>\`
-- \`https://refill.<root-domain>/orders/<order-id>\`
+- `https://store.<root-domain>/products/<product-id>`
+- `https://bills.<root-domain>/electricity`
+- `https://logistics.<root-domain>/services/<service-id>`
+- `https://refill.<root-domain>/orders/<order-id>`
 
 Do not put authentication tokens, passwords, wallet secrets, private customer details or other bearer credentials in URLs or push payloads. Resolve sensitive data only after the destination app has authenticated the user.
 
@@ -181,7 +181,7 @@ All four customer applications remain in the product plan. Preparation and relea
 
 Recommended order:
 
-1. **Stabilize the shared foundation and current applications:** audit current \`main\`, active PRs, existing app identities, current builds, shared APIs and existing production migrations.
+1. **Stabilize the shared foundation and current applications:** audit current `main`, active PRs, existing app identities, current builds, shared APIs and existing production migrations.
 2. **Refine Refill and Logistics:** resolve outstanding defects and retain their current workflows; add the limited cross-product entry points without regressions.
 3. **Complete standalone Store:** extract/compose its full experience from the current Store services while preserving the curated embedded Store sections.
 4. **Extract standalone Bills:** reuse current utility billing architecture and existing LPG/Logistics entry points; activate provider routes only after real credentials and readiness tests exist.
@@ -192,11 +192,11 @@ Staging releases does not mean abandoning a product. It means each product is pr
 
 ## 10. Repository and change-control rules
 
-- Start work from the latest verified \`main\`.
+- Start work from the latest verified `main`.
 - Before branching or pushing, list open PRs and identify their product scope and changed files.
-- Prefer the newest relevant non-conflicting PR branch only when it is current with \`main\` and its scope is appropriate.
+- Prefer the newest relevant non-conflicting PR branch only when it is current with `main` and its scope is appropriate.
 - Do not attach work to a stale or unrelated branch merely to reduce PR count.
-- Reconcile the feature branch when \`main\` advances; preserve both sides' changes.
+- Reconcile the feature branch when `main` advances; preserve both sides' changes.
 - Do not merge unrelated feature work just because documentation was added to its branch.
 - Review code, migrations, tests and security separately from documentation.
 - Do not bypass failed required checks. Distinguish application failures from external account/quota failures and record the actual reason.
