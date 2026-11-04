@@ -261,6 +261,10 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           status: "active", idempotencyKey: `${key}:attach`,
           metadata: { mediaType: contentType.startsWith("video/") ? "video" : "image", originalFileName: file.name },
         }, StoreProductSchema);
+        await api.post("/runtime/storefront/media/approve", {
+          itemId,
+          mediaAssetId: assetId,
+        }, StoreProductSchema);
       }
       return result;
     },

@@ -356,4 +356,111 @@ comment on column public.storefront_settings.delivery_per_km_fee_amount is
 comment on column public.storefront_settings.delivery_radius_km is
   'Legacy compatibility field; Store delivery is not radius-gated.';
 
+-- Product photos and videos must be explicitly approved for customer access.
+-- This is narrower than approving arbitrary uploaded media: the asset must be
+-- attached to an actual Store catalogue item and uploaded by the authorized
+-- Store administrator (or an assets manager).
+create or replace function public.approve_storefront_product_media(
+  target_item_id uuid,
+  target_media_asset_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  settings public.storefront_settings%rowtype;
+  item_record public.catalog_items%rowtype;
+  media_record public.media_assets%rowtype;
+begin
+  if auth.uid() is null
+    or not public.is_platform_super_admin()
+      and not public.has_permission('platform.store.manage', null) then
+    raise exception 'platform Store management permission is required';
+  end if;
+
+  select * into settings
+  from public.storefront_settings
+  where module_id = (select id from public.business_modules where key = 'store')
+  limit 1;
+
+  if not found or settings.status <> 'active' then
+    raise exception 'Configure and activate SKIMA Store before publishing product media';
+  end if;
+
+  select * into item_record
+  from public.catalog_items
+  where id = target_item_id
+    and organization_id = settings.organization_id
+    and module_id = settings.module_id
+    and metadata->>'sales_channel' = 'skima_store';
+
+  if not found then
+    raise exception 'The selected item is not a SKIMA Store listing';
+  end if;
+
+  if not exists (
+    select 1 from public.catalog_item_media link
+    where link.item_id = target_item_id
+      and link.media_asset_id = target_media_asset_id
+      and link.status = 'active'
+  ) then
+    raise exception 'Attach this file to the Store product before approving it';
+  end if;
+
+  select * into media_record
+  from public.media_assets
+  where id = target_media_asset_id
+    and status = 'active'
+  for update;
+
+  if not found then
+    raise exception 'The product media asset is not active';
+  end if;
+
+  if media_record.owner_user_id is distinct from auth.uid()
+    and not public.has_permission('platform.assets.manage', null) then
+    raise exception 'Only the uploader or a platform assets manager can approve this media';
+  end if;
+
+  if coalesce(media_record.content_type, '') !~ '^(image|video)/' then
+    raise exception 'Only product images and videos can be made public';
+  end if;
+
+  update public.media_assets
+  set privacy_classification = 'PUBLIC_APPROVED',
+      organization_id = coalesce(organization_id, settings.organization_id),
+      metadata = metadata || jsonb_build_object(
+        'public_storefront_product', true,
+        'storefront_item_id', target_item_id,
+        'public_approved_at', timezone('utc', now()),
+        'public_approved_by', auth.uid()
+      ),
+      updated_at = timezone('utc', now())
+  where id = target_media_asset_id;
+
+  insert into public.audit_logs (
+    actor_user_id, action, entity_type, entity_id, after_state, metadata
+  )
+  values (
+    auth.uid(),
+    'storefront.product_media_approved',
+    'media_assets',
+    target_media_asset_id,
+    jsonb_build_object(
+      'privacy_classification', 'PUBLIC_APPROVED',
+      'item_id', target_item_id,
+      'content_type', media_record.content_type
+    ),
+    jsonb_build_object('source', 'platform.storefront')
+  );
+
+  return target_media_asset_id;
+end;
+$;
+
+revoke all on function public.approve_storefront_product_media(uuid, uuid) from public, anon;
+grant execute on function public.approve_storefront_product_media(uuid, uuid) to authenticated, service_role;
+
 commit;

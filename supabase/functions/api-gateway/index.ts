@@ -172,6 +172,7 @@ const ROUTES = new Set([
   "/runtime/storefront/settings",
   "/runtime/storefront/full-settings",
   "/runtime/storefront/products",
+  "/runtime/storefront/media/approve",
   "/runtime/storefront/orders",
   "/runtime/storefront/orders/refund",
   "/runtime/storefront/checkout",
@@ -3979,6 +3980,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }).eq("id", orderId);
     if (savedMetadata.error) return databaseError(savedMetadata.error, id);
     return jsonResponse({ ok: true, data: { orderId, status: "refunded", transactionId }, requestId: id });
+  }
+
+  if (routePath === "/runtime/storefront/media/approve" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("approve_storefront_product_media", {
+        target_item_id: requireUuid(body.value.itemId, "itemId"),
+        target_media_asset_id: requireUuid(body.value.mediaAssetId, "mediaAssetId"),
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/storefront/products" && request.method === "POST") {
