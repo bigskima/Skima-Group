@@ -248,7 +248,9 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           assetTypeKey: contentType.startsWith("video/") ? "media.video.product" : "media.image.product",
           byteSize: file.size, contentType, idempotencyKey: `${key}:asset`,
           metadata: { originalFileName: file.name }, ownerUserId: context.user.id,
-          organizationId: savedOrganizationId || null, source: "skima.admin.store",
+          // The catalogue attachment row carries Store organisation scope;
+          // the uploaded asset itself stays owner-scoped for platform admins.
+          organizationId: null, source: "skima.admin.store",
           storageBucket: upload.storageBucket, storagePath: upload.storagePath,
         }, MediaAssetSchema);
         const assetId = typeof registered === "string" ? registered : catalogText(registered, "id");
