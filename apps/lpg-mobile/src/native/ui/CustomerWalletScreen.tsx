@@ -58,7 +58,7 @@ export function CustomerWalletScreen() {
             <View style={styles.heroHead}>
               <View style={styles.heroCopy}>
                 <Text style={styles.heroLabel}>AVAILABLE BALANCE</Text>
-                <Text adjustsFontSizeToFit numberOfLines={1} style={styles.heroValue}>
+                <Text adjustsFontSizeToFit minimumFontScale={0.5} maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.heroValue}>
                   {money(available, currency)}
                 </Text>
               </View>
@@ -173,7 +173,7 @@ function WalletAction({ icon, label, onPress }: { icon: React.ReactNode; label: 
 
 function money(value: number, currency: string) {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
+    return new Intl.NumberFormat("en-NG", { style: "currency", currency, currencyDisplay: "narrowSymbol", maximumFractionDigits: 2 }).format(value);
   } catch {
     return `${currency} ${value.toFixed(2)}`;
   }
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   heroHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
   heroCopy: { flex: 1 },
   heroLabel: { color: "#FFE4E8", fontSize: 10, letterSpacing: 1.35, fontWeight: "900" },
-  heroValue: { color: "#FFFFFF", fontSize: 38, lineHeight: 46, fontWeight: "900", letterSpacing: -1.25, marginTop: 7 },
+  heroValue: { color: "#FFFFFF", fontSize: 31, lineHeight: 38, fontWeight: "900", letterSpacing: -0.8, marginTop: 6, flexShrink: 1 },
   shield: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
   heroFooter: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,.24)", paddingTop: spacing.md },
   heroMeta: { color: "#FFE9EC", ...typography.caption },
