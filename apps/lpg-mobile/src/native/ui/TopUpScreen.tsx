@@ -145,7 +145,7 @@ export function TopUpScreen() {
         <View style={styles.heroHeader}>
           <View style={styles.heroCopy}>
             <Text style={styles.heroLabel}>AVAILABLE WALLET BALANCE</Text>
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.heroValue}>
+            <Text adjustsFontSizeToFit minimumFontScale={0.5} maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.heroValue}>
               {money(availableBalance, currency)}
             </Text>
           </View>
@@ -250,7 +250,7 @@ function MoneyRow({ label, value, strong = false }: { label: string; value: stri
 
 function money(value: number, currency: string) {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
+    return new Intl.NumberFormat("en-NG", { style: "currency", currency, currencyDisplay: "narrowSymbol", maximumFractionDigits: 2 }).format(value);
   } catch {
     return `${currency} ${value.toFixed(2)}`;
   }
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   heroHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
   heroCopy: { flex: 1, minWidth: 0 },
   heroLabel: { color: "rgba(255,255,255,.78)", ...typography.eyebrow, fontSize: 9 },
-  heroValue: { color: "#FFFFFF", fontSize: 31, lineHeight: 38, fontWeight: "900", letterSpacing: -0.8, marginTop: 4 },
+  heroValue: { color: "#FFFFFF", fontSize: 28, lineHeight: 34, fontWeight: "900", letterSpacing: -0.65, marginTop: 4, flexShrink: 1 },
   heroIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
   heroSub: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18, maxWidth: 460 },
   quickAmounts: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md },
