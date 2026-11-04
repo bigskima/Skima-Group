@@ -267,7 +267,7 @@ export function CustomerDashboard() {
                       accessibilityLabel={`View ${product.name} in SKIMA Store`}
                       onPress={(event) => {
                         event.stopPropagation();
-                        router.push("/(customer)/store" as never);
+                        router.push({ pathname: "/(customer)/store", params: { itemId: product.id } } as never);
                       }}
                       style={styles.storePreviewItem}
                     >
