@@ -1,5 +1,4 @@
 import * as Linking from "expo-linking";
-import * as Linking from "expo-linking";
 import { AlertCircle, CheckCircle2, RefreshCw, ShieldCheck, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -150,7 +149,8 @@ export function PaymentCheckoutModal({
               style={styles.webView}
               originWhitelist={["*"]}
               onShouldStartLoadWithRequest={(request) => {
-                if (request.url.startsWith(Linking.createURL("payment-return"))) {
+                const returnUrl = Linking.createURL("payment-return");
+                if (request.url.startsWith(returnUrl) || request.url.startsWith("skima-lpg://")) {
                   void manualCheck();
                   return false;
                 }
@@ -169,15 +169,7 @@ export function PaymentCheckoutModal({
                   <Text style={[styles.webLoadingText, { color: palette.muted }]}>Opening secure Paystack checkout…</Text>
                 </View>
               )}
-              onShouldStartLoadWithRequest={(request) => {
-                const returnUrl = Linking.createURL("payment-return");
-                if (request.url.startsWith(returnUrl) || request.url.startsWith("skima-lpg://")) {
-                  void deposits.refetch();
-                  return false;
-                }
-                return true;
-              }}
-              onError={(event) => setCheckoutError(event.nativeEvent.description || "Check your connection and reload the payment page.")}
+                            onError={(event) => setCheckoutError(event.nativeEvent.description || "Check your connection and reload the payment page.")}
               onHttpError={(event) => {
                 if (event.nativeEvent.statusCode >= 500) setCheckoutError("The payment provider is temporarily unavailable. Please retry.");
               }}
@@ -225,7 +217,7 @@ const styles = StyleSheet.create({
   secureText: { fontSize: 10, fontWeight: "900" },
   webViewArea: { flex: 1, minHeight: 0, overflow: "hidden" },
   webView: { flex: 1, backgroundColor: "#FFFFFF" },
-  webLoading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 10 },
+  webLoading: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", gap: 10 },
   webLoadingText: { ...typography.caption },
   waitingPanel: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.md, padding: spacing.xl, borderWidth: StyleSheet.hairlineWidth, margin: spacing.md, borderRadius: 18 },
   statusPanel: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.md, padding: spacing.xl },
