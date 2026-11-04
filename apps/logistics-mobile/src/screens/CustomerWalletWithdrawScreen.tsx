@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Building2, CheckCircle2, ChevronRight, Plus, ShieldCheck } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { z } from "zod";
@@ -52,6 +52,14 @@ export function CustomerWalletWithdrawScreen() {
   const [message, setMessage] = useState("");
   const [feePreview, setFeePreview] = useState<Record<string, unknown> | null>(null);
   const [receipt, setReceipt] = useState<Record<string, unknown> | null>(null);
+  const [beneficiaryKey, setBeneficiaryKey] = useState(() => createClientIdempotencyKey("logistics.wallet.beneficiary", walletId ?? session?.user.id ?? "customer"));
+  const [withdrawalKey, setWithdrawalKey] = useState(() => createClientIdempotencyKey("logistics.wallet.withdrawal", walletId ?? session?.user.id ?? "customer"));
+  const [retryKey, setRetryKey] = useState(() => createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId ?? session?.user.id ?? "customer"));
+  useEffect(() => {
+    setBeneficiaryKey(createClientIdempotencyKey("logistics.wallet.beneficiary", walletId ?? session?.user.id ?? "customer"));
+    setWithdrawalKey(createClientIdempotencyKey("logistics.wallet.withdrawal", walletId ?? session?.user.id ?? "customer"));
+    setRetryKey(createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId ?? session?.user.id ?? "customer"));
+  }, [walletId, session?.user.id]);
 
   const resolveAccount = useLogisticsFinanceMutation({ path: "/beneficiaries/resolve", schema: RecordSchema });
   const addBeneficiary = useLogisticsFinanceMutation({ path: "/beneficiaries", schema: RecordSchema });
@@ -85,12 +93,13 @@ export function CustomerWalletWithdrawScreen() {
     try {
       const result = await addBeneficiary.mutateAsync({
         walletId, bankCode, accountNumber,
-        idempotencyKey: createClientIdempotencyKey("logistics.wallet.beneficiary", walletId),
+        idempotencyKey: beneficiaryKey,
       });
       const id = asString(result, "id");
       await beneficiaryQuery.refetch();
       if (id) setDestination(id);
       setAddingAccount(false); setAccountNumber(""); setAccountName(""); setBankCode(""); setBankSearch("");
+      setBeneficiaryKey(createClientIdempotencyKey("logistics.wallet.beneficiary", walletId));
       setMessage("Verified payout account saved.");
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "The payout account could not be saved."); }
   }
@@ -113,9 +122,11 @@ export function CustomerWalletWithdrawScreen() {
     try {
       const result = await withdraw.mutateAsync({
         walletId, beneficiaryId: destination, amount: amountValue,
-        idempotencyKey: createClientIdempotencyKey("logistics.wallet.withdrawal", walletId),
+        idempotencyKey: withdrawalKey,
       });
       setReceipt(result); setFeePreview(null);
+      setWithdrawalKey(createClientIdempotencyKey("logistics.wallet.withdrawal", walletId));
+      setRetryKey(createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId));
       await Promise.all([wallets.refetch(), balances.refetch(), beneficiaryQuery.refetch()]);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "The withdrawal could not be submitted."); }
   }
@@ -125,8 +136,9 @@ export function CustomerWalletWithdrawScreen() {
     if (!id) return;
     setMessage("");
     try {
-      const result = await retry.mutateAsync({ withdrawalRequestId: id });
+      const result = await retry.mutateAsync({ withdrawalRequestId: id, idempotencyKey: retryKey });
       setReceipt(result);
+      setRetryKey(createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId ?? "customer"));
       await Promise.all([wallets.refetch(), balances.refetch()]);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "The transfer retry could not be completed."); }
   }
