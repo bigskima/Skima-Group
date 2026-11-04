@@ -153,7 +153,7 @@ export function PaymentCheckoutModal({
                   void manualCheck();
                   return false;
                 }
-                return /^https?:\\/\\//i.test(request.url);
+                return request.url.startsWith("https://") || request.url.startsWith("http://");
               }}
               javaScriptEnabled
               domStorageEnabled
