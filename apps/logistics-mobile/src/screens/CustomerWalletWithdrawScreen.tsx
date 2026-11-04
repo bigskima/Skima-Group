@@ -74,7 +74,7 @@ export function CustomerWalletWithdrawScreen() {
 
   async function verifyAccount() {
     setMessage("");
-    if (!walletId || !/^\\d{10}$/.test(accountNumber) || !bankCode) { setMessage("Choose a bank and enter a valid 10-digit account number."); return; }
+    if (!walletId || !/^\d{10}$/.test(accountNumber) || !bankCode) { setMessage("Choose a bank and enter a valid 10-digit account number."); return; }
     try {
       const result = await resolveAccount.mutateAsync({ walletId, bankCode, accountNumber });
       const name = asString(result, "accountName", "account_name");
@@ -161,7 +161,7 @@ export function CustomerWalletWithdrawScreen() {
           {addingAccount ? <View style={styles.form}>
             <TextInput value={bankSearch} onChangeText={setBankSearch} placeholder="Search Nigerian bank" placeholderTextColor={palette.muted} style={[styles.input, { color: palette.ink, borderColor: palette.border }]} />
             {bankQuery.isPending ? <ActivityIndicator color={palette.brand} /> : filteredBanks.slice(0, 8).map(b => <Pressable key={b.code} onPress={() => { setBankCode(b.code); setAccountName(""); }} style={[styles.bankOption, { backgroundColor: bankCode === b.code ? palette.brandSoft : palette.surfaceSubtle, borderColor: bankCode === b.code ? palette.brand : palette.border }]}><Text style={{ color: palette.ink, fontSize: 11 }}>{b.name}</Text></Pressable>)}
-            <TextInput value={accountNumber} onChangeText={v => { setAccountNumber(v.replace(/\\D/g, "").slice(0, 10)); setAccountName(""); }} keyboardType="number-pad" maxLength={10} placeholder="10-digit account number" placeholderTextColor={palette.muted} style={[styles.input, { color: palette.ink, borderColor: palette.border }]} />
+            <TextInput value={accountNumber} onChangeText={v => { setAccountNumber(v.replace(/\D/g, "").slice(0, 10)); setAccountName(""); }} keyboardType="number-pad" maxLength={10} placeholder="10-digit account number" placeholderTextColor={palette.muted} style={[styles.input, { color: palette.ink, borderColor: palette.border }]} />
             {accountName ? <Text style={{ color: palette.success, fontSize: 11, fontWeight: "900" }}>Verified: {accountName}</Text> : null}
             {!verificationAvailable ? <Text style={[styles.hintDark, { color: palette.muted }]}>{providerMessage ?? "New account verification is temporarily unavailable. Existing verified accounts can still be used."}</Text> : <Pressable disabled={resolveAccount.isPending} onPress={() => void verifyAccount()} style={[styles.button, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border, borderWidth: 1 }]}>{resolveAccount.isPending ? <ActivityIndicator color={palette.brand} /> : <Text style={{ color: palette.brand, fontWeight: "900" }}>Verify account</Text>}</Pressable>}
             <Pressable disabled={!accountName || addBeneficiary.isPending} onPress={() => void saveAccount()} style={[styles.button, { backgroundColor: palette.brand, opacity: !accountName || addBeneficiary.isPending ? 0.5 : 1 }]}>{addBeneficiary.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save verified account</Text>}</Pressable>
