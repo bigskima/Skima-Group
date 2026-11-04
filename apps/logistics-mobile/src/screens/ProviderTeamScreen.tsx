@@ -1,6 +1,6 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MailPlus, ShieldCheck, UserCheck, UserRound, UserX, Users } from "lucide-react-native";
+import { MailPlus, ShieldCheck, UserCheck, UserPlus, UserRound, UserX, Users } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -156,7 +156,7 @@ export function ProviderTeamScreen() {
       if (!organizationId) throw new Error("Register your Logistics company first.");
       const invitedEmail = email.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invitedEmail)) {
-        throw new Error("Enter a valid work email address.");
+        throw new Error("Enter the email address linked to the recipient’s SKIMA account.");
       }
       const idempotencyKey = createClientIdempotencyKey(
         "logistics.staff.invite",
@@ -196,7 +196,7 @@ export function ProviderTeamScreen() {
     onSuccess: async () => {
       setEmail("");
       setError(null);
-      setNotice("The company invitation has been created and is awaiting acceptance.");
+      setNotice("In-app invitation created. The recipient can accept it from their SKIMA Notifications.");
       await Promise.all([
         client.invalidateQueries({ queryKey: ["skima-logistics", "team-directory"] }),
         client.invalidateQueries({ queryKey: ["skima-logistics", "team-invitations"] }),
@@ -268,12 +268,12 @@ export function ProviderTeamScreen() {
           </Card>
 
           <Card padding="lg">
-            <SectionHeader title="Invite a teammate" description="Invitations expire after seven days. Access is restricted to the selected company role." />
+            <SectionHeader title="Invite a teammate" description="Invite an existing SKIMA account by its sign-in email. The invitation appears in the recipient’s in-app Notifications; no email is sent." />
             <AppField
-              label="Work email address"
+              label="Recipient’s SKIMA account email"
               value={email}
               onChangeText={setEmail}
-              placeholder="name@company.com"
+              placeholder="account@email.com"
               keyboardType="email-address"
               autoCapitalize="none"
             />
@@ -304,12 +304,12 @@ export function ProviderTeamScreen() {
             {error ? <Text style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
             {notice ? <Text style={[styles.notice, { color: palette.success }]}>{notice}</Text> : null}
             <AppButton
-              label="Create company invitation"
+              label="Send in-app invitation"
               fullWidth
               loading={invite.isPending}
               disabled={email.trim().length < 5}
               onPress={() => { setError(null); setNotice(null); invite.mutate(); }}
-              icon={<MailPlus color="#FFFFFF" size={16} />}
+              icon={<UserPlus color="#FFFFFF" size={16} />}
             />
           </Card>
 
