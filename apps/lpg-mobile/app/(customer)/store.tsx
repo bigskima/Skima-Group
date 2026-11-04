@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import {
   ArrowLeft,
   Check,
@@ -65,6 +65,8 @@ const STORE_MEDIA_READ_SCHEMA = z.object({
 export default function StoreScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
+  const params = useLocalSearchParams<{ itemId?: string | string[] }>();
+  const requestedItemId = Array.isArray(params.itemId) ? params.itemId[0] : params.itemId;
   const data = useStorefrontData();
   const userId = session.context?.user.id ?? session.session?.user.id ?? "anonymous";
   const cartStorageKey = `skima:store:cart:v1:${userId}`;
@@ -233,6 +235,14 @@ export default function StoreScreen() {
       return inCategory && (!normalizedSearch || searchable.includes(normalizedSearch));
     });
   }, [products, search, categoryKey]);
+
+  useEffect(() => {
+    if (!requestedItemId || data.items.isPending) return;
+    const requestedProduct = products.find((item) => recordString(item, "id") === requestedItemId);
+    if (requestedProduct && recordString(selectedItem, "id") !== requestedItemId) {
+      openProduct(requestedProduct);
+    }
+  }, [requestedItemId, data.items.isPending, products, selectedItem]);
 
   const selectedVariants = selectedItem
     ? (data.variants.data ?? []).filter((variant) =>
@@ -404,6 +414,12 @@ export default function StoreScreen() {
       );
     });
     setSelectedItem(null);
+    if (requestedItemId) router.replace("/(customer)/store" as never);
+  }
+
+  function closeProductDetails() {
+    setSelectedItem(null);
+    if (requestedItemId) router.replace("/(customer)/store" as never);
   }
 
   function adjustCartLine(itemId: string, variantId: string | null, delta: number) {
@@ -571,13 +587,13 @@ export default function StoreScreen() {
         </>
       )}
 
-      <Modal transparent animationType="slide" visible={Boolean(selectedItem)} onRequestClose={() => setSelectedItem(null)}>
+      <Modal transparent animationType="slide" visible={Boolean(selectedItem)} onRequestClose={closeProductDetails}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.productModal, { backgroundColor: palette.surface }]}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: palette.ink }]} numberOfLines={2}>{selectedItem ? recordString(selectedItem, "display_name") : "Product"}</Text>
-              <Pressable onPress={() => setSelectedItem(null)} style={[styles.closeButton, { backgroundColor: palette.surfaceSubtle }]}><X color={palette.ink} size={19} /></Pressable>
+              <Pressable onPress={closeProductDetails} style={[styles.closeButton, { backgroundColor: palette.surfaceSubtle }]}><X color={palette.ink} size={19} /></Pressable>
             </View>
             {selectedItem ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productGallery}>
