@@ -236,16 +236,22 @@ export function LogisticsStoreScreen() {
              <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>{category==="all"?"Shop all products":asString(activeCategories.find(item=>(asString(item,"id")??asString(item,"key"))===category),"display_name","name")??"Products"}</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>{filtered.length} product{filtered.length===1?"":"s"} available</Text></View>
            </View>
            {filtered.length? <View style={styles.grid}>
-            {filtered.map(product=><View key={`${product.id}:${product.variantId??"base"}`} style={[styles.product,{width:width>=1100?"23.5%":width>=700?"31.5%":"48.5%",backgroundColor:palette.surface,borderColor:palette.border}]}>
-              <ProductImage assetId={product.imageAssetId} label={product.name}/>
-              <Text style={[styles.productName,{color:palette.ink}]} numberOfLines={2}>{product.name}</Text>
-              {product.variantName?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={1}>{product.variantName}</Text>:null}
-              {product.description?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={2}>{product.description}</Text>:null}
-              <Pressable onPress={()=>setSelectedProduct(product)}><Text style={{color:palette.brand,fontSize:10,fontWeight:"900"}}>View product details</Text></Pressable>
-              <View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(product.amount,product.currency)}</Text>{product.compareAtAmount!==null&&product.compareAtAmount>product.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(product.compareAtAmount,product.currency)}</Text>:null}</View>
-              <Pressable onPress={()=>add(product)} style={[styles.add,{backgroundColor:palette.brand}]}><Plus color="#fff" size={15}/><Text style={styles.addText}>Add</Text></Pressable>
-            </View>)}
-           </View>:<StatePanel title="No available products" description="Active Store products with a valid price and available stock will appear here."/>}
+            {filtered.map(product=>{
+              const categoryLabel=asString(product.item,"category_name","categoryName","category")??asString(activeCategories.find(item=>(asString(item,"id")??asString(item,"key"))===asString(product.item,"category_id")),"display_name","name")??"General";
+              const discountPercent=product.compareAtAmount!==null&&product.compareAtAmount>product.amount?Math.round((product.compareAtAmount-product.amount)/product.compareAtAmount*100):0;
+              return <View key={${product.id}:${product.variantId??"base"}} style={[styles.product,{width:width>=1100?"23.5%":width>=700?"31.5%":"48.5%",backgroundColor:palette.surface,borderColor:palette.border}]}>
+                <View style={styles.productMedia}>
+                  <ProductImage assetId={product.imageAssetId} label={product.name}/>
+                  {discountPercent>0?<View style={[styles.discountBadge,{backgroundColor:palette.brand}]}><Text style={styles.discountText}>{discountPercent}% OFF</Text></View>:null}
+                </View>
+                <Text style={[styles.productCategory,{color:palette.muted}]} numberOfLines={1}>{categoryLabel}</Text>
+                <Pressable onPress={()=>setSelectedProduct(product)}><Text style={[styles.productName,{color:palette.ink}]} numberOfLines={2}>{product.name}</Text></Pressable>
+                {product.variantName?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={1}>{product.variantName}</Text>:null}
+                <View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(product.amount,product.currency)}</Text>{product.compareAtAmount!==null&&product.compareAtAmount>product.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(product.compareAtAmount,product.currency)}</Text>:null}</View>
+                <Pressable onPress={()=>add(product)} style={[styles.add,{backgroundColor:palette.brand}]}><Plus color="#fff" size={15}/><Text style={styles.addText}>Add to basket</Text></Pressable>
+              </View>;
+            })}
+           </View></View>:<StatePanel title="No available products" description="Active Store products with a valid price and available stock will appear here."/>}
            </>}
           {cart.length? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
             <View style={styles.cartHead}><View style={styles.cartTitleRow}><ShoppingCart color={palette.brand} size={18}/><Text style={[styles.cartTitle,{color:palette.ink}]}>Basket ({cart.reduce((sum,line)=>sum+line.quantity,0)})</Text></View><Text style={[styles.cartTotal,{color:palette.ink}]}>{money(cartTotal,cartCurrency)}</Text></View>
@@ -381,12 +387,12 @@ const styles=StyleSheet.create({
  toolbar:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:8,flexDirection:"row",alignItems:"center",gap:8},
  search:{flex:1,minWidth:0,height:38,flexDirection:"row",alignItems:"center",gap:7,paddingHorizontal:8},searchInput:{flex:1,minWidth:0,fontSize:12,paddingVertical:0},
  walletPill:{flexDirection:"row",alignItems:"center",gap:5,borderRadius:radii.pill,backgroundColor:"rgba(220,45,65,.09)",paddingHorizontal:9,paddingVertical:8},
- productImage:{height:100,width:"100%",borderRadius:radii.md,overflow:"hidden",alignItems:"center",justifyContent:"center",backgroundColor:"rgba(220,45,65,.07)"},
+ productMedia:{position:"relative"},productImage:{height:128,width:"100%",borderRadius:radii.md,overflow:"hidden",alignItems:"center",justifyContent:"center",backgroundColor:"rgba(220,45,65,.07)"},discountBadge:{position:"absolute",left:7,top:7,paddingHorizontal:7,paddingVertical:5,borderRadius:7},discountText:{color:"#fff",fontSize:8,fontWeight:"900"},productCategory:{fontSize:9,fontWeight:"700"},
  filters:{gap:7,paddingVertical:9},filter:{paddingHorizontal:12,paddingVertical:8,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.pill},
  grid:{flexDirection:"row",flexWrap:"wrap",gap:10},product:{minWidth:142,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:11,gap:6},
- productIcon:{width:44,height:44,borderRadius:13,alignItems:"center",justifyContent:"center"},productName:{...typography.bodyStrong,fontSize:12,lineHeight:16},
+ productIcon:{width:44,height:44,borderRadius:13,alignItems:"center",justifyContent:"center"},productName:{...typography.bodyStrong,fontSize:13,lineHeight:17,minHeight:34},
  productDescription:{...typography.caption,fontSize:10,lineHeight:14},price:{fontSize:13,fontWeight:"900"},priceRow:{flexDirection:"row",alignItems:"center",flexWrap:"wrap",gap:6},comparePrice:{fontSize:10,textDecorationLine:"line-through",fontWeight:"600"},
- add:{height:34,borderRadius:radii.md,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:5},addText:{color:"#fff",fontSize:11,fontWeight:"900"},
+ add:{height:34,borderRadius:radii.md,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:5},addText:{color:"#fff",fontSize:10,fontWeight:"900"},
  cartPanel:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:12,gap:9},cartHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
  cartTitleRow:{flexDirection:"row",alignItems:"center",gap:7},cartTitle:{fontSize:12,fontWeight:"900"},cartTotal:{fontSize:14,fontWeight:"900"},
  cartLine:{flexDirection:"row",alignItems:"center",gap:8},cartName:{fontSize:10,fontWeight:"700"},cartAmount:{fontSize:10,fontWeight:"800"},
