@@ -291,6 +291,8 @@ export default function StoreScreen() {
   const cartTotal = cart.reduce((sum, line) => sum + line.quantity * line.unitAmount, 0);
   const currencyCode = typeof settings?.currency_code === "string" ? settings.currency_code : "NGN";
   const deliveryFlatFee = firstNumber(settings, ["delivery_base_fee_amount"]) ?? 0;
+  const deliveryEtaMinBusinessDays = firstNumber(settings, ["delivery_eta_min_business_days"]) ?? 2;
+  const deliveryEtaMaxBusinessDays = firstNumber(settings, ["delivery_eta_max_business_days"]) ?? 5;
   const freeDeliveryMinimum = firstNumber(settings, ["free_delivery_minimum_amount"]);
   const estimatedDeliveryFee = fulfillmentMethod === "pickup"
     ? 0
@@ -772,7 +774,12 @@ export default function StoreScreen() {
                 {walletCurrency !== currencyCode ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet currency must match Store currency ({currencyCode}).</Text> : null}
                 {estimatedCheckoutTotal !== null && !walletSufficient ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet balance does not cover this order total.</Text> : null}
                 <Text style={[styles.checkoutNote, { color: palette.muted }]}>Orders are accepted from addresses across Nigeria. SKIMA Store will review delivery availability after checkout; if we cannot serve the location, the order will be cancelled and the wallet payment refunded.</Text>
-                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Payment is reserved in SKIMA escrow. The Store team can only prepare your order after the wallet reservation succeeds.</Text>
+                {fulfillmentMethod === "delivery" ? (
+                  <Text style={[styles.checkoutNote, { color: palette.muted }]}>
+                    Estimated delivery: {deliveryEtaMinBusinessDays === deliveryEtaMaxBusinessDays ? `${deliveryEtaMinBusinessDays} business days` : `${deliveryEtaMinBusinessDays}–${deliveryEtaMaxBusinessDays} business days`} after SKIMA accepts your order and confirms the address is serviceable.
+                  </Text>
+                ) : null}
+                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Payment is reserved in SKIMA escrow. The Store team can only prepare your order after the wallet reservation succeeds. After delivery, confirm receipt in your order details to complete settlement.</Text>
                 <Pressable disabled={checkout.isPending || !cartReady || !canCheckout} onPress={() => checkout.mutate()} style={[styles.primaryButton, styles.checkoutButton, { backgroundColor: palette.brand, opacity: checkout.isPending || !canCheckout ? 0.5 : 1 }]}>
                   {checkout.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Pay and place order</Text>}
                 </Pressable>
