@@ -199,10 +199,14 @@ Deno.test("Authentication, deep links and app lifecycle are isolated from LPG mo
   requireText(routes, "CustomerTabs", "customer-only navigation");
 });
 
-Deno.test("Customer account keeps its preferences and sign-out controls interactive", () => {
+Deno.test("Customer account keeps preferences and browser/native sign-out interactive", () => {
   requireText(account, "<Pressable", "interactive preference rows");
   requireText(account, "void toggle()", "working appearance toggle");
-  requireText(account, "void signOut()", "working secure sign-out");
+  requireText(account, "setLogoutOpen(true)", "cross-platform sign-out confirmation");
+  requireText(account, "await signOut()", "awaited secure sign-out");
+  requireText(account, "client.clear()", "clear cached user data after sign-out");
+  requireText(session, 'signOut({ scope: "local" })', "revoke the current device session");
+  requireText(account, 'router.replace("/(auth)/sign-in"', "return to the signed-out route");
 });
 
 Deno.test("Provider workspace has separate company, opportunities and jobs routes", () => {
