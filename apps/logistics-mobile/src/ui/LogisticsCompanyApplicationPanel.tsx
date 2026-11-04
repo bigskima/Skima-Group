@@ -434,7 +434,7 @@ export function LogisticsCompanyApplicationPanel({
       const identityRequirementId = asString(identityRequirement, "id");
       const hasIdentityEvidence = (documents.data ?? []).some((document) =>
         asString(document, "application_id") === applicationId &&
-        asString(document, "status") !== "rejected" &&
+        !["rejected", "expired", "deleted"].includes(asString(document, "status") ?? "") &&
         (asString(document, "requirement_id") === identityRequirementId ||
           asString(record(document.metadata), "requirement_key") === "logistics.company.owner-identity")
       );
