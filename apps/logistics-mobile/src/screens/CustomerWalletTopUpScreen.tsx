@@ -124,7 +124,7 @@ export function CustomerWalletTopUpScreen() {
                     void Promise.all([deposits.refetch(), wallets.refetch(), balances.refetch()]);
                     return false;
                   }
-                  return /^https?:\\/\\//i.test(request.url);
+                  return request.url.startsWith("https://") || request.url.startsWith("http://");
                 }}
                 javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled
                 allowsBackForwardNavigationGestures setSupportMultipleWindows={false} startInLoadingState
