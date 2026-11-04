@@ -156,7 +156,7 @@ export function ProviderTeamScreen() {
       if (!organizationId) throw new Error("Register your Logistics company first.");
       const invitedEmail = email.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invitedEmail)) {
-        throw new Error("Enter the email address linked to the recipient’s SKIMA account.");
+        throw new Error("Enter the recipient’s SKIMA account email.");
       }
       const idempotencyKey = createClientIdempotencyKey(
         "logistics.staff.invite",
@@ -196,7 +196,7 @@ export function ProviderTeamScreen() {
     onSuccess: async () => {
       setEmail("");
       setError(null);
-      setNotice("In-app invitation created. The recipient can accept it from their SKIMA Notifications.");
+      setNotice("In-app invitation created. The recipient can accept it from SKIMA Notifications when signed in with this email.");
       await Promise.all([
         client.invalidateQueries({ queryKey: ["skima-logistics", "team-directory"] }),
         client.invalidateQueries({ queryKey: ["skima-logistics", "team-invitations"] }),
@@ -268,7 +268,7 @@ export function ProviderTeamScreen() {
           </Card>
 
           <Card padding="lg">
-            <SectionHeader title="Invite a teammate" description="Invite an existing SKIMA account by its sign-in email. The invitation appears in the recipient’s in-app Notifications; no email is sent." />
+            <SectionHeader title="Invite a teammate" description="Use the email address the recipient will use for their SKIMA account. The invitation appears in their in-app Notifications once that account is available; no email is sent." />
             <AppField
               label="Recipient’s SKIMA account email"
               value={email}
