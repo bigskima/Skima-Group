@@ -381,6 +381,8 @@ export default function StoreScreen() {
     setSelectedItem(item);
     setSelectedVariantId(variants.length ? recordString(variants[0], "id") : null);
     setSelectedQuantity(1);
+    const itemId = recordString(item, "id");
+    if (itemId) router.setParams({ itemId });
   }
 
   function addSelectedToCart() {
