@@ -173,6 +173,7 @@ const ROUTES = new Set([
   "/runtime/storefront/full-settings",
   "/runtime/storefront/products",
   "/runtime/storefront/orders",
+  "/runtime/storefront/orders/refund",
   "/runtime/storefront/checkout",
   "/runtime/session-context",
   "/runtime/profile/avatar",
@@ -3637,6 +3638,9 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         return jsonResponse({ ok: false, error: "delivery_location_not_found", message: "That saved delivery address is no longer available. Choose another address.", requestId: id }, 404);
       }
       deliveryLocation = locationResult.data as Record<string, unknown>;
+      if (!String(deliveryLocation.formatted_address ?? "").trim()) {
+        return jsonResponse({ ok: false, error: "delivery_address_incomplete", message: "Add a complete delivery address, including the town/city and state in Nigeria.", requestId: id }, 400);
+      }
     } else if (!settings.pickup_formatted_address) {
       return jsonResponse({ ok: false, error: "pickup_not_configured", message: "Store customer pickup has not been configured yet.", requestId: id }, 409);
     }
@@ -3670,8 +3674,6 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           id: deliveryLocation.id,
           label: deliveryLocation.label,
           formattedAddress: deliveryLocation.formatted_address,
-          latitude: deliveryLocation.latitude,
-          longitude: deliveryLocation.longitude,
           landmark: deliveryLocation.landmark,
           deliveryInstructions: deliveryLocation.delivery_instructions,
           contactName: deliveryLocation.contact_name,
@@ -3783,22 +3785,11 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       if (fulfillmentMethod === "delivery") {
-        const originLatitude = Number(settings.delivery_origin_latitude);
-        const originLongitude = Number(settings.delivery_origin_longitude);
-        const destinationLatitude = Number(deliveryLocation?.latitude);
-        const destinationLongitude = Number(deliveryLocation?.longitude);
-        if (![originLatitude, originLongitude, destinationLatitude, destinationLongitude].every(Number.isFinite)) {
-          await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "invalid_delivery_coordinates");
-          return jsonResponse({ ok: false, error: "delivery_coordinates_required", message: "The Store delivery origin or saved address is missing valid coordinates.", requestId: id }, 409);
-        }
-        deliveryDistanceKm = haversineDistanceKm(originLatitude, originLongitude, destinationLatitude, destinationLongitude);
-        const maximumRadius = Number(settings.delivery_radius_km);
-        if (!Number.isFinite(maximumRadius) || maximumRadius <= 0 || deliveryDistanceKm > maximumRadius) {
-          await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "outside_delivery_radius");
-          return jsonResponse({ ok: false, error: "outside_delivery_area", message: "This address is outside the current SKIMA Store delivery area. Choose pickup or another address.", requestId: id }, 409);
-        }
-        deliveryFeeAmount = Number(settings.delivery_base_fee_amount ?? 0) +
-          Number(settings.delivery_per_km_fee_amount ?? 0) * deliveryDistanceKm;
+        // Nationwide Store checkout must never infer a delivery charge from
+        // straight-line GPS distance. The configured base amount is the single
+        // flat fee; operations confirms serviceability after the order is placed.
+        deliveryDistanceKm = null;
+        deliveryFeeAmount = Number(settings.delivery_base_fee_amount ?? 0);
         const freeThreshold = settings.free_delivery_minimum_amount === null ? null : Number(settings.free_delivery_minimum_amount);
         if (freeThreshold !== null && subtotalAmount >= freeThreshold) deliveryFeeAmount = 0;
       }
@@ -3913,6 +3904,83 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     });
   }
 
+  if (routePath === "/runtime/storefront/orders/refund" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const reason = optionalString(payload.reason) ?? "Store cannot fulfil delivery to the supplied address.";
+    const superAdminResult = await supabase.rpc("is_platform_super_admin");
+    if (superAdminResult.error) return databaseError(superAdminResult.error, id);
+    const storePermission = superAdminResult.data === true
+      ? { data: true, error: null }
+      : await supabase.rpc("has_permission", {
+        target_permission: "platform.store.manage",
+        target_organization_id: null,
+      });
+    if (storePermission.error) return databaseError(storePermission.error, id);
+    if (storePermission.data !== true) {
+      return jsonResponse({ ok: false, error: "forbidden", message: "Store management permission is required to refund a cancelled Store order.", requestId: id }, 403);
+    }
+
+    const moduleResult = await supabase.from("business_modules")
+      .select("id").eq("key", "store").eq("status", "active").maybeSingle();
+    if (moduleResult.error) return databaseError(moduleResult.error, id);
+    if (!moduleResult.data) return jsonResponse({ ok: false, error: "store_unavailable", requestId: id }, 503);
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const orderResult = await serviceClient.from("order_records")
+      .select("id,module_id,requester_user_id,service_request_id,status,currency_code,metadata,order_payload")
+      .eq("id", orderId).eq("module_id", moduleResult.data.id)
+      .eq("order_payload->>channel", "skima_store").maybeSingle();
+    if (orderResult.error) return databaseError(orderResult.error, id);
+    const order = orderResult.data;
+    if (!order) return jsonResponse({ ok: false, error: "store_order_not_found", requestId: id }, 404);
+    if (order.status !== "cancelled") {
+      return jsonResponse({ ok: false, error: "store_order_must_be_cancelled", message: "Cancel the Store order before issuing its wallet refund.", requestId: id }, 409);
+    }
+    const existingMetadata = optionalRecord(order.metadata) ?? {};
+    if (typeof existingMetadata.store_refunded_at === "string") {
+      return jsonResponse({ ok: true, data: { orderId, status: "refunded", alreadyRefunded: true, transactionId: existingMetadata.store_refund_transaction_id ?? null }, requestId: id });
+    }
+
+    const requestResult = await serviceClient.from("service_requests")
+      .select("id,escrow_hold_id").eq("id", order.service_request_id).maybeSingle();
+    if (requestResult.error) return databaseError(requestResult.error, id);
+    const holdId = optionalString(requestResult.data?.escrow_hold_id);
+    if (!holdId) return jsonResponse({ ok: false, error: "store_escrow_hold_missing", message: "This Store order has no linked escrow hold to refund.", requestId: id }, 409);
+
+    const walletResult = await serviceClient.from("wallet_accounts")
+      .select("id").eq("wallet_type", "customer").eq("owner_entity_type", "user")
+      .eq("owner_entity_id", order.requester_user_id)
+      .eq("currency_code", order.currency_code).eq("status", "active").maybeSingle();
+    if (walletResult.error) return databaseError(walletResult.error, id);
+    if (!walletResult.data) return jsonResponse({ ok: false, error: "store_refund_wallet_missing", message: "The customer's active Store-currency wallet could not be found. The refund needs finance review.", requestId: id }, 409);
+
+    const refundKey = `skima-store-refund:${orderId}:v1`;
+    const refundResult = await serviceClient.rpc("refund_escrow_hold", {
+      target_escrow_hold_id: holdId,
+      target_refund_wallet_id: walletResult.data.id,
+      target_idempotency_key: refundKey,
+      target_metadata: { module_key: "store", order_id: orderId, reason, source: "skima.store.admin.refund" },
+    });
+    if (refundResult.error) return databaseError(refundResult.error, id);
+    const transactionId = typeof refundResult.data === "string" ? refundResult.data : null;
+    const savedMetadata = await serviceClient.from("order_records").update({
+      metadata: {
+        ...existingMetadata,
+        store_refunded_at: new Date().toISOString(),
+        store_refund_transaction_id: transactionId,
+        store_refund_reason: reason,
+      },
+      updated_at: new Date().toISOString(),
+    }).eq("id", orderId);
+    if (savedMetadata.error) return databaseError(savedMetadata.error, id);
+    return jsonResponse({ ok: true, data: { orderId, status: "refunded", transactionId }, requestId: id });
+  }
+
   if (routePath === "/runtime/storefront/products" && request.method === "POST") {
     const body = await readJsonBody(request, id);
 
@@ -3921,6 +3989,24 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
+    if (optionalString(payload.operation) === "update") {
+      return rpcResponse(
+        supabase.rpc("update_storefront_product", {
+          target_item_id: requireUuid(payload.itemId, "itemId"),
+          target_display_name: requireString(payload.displayName, "displayName"),
+          target_description: optionalString(payload.description),
+          target_category_key: optionalString(payload.categoryKey),
+          target_category_name: optionalString(payload.categoryName),
+          target_amount: requireNumber(payload.amount, "amount"),
+          target_compare_at_amount: optionalNumber(payload.compareAtAmount, "compareAtAmount"),
+          target_stock_quantity: requireNumber(payload.stockQuantity, "stockQuantity"),
+          target_status: optionalString(payload.status) ?? "active",
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+        }),
+        id,
+      );
+    }
     return rpcResponse(
       supabase.rpc("create_storefront_product", {
         target_amount: requireNumber(payload.amount, "amount"),

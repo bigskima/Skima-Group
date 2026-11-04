@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeDollarSign, Boxes, PackagePlus, RefreshCcw, Settings2, ShoppingBag, Tag, Truck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ChangeEvent, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { createClientIdempotencyKey, normalizeStatusLabel } from "@skima/frontend-core";
@@ -31,22 +31,23 @@ import {
 const RecordArraySchema = z.array(z.record(z.unknown()));
 const StoreSettingsSchema = z.unknown();
 const StoreProductSchema = z.record(z.unknown());
+const UploadSessionSchema = z.object({ token: z.string(), signedUrl: z.string().url(), storageBucket: z.string(), storagePath: z.string() });
+const MediaAssetSchema = z.union([z.string(), z.record(z.unknown())]);
 
 export function StoreWorkspace(props: { readonly onNavigate: (href: string) => void }) {
-  const { api, status } = useSessionState();
+  const { api, status, supabase, context } = useSessionState();
   const client = useQueryClient();
   const [settingsEditorOpen, setSettingsEditorOpen] = useState(false);
   const [productEditorOpen, setProductEditorOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<CatalogRecord | null>(null);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [listingStatus, setListingStatus] = useState("active");
   const [organizationId, setOrganizationId] = useState("");
   const [currencyCode, setCurrencyCode] = useState("NGN");
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
   const [deliveryOriginLabel, setDeliveryOriginLabel] = useState("SKIMA Store");
   const [deliveryOriginAddress, setDeliveryOriginAddress] = useState("");
-  const [deliveryOriginLatitude, setDeliveryOriginLatitude] = useState("");
-  const [deliveryOriginLongitude, setDeliveryOriginLongitude] = useState("");
   const [deliveryBaseFeeAmount, setDeliveryBaseFeeAmount] = useState("0");
-  const [deliveryPerKmFeeAmount, setDeliveryPerKmFeeAmount] = useState("0");
-  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState("15");
   const [freeDeliveryMinimumAmount, setFreeDeliveryMinimumAmount] = useState("");
   const [minimumOrderAmount, setMinimumOrderAmount] = useState("0");
   const [pickupLocationLabel, setPickupLocationLabel] = useState("SKIMA Store pickup");
@@ -94,6 +95,11 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
     queryKey: ["store-admin", "availability"],
     enabled: status === "authenticated",
     queryFn: () => api.get("/runtime/catalog/availability", RecordArraySchema),
+  });
+  const media = useQuery({
+    queryKey: ["store-admin", "media"],
+    enabled: status === "authenticated",
+    queryFn: () => api.get("/runtime/catalog/media", RecordArraySchema),
   });
   const orders = useQuery({
     queryKey: ["store-admin", "orders"],
@@ -144,24 +150,12 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   const saveSettings = useMutation({
     mutationFn: () => {
       const parsedBaseFee = Number(deliveryBaseFeeAmount);
-      const parsedPerKmFee = Number(deliveryPerKmFeeAmount);
       const parsedMinimumOrder = Number(minimumOrderAmount);
-      const parsedRadius = deliveryRadiusKm.trim() ? Number(deliveryRadiusKm) : null;
       const parsedFreeThreshold = freeDeliveryMinimumAmount.trim() ? Number(freeDeliveryMinimumAmount) : null;
-      const parsedLatitude = deliveryOriginLatitude.trim() ? Number(deliveryOriginLatitude) : null;
-      const parsedLongitude = deliveryOriginLongitude.trim() ? Number(deliveryOriginLongitude) : null;
       if (!deliveryOriginLabel.trim() || !deliveryOriginAddress.trim()) {
         throw new Error("Enter the Store dispatch origin and its formatted address.");
       }
-      if (parsedLatitude === null || parsedLongitude === null ||
-        !Number.isFinite(parsedLatitude) || !Number.isFinite(parsedLongitude) ||
-        parsedLatitude < -90 || parsedLatitude > 90 || parsedLongitude < -180 || parsedLongitude > 180) {
-        throw new Error("Enter valid Store dispatch latitude and longitude coordinates.");
-      }
-      if (parsedRadius === null || !Number.isFinite(parsedRadius) || parsedRadius <= 0) {
-        throw new Error("Enter a positive delivery radius in kilometres.");
-      }
-      if (![parsedBaseFee, parsedPerKmFee, parsedMinimumOrder].every((value) => Number.isFinite(value) && value >= 0) ||
+      if (![parsedBaseFee, parsedMinimumOrder].every((value) => Number.isFinite(value) && value >= 0) ||
         (parsedFreeThreshold !== null && (!Number.isFinite(parsedFreeThreshold) || parsedFreeThreshold < 0))) {
         throw new Error("Delivery fees, free-delivery threshold and minimum order must be zero or greater.");
       }
@@ -173,11 +167,11 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         fulfillmentMethods: ["delivery", "pickup"],
         deliveryOriginLabel: deliveryOriginLabel.trim(),
         deliveryOriginFormattedAddress: deliveryOriginAddress.trim(),
-        deliveryOriginLatitude: parsedLatitude,
-        deliveryOriginLongitude: parsedLongitude,
+        deliveryOriginLatitude: null,
+        deliveryOriginLongitude: null,
         deliveryBaseFeeAmount: parsedBaseFee,
-        deliveryPerKmFeeAmount: parsedPerKmFee,
-        deliveryRadiusKm: parsedRadius,
+        deliveryPerKmFeeAmount: 0,
+        deliveryRadiusKm: null,
         freeDeliveryMinimumAmount: parsedFreeThreshold,
         minimumOrderAmount: parsedMinimumOrder,
         pickupLocationLabel: pickupLocationLabel.trim() || deliveryOriginLabel.trim(),
@@ -195,7 +189,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   });
 
   const createProduct = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const parsedAmount = Number(amount);
       const parsedCompareAt = compareAtAmount.trim() ? Number(compareAtAmount) : null;
       const parsedStock = Number(stockQuantity);
@@ -205,28 +199,62 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         throw new Error("The crossed-out price must be greater than the selling price.");
       }
       if (!Number.isFinite(parsedStock) || parsedStock < 0) throw new Error("Enter a valid stock quantity.");
-      const slug = catalogSlug(productName);
-      return api.post("/runtime/storefront/products", {
-        displayName: productName.trim(),
-        description: description.trim(),
-        categoryKey: catalogSlug(categoryKey) ? categoryKey : "store.category.general",
-        categoryName: categoryName.trim() || "General",
-        itemKey: `store.item.${slug}.${Date.now()}`,
-        amount: parsedAmount,
-        compareAtAmount: parsedCompareAt,
-        stockQuantity: parsedStock,
-        status: "active",
-        idempotencyKey: createClientIdempotencyKey("admin.storefront.product"),
-        metadata: { productOrigin: "skima_store_admin" },
-      }, StoreProductSchema);
+      if (!context?.user.id) throw new Error("The authenticated Admin identity is unavailable.");
+      if (mediaFiles.some((file) => !file.type.startsWith("image/") && !file.type.startsWith("video/"))) throw new Error("Store media must be an image or video file.");
+      if (mediaFiles.some((file) => file.size <= 0 || file.size > 50 * 1024 * 1024)) throw new Error("Each Store photo or video must be no larger than 50 MB.");
+
+      let result: Record<string, unknown>;
+      if (editingItem) {
+        result = await api.post("/runtime/storefront/products", {
+          operation: "update", itemId: catalogText(editingItem, "id"),
+          displayName: productName.trim(), description: description.trim(), categoryKey, categoryName: categoryName.trim() || "General",
+          amount: parsedAmount, compareAtAmount: parsedCompareAt, stockQuantity: parsedStock,
+          status: listingStatus,
+          idempotencyKey: createClientIdempotencyKey("admin.storefront.product.update", catalogText(editingItem, "id")),
+          metadata: { productOrigin: "skima_store_admin", editedFrom: "store_workspace" },
+        }, StoreProductSchema);
+      } else {
+        const slug = catalogSlug(productName);
+        result = await api.post("/runtime/storefront/products", {
+          displayName: productName.trim(), description: description.trim(),
+          categoryKey: catalogSlug(categoryKey) ? categoryKey : "store.category.general",
+          categoryName: categoryName.trim() || "General", itemKey: `store.item.${slug}.${Date.now()}`,
+          amount: parsedAmount, compareAtAmount: parsedCompareAt, stockQuantity: parsedStock,
+          status: listingStatus, idempotencyKey: createClientIdempotencyKey("admin.storefront.product"),
+          metadata: { productOrigin: "skima_store_admin" },
+        }, StoreProductSchema);
+      }
+
+      const itemId = catalogText(result, "itemId") || (editingItem ? catalogText(editingItem, "id") : "");
+      if (!itemId) throw new Error("The Store product was saved but no item identifier was returned.");
+      for (let index = 0; index < mediaFiles.length; index += 1) {
+        const file = mediaFiles[index];
+        const contentType = file.type || "application/octet-stream";
+        const key = createClientIdempotencyKey("admin.store.product-media", `${itemId}:${file.name}:${file.lastModified}`);
+        const upload = await api.post("/runtime/media/upload-sessions", { contentType, fileName: file.name, idempotencyKey: key, storageBucket: "skima-platform-media" }, UploadSessionSchema);
+        const stored = await supabase.storage.from(upload.storageBucket).uploadToSignedUrl(upload.storagePath, upload.token, file, { contentType, upsert: true });
+        if (stored.error) throw new Error(stored.error.message || `Could not upload ${file.name}.`);
+        const registered = await api.post("/runtime/media/assets", {
+          assetTypeKey: contentType.startsWith("video/") ? "media.video.product" : "media.image.product",
+          byteSize: file.size, contentType, idempotencyKey: `${key}:asset`,
+          metadata: { originalFileName: file.name }, ownerUserId: context.user.id,
+          organizationId: savedOrganizationId || null, source: "skima.admin.store",
+          storageBucket: upload.storageBucket, storagePath: upload.storagePath,
+        }, MediaAssetSchema);
+        const assetId = typeof registered === "string" ? registered : catalogText(registered, "id");
+        if (!assetId) throw new Error(`The media registry did not return an asset id for ${file.name}.`);
+        await api.post("/runtime/catalog/media", {
+          itemId, mediaAssetId: assetId,
+          displayOrder: (media.data ?? []).filter((entry) => catalogText(entry, "item_id") === itemId).length + index,
+          status: "active", idempotencyKey: `${key}:attach`,
+          metadata: { mediaType: contentType.startsWith("video/") ? "video" : "image", originalFileName: file.name },
+        }, StoreProductSchema);
+      }
+      return result;
     },
     onSuccess: async () => {
-      setProductEditorOpen(false);
-      setProductName("");
-      setDescription("");
-      setAmount("");
-      setCompareAtAmount("");
-      setStockQuantity("1");
+      setProductEditorOpen(false); setEditingItem(null); setMediaFiles([]);
+      setProductName(""); setDescription(""); setAmount(""); setCompareAtAmount(""); setStockQuantity("1"); setListingStatus("active");
       await refresh();
     },
   });
@@ -244,6 +272,33 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       }, StoreSettingsSchema),
     onSuccess: refresh,
   });
+  const refundOrder = useMutation({
+    mutationFn: (input: { orderId: string; reason: string }) => api.post("/runtime/storefront/orders/refund", {
+      orderId: input.orderId, reason: input.reason,
+      idempotencyKey: createClientIdempotencyKey("admin.store.order-refund", input.orderId),
+    }, StoreSettingsSchema),
+    onSuccess: refresh,
+  });
+
+  const openProductEditor = (item?: CatalogRecord) => {
+    setEditingItem(item ?? null); setMediaFiles([]);
+    if (item) {
+      const itemId = catalogText(item, "id");
+      const price = activePrices.find((entry) => catalogText(entry, "item_id") === itemId && !catalogText(entry, "variant_id"));
+      const stock = (availability.data ?? []).find((entry) => catalogText(entry, "item_id") === itemId && !catalogText(entry, "variant_id") && catalogText(entry, "status") === "active");
+      const productCategory = storeCategories.find((entry) => catalogText(entry, "id") === catalogText(item, "category_id"));
+      setProductName(catalogLabel(item)); setDescription(catalogText(item, "description"));
+      setCategoryName(catalogLabel(productCategory, "General")); setCategoryKey(catalogText(productCategory, "key") || "store.category.general");
+      setAmount(price ? String(price.amount ?? "") : "");
+      setCompareAtAmount(price && numberValue(price.compare_at_amount) > numberValue(price.amount) ? String(price.compare_at_amount) : "");
+      setStockQuantity(stock && stock.stock_quantity !== null ? String(stock.stock_quantity) : "0");
+      setListingStatus(catalogText(item, "status") === "active" ? "active" : "draft");
+    } else {
+      setProductName(""); setDescription(""); setCategoryName("General"); setCategoryKey("store.category.general");
+      setAmount(""); setCompareAtAmount(""); setStockQuantity("1"); setListingStatus("active");
+    }
+    setProductEditorOpen(true);
+  };
 
   const productColumns: TableColumn<CatalogRecord>[] = [
     { key: "product", header: "Product", render: (item) => <><strong>{catalogLabel(item)}</strong><br /><small>{catalogText(item, "key")}</small></> },
@@ -256,7 +311,12 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       const stock = (availability.data ?? []).find((rule) => catalogText(rule, "item_id") === catalogText(item, "id") && !catalogText(rule, "variant_id") && catalogText(rule, "status") === "active");
       return stock ? `${stock.stock_quantity ?? "Unlimited"} ${catalogText(stock, "availability_status") === "out_of_stock" ? "· Out of stock" : ""}` : "Not configured";
     } },
+    { key: "media", header: "Media", render: (item) => {
+      const count = (media.data ?? []).filter((entry) => catalogText(entry, "item_id") === catalogText(item, "id") && catalogText(entry, "status") === "active").length;
+      return count ? `${count} photo/video file${count === 1 ? "" : "s"}` : "No media";
+    } },
     { key: "status", header: "Status", render: (item) => <StatusBadge tone={catalogText(item, "status") === "active" ? "success" : "warning"}>{normalizeStatusLabel(catalogText(item, "status") || "unknown")}</StatusBadge> },
+    { key: "edit", header: "Manage", render: (item) => <Button size="sm" variant="outline" onClick={() => openProductEditor(item)}>Edit</Button> },
   ];
 
   const orderColumns: TableColumn<CatalogRecord>[] = [
@@ -267,6 +327,8 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
     { key: "action", header: "Next action", render: (order) => {
       const nextAction = storeOrderNextAction(catalogText(order, "status"));
       const orderId = catalogText(order, "id");
+      const orderMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata as Record<string, unknown> : {};
+      const refunded = typeof orderMetadata.store_refunded_at === "string";
       return nextAction ? (
         <div className="store-workspace__order-actions">
           <Button
@@ -283,16 +345,18 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
               onClick={() => processOrderAction.mutate({
                 orderId,
                 actionKey: "store.order.cancel",
-                reason: "Cancelled by Store operations",
+                reason: "Store cannot fulfil the customer's delivery location.",
               })}
             >Cancel</Button>
           ) : null}
         </div>
-      ) : "—";
+      ) : catalogText(order, "status") === "cancelled" && !refunded ? (
+        <Button size="sm" variant="outline" disabled={refundOrder.isPending || !orderId} onClick={() => refundOrder.mutate({ orderId, reason: "Store cannot fulfil the customer's delivery location." })}>Refund wallet</Button>
+      ) : refunded ? <StatusBadge tone="success">Refunded</StatusBadge> : "—";
     } },
   ];
 
-  const queries = [organizations, modules, settings, items, categories, prices, availability, orders];
+  const queries = [organizations, modules, settings, items, categories, prices, availability, media, orders];
   const loading = queries.some((query) => query.isLoading);
   const error = queries.find((query) => query.error)?.error;
 
@@ -305,7 +369,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         eyebrow="Commerce · SKIMA Store"
         title="Store"
         description="Manage SKIMA's direct product shop independently of LPG refill and fuel operations. Products use the shared catalogue, configured prices and stock rules."
-        actions={<><Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button><Button icon={Boxes} variant="outline" onClick={() => props.onNavigate("/services/catalog")}>Full catalogue</Button><Button icon={PackagePlus} disabled={!savedSettings || savedSettings.status !== "active"} onClick={() => setProductEditorOpen(true)}>Add product</Button></>}
+        actions={<><Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button><Button icon={Boxes} variant="outline" onClick={() => props.onNavigate("/services/catalog")}>Full catalogue</Button><Button icon={PackagePlus} disabled={!savedSettings || savedSettings.status !== "active"} onClick={() => openProductEditor()}>Add product</Button></>}
       />
 
       <section className="skima-grid skima-grid--compact">
@@ -330,11 +394,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           setFulfillmentMethod(catalogText(savedSettings, "fulfillment_method") || "delivery");
           setDeliveryOriginLabel(catalogText(savedSettings, "delivery_origin_label") || "SKIMA Store");
           setDeliveryOriginAddress(catalogText(savedSettings, "delivery_origin_formatted_address"));
-          setDeliveryOriginLatitude(catalogText(savedSettings, "delivery_origin_latitude"));
-          setDeliveryOriginLongitude(catalogText(savedSettings, "delivery_origin_longitude"));
           setDeliveryBaseFeeAmount(catalogText(savedSettings, "delivery_base_fee_amount") || "0");
-          setDeliveryPerKmFeeAmount(catalogText(savedSettings, "delivery_per_km_fee_amount") || "0");
-          setDeliveryRadiusKm(catalogText(savedSettings, "delivery_radius_km") || "15");
           setFreeDeliveryMinimumAmount(catalogText(savedSettings, "free_delivery_minimum_amount"));
           setMinimumOrderAmount(catalogText(savedSettings, "minimum_order_amount") || "0");
           setPickupLocationLabel(catalogText(savedSettings, "pickup_location_label") || "SKIMA Store pickup");
@@ -366,17 +426,11 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           <SelectInput label="Operating organisation" value={organizationId} onChange={(event) => setOrganizationId(event.currentTarget.value)} options={organizationOptions(organizations.data ?? [])} />
           <SelectInput label="Store currency" value={currencyCode} onChange={(event) => setCurrencyCode(event.currentTarget.value)} options={[{ label: "Nigerian naira (NGN)", value: "NGN" }, { label: "USDC", value: "USDC" }]} />
           <SelectInput label="Default fulfillment" value={fulfillmentMethod} onChange={(event) => setFulfillmentMethod(event.currentTarget.value)} options={[{ label: "Delivery", value: "delivery" }, { label: "Customer pickup", value: "pickup" }]} />
-          <div className="admin-notice"><strong>Delivery coverage and pricing</strong><p>SKIMA calculates the customer delivery fee from this origin to the saved delivery address. An address outside the radius cannot be checked out for delivery.</p></div>
+          <div className="admin-notice"><strong>Nationwide delivery</strong><p>Customers may place Store orders from any address in Nigeria. SKIMA charges one flat delivery fee here, then Store operations reviews whether the destination can be served. Unserviceable orders can be cancelled and refunded from the Store orders list.</p></div>
           <TextInput label="Dispatch / warehouse name" value={deliveryOriginLabel} onChange={(event) => setDeliveryOriginLabel(event.currentTarget.value)} placeholder="SKIMA Store" />
-          <TextInput label="Dispatch address" value={deliveryOriginAddress} onChange={(event) => setDeliveryOriginAddress(event.currentTarget.value)} placeholder="Full origin address" />
+          <TextInput label="Dispatch address or service area" value={deliveryOriginAddress} onChange={(event) => setDeliveryOriginAddress(event.currentTarget.value)} placeholder="Formatted address, town/city and state" />
           <div className="skima-form-grid">
-            <TextInput label="Origin latitude" type="number" value={deliveryOriginLatitude} onChange={(event) => setDeliveryOriginLatitude(event.currentTarget.value)} placeholder="6.2..." />
-            <TextInput label="Origin longitude" type="number" value={deliveryOriginLongitude} onChange={(event) => setDeliveryOriginLongitude(event.currentTarget.value)} placeholder="7.0..." />
-          </div>
-          <div className="skima-form-grid">
-            <TextInput label={`Base delivery fee (${currencyCode})`} type="number" value={deliveryBaseFeeAmount} onChange={(event) => setDeliveryBaseFeeAmount(event.currentTarget.value)} />
-            <TextInput label={`Extra fee per kilometre (${currencyCode})`} type="number" value={deliveryPerKmFeeAmount} onChange={(event) => setDeliveryPerKmFeeAmount(event.currentTarget.value)} />
-            <TextInput label="Maximum delivery radius (km)" type="number" value={deliveryRadiusKm} onChange={(event) => setDeliveryRadiusKm(event.currentTarget.value)} />
+            <TextInput label={`Flat delivery fee (${currencyCode})`} type="number" value={deliveryBaseFeeAmount} onChange={(event) => setDeliveryBaseFeeAmount(event.currentTarget.value)} />
             <TextInput label={`Free delivery from (${currencyCode}, optional)`} type="number" value={freeDeliveryMinimumAmount} onChange={(event) => setFreeDeliveryMinimumAmount(event.currentTarget.value)} />
           </div>
           <TextInput label={`Minimum order amount (${currencyCode})`} type="number" value={minimumOrderAmount} onChange={(event) => setMinimumOrderAmount(event.currentTarget.value)} />
@@ -388,7 +442,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         </div>
       </Dialog>
 
-      <Dialog isOpen={productEditorOpen} title="Add Store product" onClose={() => setProductEditorOpen(false)} footer={<><Button variant="ghost" onClick={() => setProductEditorOpen(false)}>Cancel</Button><Button isLoading={createProduct.isPending} disabled={!productName.trim() || !amount.trim()} onClick={() => createProduct.mutate()}>Create and publish product</Button></>}>
+      <Dialog isOpen={productEditorOpen} title={editingItem ? "Edit Store listing" : "Add Store product"} onClose={() => { setProductEditorOpen(false); setEditingItem(null); setMediaFiles([]); }} footer={<><Button variant="ghost" onClick={() => { setProductEditorOpen(false); setEditingItem(null); setMediaFiles([]); }}>Cancel</Button><Button isLoading={createProduct.isPending} disabled={!productName.trim() || !amount.trim()} onClick={() => createProduct.mutate()}>{editingItem ? "Save listing changes" : "Create product"}</Button></>}>
         <div className="skima-form-grid">
           <TextInput label="Product name" value={productName} onChange={(event) => setProductName(event.currentTarget.value)} placeholder="e.g. 12.5kg LPG cylinder" />
           <TextAreaInput label="Description" value={description} onChange={(event) => setDescription(event.currentTarget.value)} placeholder="Tell customers what they are buying." />
@@ -397,7 +451,15 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
             <TextInput label={`Selling price (${currencyCode})`} type="number" value={amount} onChange={(event) => setAmount(event.currentTarget.value)} placeholder="0.00" />
             <TextInput label="Compare-at price (optional)" type="number" value={compareAtAmount} onChange={(event) => setCompareAtAmount(event.currentTarget.value)} placeholder="Original price" />
           </div>
-          <TextInput label="Available stock quantity" type="number" value={stockQuantity} onChange={(event) => setStockQuantity(event.currentTarget.value)} helperText="Set 0 to list the product as out of stock." />
+          <TextInput label="Available stock quantity" type="number" value={stockQuantity} onChange={(event) => setStockQuantity(event.currentTarget.value)} helperText="Set 0 to list the product as out of stock. Already-reserved stock cannot be removed." />
+          <SelectInput label="Listing status" value={listingStatus} onChange={(event) => setListingStatus(event.currentTarget.value)} options={[{ label: "Published", value: "active" }, { label: "Draft / hidden", value: "draft" }]} />
+          {editingItem ? <div className="admin-notice"><strong>Existing product media</strong><p>{(media.data ?? []).filter((entry) => catalogText(entry, "item_id") === catalogText(editingItem, "id") && catalogText(entry, "status") === "active").length} photo/video files are currently attached. New uploads are added to the gallery; existing media remains available.</p></div> : null}
+          <div className="skima-form-field">
+            <label htmlFor="store-product-media">Product photos and videos</label>
+            <input id="store-product-media" type="file" accept="image/*,video/*" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => setMediaFiles(Array.from(event.currentTarget.files ?? []))} />
+            <small>Choose multiple photos and videos. Up to 50 MB per file. The first photo is used as the product cover.</small>
+            {mediaFiles.length ? <small>{mediaFiles.map((file) => file.name).join(" · ")}</small> : null}
+          </div>
           <div className="store-workspace__pricing-hint"><Tag size={16} /><span>The crossed-out price is shown as an offer only when it is higher than the current selling price.</span></div>
           {createProduct.error ? <StatusBadge tone="danger">{catalogError(createProduct.error)}</StatusBadge> : null}
         </div>

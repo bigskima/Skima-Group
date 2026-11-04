@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import {
   ArrowLeft,
@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -54,6 +55,12 @@ type StoreCartLine = {
 };
 
 const ORDER_RESULT_SCHEMA = z.union([z.string(), z.record(z.unknown())]);
+const STORE_MEDIA_READ_SCHEMA = z.object({
+  assetId: z.string(),
+  contentType: z.string().nullable(),
+  expiresInSeconds: z.number().positive(),
+  signedUrl: z.string().url(),
+});
 
 export default function StoreScreen() {
   const session = useSession();
@@ -87,10 +94,6 @@ export default function StoreScreen() {
   const availableLocations = (locations.data ?? []).filter((location) =>
     !["inactive", "disabled", "deleted"].includes(firstString(location, ["status"]) ?? ""),
   );
-  const selectedDeliveryLocation = availableLocations.find((location) =>
-    firstString(location, ["id"]) === deliveryLocationId
-  ) ?? null;
-
   useEffect(() => {
     let active = true;
     setCart([]);
@@ -205,7 +208,9 @@ export default function StoreScreen() {
           _variants: variants,
           _prices: itemPrices,
           _availability: itemAvailability,
-          _imageAssetId: typeof itemMedia[0]?.media_asset_id === "string" ? itemMedia[0].media_asset_id : null,
+          _imageAssetId: typeof itemMedia.find((media) => metadataValue(media, "mediaType") !== "video")?.media_asset_id === "string"
+            ? itemMedia.find((media) => metadataValue(media, "mediaType") !== "video")?.media_asset_id as string
+            : null,
           _available: available,
         };
       })
@@ -285,39 +290,14 @@ export default function StoreScreen() {
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.quantity * line.unitAmount, 0);
   const currencyCode = typeof settings?.currency_code === "string" ? settings.currency_code : "NGN";
-  const deliveryOriginLatitude = firstNumber(settings, ["delivery_origin_latitude"]);
-  const deliveryOriginLongitude = firstNumber(settings, ["delivery_origin_longitude"]);
-  const deliveryDestinationLatitude = firstNumber(selectedDeliveryLocation, ["latitude"]);
-  const deliveryDestinationLongitude = firstNumber(selectedDeliveryLocation, ["longitude"]);
-  const deliveryDistanceKm = fulfillmentMethod === "delivery" &&
-      deliveryOriginLatitude !== null &&
-      deliveryOriginLongitude !== null &&
-      deliveryDestinationLatitude !== null &&
-      deliveryDestinationLongitude !== null
-    ? haversineDistanceKm(
-        deliveryOriginLatitude,
-        deliveryOriginLongitude,
-        deliveryDestinationLatitude,
-        deliveryDestinationLongitude,
-      )
-    : null;
-  const deliveryRadiusKm = firstNumber(settings, ["delivery_radius_km"]);
-  const deliveryWithinRadius = fulfillmentMethod === "pickup" ||
-    deliveryDistanceKm !== null &&
-    Number.isFinite(deliveryDistanceKm) &&
-    deliveryRadiusKm !== null &&
-    deliveryDistanceKm <= deliveryRadiusKm;
-  const deliveryBaseFee = firstNumber(settings, ["delivery_base_fee_amount"]) ?? 0;
-  const deliveryPerKmFee = firstNumber(settings, ["delivery_per_km_fee_amount"]) ?? 0;
+  const deliveryFlatFee = firstNumber(settings, ["delivery_base_fee_amount"]) ?? 0;
   const freeDeliveryMinimum = firstNumber(settings, ["free_delivery_minimum_amount"]);
   const estimatedDeliveryFee = fulfillmentMethod === "pickup"
     ? 0
-    : deliveryDistanceKm === null || !Number.isFinite(deliveryDistanceKm)
-      ? null
-      : freeDeliveryMinimum !== null && cartTotal >= freeDeliveryMinimum
-        ? 0
-        : Math.round((deliveryBaseFee + deliveryPerKmFee * deliveryDistanceKm) * 100) / 100;
-  const estimatedCheckoutTotal = estimatedDeliveryFee === null ? null : cartTotal + estimatedDeliveryFee;
+    : freeDeliveryMinimum !== null && cartTotal >= freeDeliveryMinimum
+      ? 0
+      : deliveryFlatFee;
+  const estimatedCheckoutTotal = cartTotal + estimatedDeliveryFee;
   const minimumOrderAmount = firstNumber(settings, ["minimum_order_amount"]) ?? 0;
   const walletCurrencyMatches = walletCurrency === currencyCode;
   const walletSufficient = estimatedCheckoutTotal !== null && walletBalance >= estimatedCheckoutTotal;
@@ -330,8 +310,7 @@ export default function StoreScreen() {
     estimatedCheckoutTotal > 0 &&
     cartTotal >= minimumOrderAmount &&
     walletSufficient &&
-    (fulfillmentMethod === "pickup" || deliveryLocationId) &&
-    deliveryWithinRadius,
+    (fulfillmentMethod === "pickup" || deliveryLocationId),
   );
 
   const checkout = useMutation({
@@ -376,7 +355,7 @@ export default function StoreScreen() {
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : "Please review your basket and try again.";
-      if (/insufficient_wallet_balance|insufficient.*balance|outside_delivery_area|delivery_coordinates_required|minimum_order_not_met|pickup_not_configured|invalid_checkout_snapshot/i.test(message)) {
+      if (/insufficient_wallet_balance|insufficient.*balance|outside_delivery_area|delivery_coordinates_required|minimum_order_not_met|pickup_not_configured|invalid_checkout_snapshot|checkout_order_closed/i.test(message)) {
         setCheckoutAttemptKey(idempotencyKey("store-order", userId));
       }
       Alert.alert("Checkout could not be completed", message);
@@ -487,9 +466,9 @@ export default function StoreScreen() {
           >
             <View style={[styles.hero, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.heroCopy}>
-                <Text style={[styles.heroEyebrow, { color: palette.brand }]}>MORE THAN REFILLS</Text>
-                <Text style={[styles.heroTitle, { color: palette.ink }]}>Everyday essentials, in one place.</Text>
-                <Text style={[styles.heroBody, { color: palette.muted }]}>Shop cylinders and other products listed by SKIMA. Prices, offers and availability are managed from the Store catalogue.</Text>
+                <Text style={[styles.heroEyebrow, { color: palette.brand }]}>SKIMA STORE</Text>
+                <Text style={[styles.heroTitle, { color: palette.ink }]}>Shop essentials.</Text>
+                <Text style={[styles.heroBody, { color: palette.muted }]}>Cylinders and more, all in one store.</Text>
               </View>
               <View style={[styles.heroIcon, { backgroundColor: palette.brandSoft }]}>
                 <ShoppingBag color={palette.brand} size={31} />
@@ -598,7 +577,30 @@ export default function StoreScreen() {
               <Text style={[styles.modalTitle, { color: palette.ink }]} numberOfLines={2}>{selectedItem ? recordString(selectedItem, "display_name") : "Product"}</Text>
               <Pressable onPress={() => setSelectedItem(null)} style={[styles.closeButton, { backgroundColor: palette.surfaceSubtle }]}><X color={palette.ink} size={19} /></Pressable>
             </View>
-            {selectedItem?._imageAssetId ? <RuntimeMediaImage assetId={selectedItem._imageAssetId as string} label={recordString(selectedItem, "display_name")} variant="hero" /> : null}
+            {selectedItem ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productGallery}>
+                {data.media.data
+                  ?.filter((media) => media.item_id === selectedItemId && media.status === "active")
+                  .sort((left, right) => numberValue(left.display_order) - numberValue(right.display_order))
+                  .map((media) => {
+                    const assetId = recordString(media, "media_asset_id");
+                    const isVideo = metadataValue(media, "mediaType") === "video";
+                    return assetId ? (
+                      <StoreProductMedia
+                        key={assetId}
+                        assetId={assetId}
+                        label={recordString(selectedItem, "display_name")}
+                        isVideo={isVideo}
+                      />
+                    ) : null;
+                  })}
+                {!data.media.data?.some((media) => media.item_id === selectedItemId && media.status === "active") ? (
+                  <View style={[styles.galleryEmpty, { backgroundColor: palette.surfaceSubtle }]}>
+                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: "700" }}>No product media yet</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+            ) : null}
             {selectedItem && recordString(selectedItem, "description") ? <Text style={[styles.modalDescription, { color: palette.muted }]}>{recordString(selectedItem, "description")}</Text> : null}
             {selectedVariants.length ? (
               <View style={styles.optionSection}>
@@ -769,7 +771,7 @@ export default function StoreScreen() {
                 {cartTotal < minimumOrderAmount ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Minimum Store order is {formatMoney(minimumOrderAmount, currencyCode)}.</Text> : null}
                 {walletCurrency !== currencyCode ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet currency must match Store currency ({currencyCode}).</Text> : null}
                 {estimatedCheckoutTotal !== null && !walletSufficient ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet balance does not cover this order total.</Text> : null}
-                {deliveryDistanceKm !== null && Number.isFinite(deliveryDistanceKm) && deliveryRadiusKm !== null && deliveryDistanceKm > deliveryRadiusKm ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>This address is outside the current delivery area. Choose pickup or another address.</Text> : null}
+                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Orders are accepted from addresses across Nigeria. SKIMA Store will review delivery availability after checkout; if we cannot serve the location, the order will be cancelled and the wallet payment refunded.</Text>
                 <Text style={[styles.checkoutNote, { color: palette.muted }]}>Payment is reserved in SKIMA escrow. The Store team can only prepare your order after the wallet reservation succeeds.</Text>
                 <Pressable disabled={checkout.isPending || !cartReady || !canCheckout} onPress={() => checkout.mutate()} style={[styles.primaryButton, styles.checkoutButton, { backgroundColor: palette.brand, opacity: checkout.isPending || !canCheckout ? 0.5 : 1 }]}>
                   {checkout.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Pay and place order</Text>}
@@ -780,6 +782,50 @@ export default function StoreScreen() {
         </View>
       </Modal>
     </View>
+  );
+}
+
+function StoreProductMedia({ assetId, label, isVideo }: { assetId: string; label: string; isVideo: boolean }) {
+  const session = useSession();
+  const { palette } = useAppTheme();
+  const media = useQuery({
+    queryKey: ["lpg-expo", "store-product-media", assetId, session.session?.user.id ?? "anonymous"],
+    enabled: isVideo && session.status === "authenticated",
+    staleTime: 10 * 60 * 1000,
+    queryFn: () => session.api.post(
+      "/runtime/media/read-sessions",
+      { assetId, idempotencyKey: idempotencyKey("store-product-video", assetId) },
+      STORE_MEDIA_READ_SCHEMA,
+    ),
+  });
+  if (!isVideo) {
+    return <View style={{ width: 210 }}>
+      <RuntimeMediaImage assetId={assetId} label={label} variant="hero" previewable />
+    </View>;
+  }
+  return (
+    <Pressable
+      disabled={!media.data?.signedUrl}
+      onPress={() => { if (media.data?.signedUrl) void Linking.openURL(media.data.signedUrl); }}
+      style={({ pressed }) => ({
+        width: 210,
+        height: 132,
+        borderRadius: 14,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: palette.surfaceSubtle,
+        borderWidth: 1,
+        borderColor: palette.border,
+        opacity: pressed ? 0.8 : 1,
+        padding: 12,
+      })}
+    >
+      <ShoppingBag color={palette.brand} size={27} />
+      <Text style={{ color: palette.ink, fontSize: 12, fontWeight: "900", marginTop: 8 }}>Watch product video</Text>
+      <Text style={{ color: palette.muted, fontSize: 10, marginTop: 3 }}>
+        {media.isPending ? "Loading video…" : media.error ? "Video unavailable" : "Tap to play"}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -794,17 +840,6 @@ function CategoryChip({ label, active, onPress }: { label: string; active: boole
 
 function chooseRecord(records: PlatformRecord[], variantId: string | null) {
   return records.find((record) => (record.variant_id ?? null) === variantId) ?? null;
-}
-
-function haversineDistanceKm(fromLatitude: number, fromLongitude: number, toLatitude: number, toLongitude: number) {
-  if (![fromLatitude, fromLongitude, toLatitude, toLongitude].every(Number.isFinite)) return Number.NaN;
-  const radians = (degrees: number) => degrees * Math.PI / 180;
-  const latitudeDelta = radians(toLatitude - fromLatitude);
-  const longitudeDelta = radians(toLongitude - fromLongitude);
-  const a = Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(radians(fromLatitude)) * Math.cos(radians(toLatitude)) *
-    Math.sin(longitudeDelta / 2) ** 2;
-  return 6371.0088 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function isEffective(record: PlatformRecord, now: number) {
@@ -887,12 +922,12 @@ const styles = StyleSheet.create({
   cartCount: { position: "absolute", top: -4, right: -4, minWidth: 19, height: 19, paddingHorizontal: 4, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: "#1A1A1D", borderWidth: 1.5, borderColor: "#FFFFFF" },
   cartCountText: { color: "#FFFFFF", fontSize: 9, fontWeight: "900" },
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 115, gap: 16 },
-  hero: { minHeight: 146, borderRadius: 22, borderWidth: borders.hairline, padding: 18, flexDirection: "row", alignItems: "center", gap: 8 },
-  heroCopy: { flex: 1, gap: 6 },
+  hero: { minHeight: 108, borderRadius: 20, borderWidth: borders.hairline, padding: 14, flexDirection: "row", alignItems: "center", gap: 8 },
+  heroCopy: { flex: 1, gap: 4 },
   heroEyebrow: { ...typography.eyebrow },
-  heroTitle: { fontSize: 22, lineHeight: 26, fontWeight: "900", letterSpacing: -0.45 },
-  heroBody: { fontSize: 12, lineHeight: 17, fontWeight: "500" },
-  heroIcon: { width: 62, height: 62, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  heroTitle: { fontSize: 19, lineHeight: 22, fontWeight: "900", letterSpacing: -0.35 },
+  heroBody: { fontSize: 10, lineHeight: 14, fontWeight: "600" },
+  heroIcon: { width: 48, height: 48, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   searchBox: { minHeight: 50, borderRadius: 16, borderWidth: borders.control, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   searchInput: { flex: 1, fontSize: 14, fontWeight: "600", paddingVertical: 9 },
   categoryRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 8 },
@@ -934,6 +969,8 @@ const styles = StyleSheet.create({
   modalTitle: { flex: 1, fontSize: 19, fontWeight: "900" },
   closeButton: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   modalDescription: { fontSize: 12, lineHeight: 17 },
+  productGallery: { gap: 9, paddingVertical: 2 },
+  galleryEmpty: { width: 210, height: 132, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   optionSection: { gap: 8 },
   optionLabel: { fontSize: 13, fontWeight: "900" },
   optionList: { gap: 7 },
