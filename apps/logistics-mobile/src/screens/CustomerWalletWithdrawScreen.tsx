@@ -122,7 +122,11 @@ export function CustomerWalletWithdrawScreen() {
         walletId, beneficiaryId: destination, amount: amountValue,
         idempotencyKey: withdrawalKey,
       });
-      setReceipt(result); setFeePreview(null);
+      const resultStatus = (asString(result, "status") ?? "processing").toLowerCase();
+      const resultTransfer = record(result.transfer);
+      const resultProviderStatus = (asString(resultTransfer, "providerStatus", "provider_status", "status") ?? "").toLowerCase();
+      setReceipt({ ...result, status: resultProviderStatus === "approved" ? "approved" : resultStatus });
+      setFeePreview(null);
       setWithdrawalKey(createClientIdempotencyKey("logistics.wallet.withdrawal", walletId));
       await Promise.all([wallets.refetch(), balances.refetch(), beneficiaryQuery.refetch()]);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "The withdrawal could not be submitted."); }
@@ -134,7 +138,10 @@ export function CustomerWalletWithdrawScreen() {
     setMessage("");
     try {
       const result = await retry.mutateAsync({ withdrawalRequestId: id });
-      setReceipt(result);
+      const nextStatus = (asString(result, "status") ?? "").toLowerCase();
+      const nextTransfer = record(result.transfer);
+      const nextProviderStatus = (asString(nextTransfer, "providerStatus", "provider_status", "status") ?? "").toLowerCase();
+      setReceipt({ ...result, status: nextProviderStatus === "approved" ? "approved" : nextStatus });
       await Promise.all([wallets.refetch(), balances.refetch()]);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "The transfer retry could not be completed."); }
   }
