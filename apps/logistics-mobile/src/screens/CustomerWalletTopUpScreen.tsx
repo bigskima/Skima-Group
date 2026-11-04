@@ -1,10 +1,10 @@
 import * as Linking from "expo-linking";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { z } from "zod";
 import { useLogisticsQuery, asString, asNumber } from "../api/logistics";
-import { useLogisticsFinanceMutation } from "../api/finance";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii } from "../theme/tokens";
@@ -31,8 +31,8 @@ export function CustomerWalletTopUpScreen() {
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [reference, setReference] = useState("");
   const [error, setError] = useState("");
-  const preview = useLogisticsFinanceMutation({ path: "/deposits/preview", schema: RecordSchema });
-  const initialize = useLogisticsFinanceMutation({ path: "/deposits", schema: RecordSchema });
+  const preview = useMutation({ mutationFn: (body: Record<string, unknown>) => session.api.post("/runtime/payments/deposits/preview", body, RecordSchema) });
+  const initialize = useMutation({ mutationFn: (body: Record<string, unknown>) => session.api.post("/runtime/payments/deposits", body, RecordSchema) });
   const value = Number(amount);
   const credit = asNumber(previewData, "walletCreditAmount", "wallet_credit_amount") ?? value;
   const fee = asNumber(previewData, "calculatedFeeAmount", "calculated_fee_amount") ?? 0;
