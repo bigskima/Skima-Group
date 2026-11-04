@@ -3508,46 +3508,47 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
     const payload = body.value;
-    const settingsResult = await supabase.rpc("configure_storefront_fulfillment_settings", {
-      target_branch_id: optionalUuid(payload.branchId, "branchId"),
-      target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
-      target_delivery_base_fee_amount: requireNumber(payload.deliveryBaseFeeAmount, "deliveryBaseFeeAmount"),
-      target_delivery_origin_formatted_address: optionalString(payload.deliveryOriginFormattedAddress),
-      target_delivery_origin_label: optionalString(payload.deliveryOriginLabel),
-      target_delivery_origin_latitude: optionalNumber(payload.deliveryOriginLatitude, "deliveryOriginLatitude"),
-      target_delivery_origin_longitude: optionalNumber(payload.deliveryOriginLongitude, "deliveryOriginLongitude"),
-      target_delivery_per_km_fee_amount: requireNumber(payload.deliveryPerKmFeeAmount, "deliveryPerKmFeeAmount"),
-      target_delivery_radius_km: optionalNumber(payload.deliveryRadiusKm, "deliveryRadiusKm"),
-      target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
-      target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ?? ["delivery", "pickup"],
-      target_free_delivery_minimum_amount: optionalNumber(payload.freeDeliveryMinimumAmount, "freeDeliveryMinimumAmount"),
-      target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-      target_metadata: optionalRecord(payload.metadata) ?? {},
-      target_minimum_order_amount: requireNumber(payload.minimumOrderAmount, "minimumOrderAmount"),
-      target_organization_id: requireUuid(payload.organizationId, "organizationId"),
-      target_pickup_formatted_address: optionalString(payload.pickupFormattedAddress),
-      target_pickup_instructions: optionalString(payload.pickupInstructions),
-      target_pickup_location_label: optionalString(payload.pickupLocationLabel),
-      target_status: optionalString(payload.status) ?? "active",
-    });
-    if (settingsResult.error) return databaseError(settingsResult.error, id);
 
-    const etaMinimum = requireBoundedInteger(payload.deliveryEtaMinBusinessDays ?? 2, "deliveryEtaMinBusinessDays", 1, 60);
-    const etaMaximum = requireBoundedInteger(payload.deliveryEtaMaxBusinessDays ?? 5, "deliveryEtaMaxBusinessDays", etaMinimum, 90);
-    const etaResult = await supabase.rpc("configure_storefront_delivery_window", {
-      target_organization_id: requireUuid(payload.organizationId, "organizationId"),
-      target_min_business_days: etaMinimum,
-      target_max_business_days: etaMaximum,
-      target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey") + ":delivery-window",
-      target_metadata: optionalRecord(payload.metadata) ?? {},
-    });
-    if (etaResult.error) return databaseError(etaResult.error, id);
+    const etaMinimum = requireBoundedInteger(
+      payload.deliveryEtaMinBusinessDays ?? 2,
+      "deliveryEtaMinBusinessDays",
+      1,
+      60,
+    );
+    const etaMaximum = requireBoundedInteger(
+      payload.deliveryEtaMaxBusinessDays ?? 5,
+      "deliveryEtaMaxBusinessDays",
+      etaMinimum,
+      90,
+    );
 
-    return jsonResponse({
-      ok: true,
-      data: { settingsId: settingsResult.data, deliveryWindowId: etaResult.data },
-      requestId: id,
-    });
+    return rpcResponse(
+      supabase.rpc("configure_storefront_full_settings", {
+        target_branch_id: optionalUuid(payload.branchId, "branchId"),
+        target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+        target_delivery_base_fee_amount: requireNumber(payload.deliveryBaseFeeAmount, "deliveryBaseFeeAmount"),
+        target_delivery_origin_formatted_address: optionalString(payload.deliveryOriginFormattedAddress),
+        target_delivery_origin_label: optionalString(payload.deliveryOriginLabel),
+        target_delivery_origin_latitude: optionalNumber(payload.deliveryOriginLatitude, "deliveryOriginLatitude"),
+        target_delivery_origin_longitude: optionalNumber(payload.deliveryOriginLongitude, "deliveryOriginLongitude"),
+        target_delivery_per_km_fee_amount: requireNumber(payload.deliveryPerKmFeeAmount, "deliveryPerKmFeeAmount"),
+        target_delivery_radius_km: optionalNumber(payload.deliveryRadiusKm, "deliveryRadiusKm"),
+        target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
+        target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ?? ["delivery", "pickup"],
+        target_free_delivery_minimum_amount: optionalNumber(payload.freeDeliveryMinimumAmount, "freeDeliveryMinimumAmount"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_max_business_days: etaMaximum,
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_min_business_days: etaMinimum,
+        target_minimum_order_amount: requireNumber(payload.minimumOrderAmount, "minimumOrderAmount"),
+        target_organization_id: requireUuid(payload.organizationId, "organizationId"),
+        target_pickup_formatted_address: optionalString(payload.pickupFormattedAddress),
+        target_pickup_instructions: optionalString(payload.pickupInstructions),
+        target_pickup_location_label: optionalString(payload.pickupLocationLabel),
+        target_status: optionalString(payload.status) ?? "active",
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/storefront/orders" && request.method === "GET") {
