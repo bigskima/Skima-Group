@@ -230,7 +230,7 @@ export function LogisticsStoreScreen() {
               <Pressable onPress={()=>add(product)} style={[styles.add,{backgroundColor:palette.brand}]}><Plus color="#fff" size={15}/><Text style={styles.addText}>Add</Text></Pressable>
             </View>)}
            </View>:<StatePanel title="No available products" description="Active Store products with a valid price and available stock will appear here."/>}
-           </>
+           </>}
           {cart.length? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
             <View style={styles.cartHead}><View style={styles.cartTitleRow}><ShoppingCart color={palette.brand} size={18}/><Text style={[styles.cartTitle,{color:palette.ink}]}>Basket ({cart.reduce((sum,line)=>sum+line.quantity,0)})</Text></View><Text style={[styles.cartTotal,{color:palette.ink}]}>{money(cartTotal,cartCurrency)}</Text></View>
             {cart.map(line=><View key={`${line.itemId}:${line.variantId??"base"}`} style={styles.cartLine}><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.cartName,{color:palette.ink}]}>{line.name}</Text>{line.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{line.variantName}</Text>:null}</View><View style={styles.quantity}><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,-1)}><Minus color={palette.muted} size={15}/></Pressable><Text style={{color:palette.ink,fontWeight:"800"}}>{line.quantity}</Text><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,1)}><Plus color={palette.brand} size={15}/></Pressable></View><Text style={[styles.cartAmount,{color:palette.ink}]}>{money(line.unitAmount*line.quantity,line.currencyCode)}</Text></View>)}
