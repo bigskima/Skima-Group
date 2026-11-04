@@ -13,8 +13,9 @@ const FAILED = new Set(["cancelled", "failed", "rejected", "expired"]);
 export function PaymentReturnScreen() {
   const { palette } = useAppTheme();
   const { status } = useSession();
-  const params = useLocalSearchParams<{ depositId?: string | string[]; reference?: string | string[] }>();
-  const requested = Array.isArray(params.depositId) ? params.depositId[0] : params.depositId
+  const params = useLocalSearchParams<{ depositRequestId?: string | string[]; depositId?: string | string[]; reference?: string | string[] }>();
+  const requested = Array.isArray(params.depositRequestId) ? params.depositRequestId[0] : params.depositRequestId
+    ?? (Array.isArray(params.depositId) ? params.depositId[0] : params.depositId)
     ?? (Array.isArray(params.reference) ? params.reference[0] : params.reference);
   const deposits = useLogisticsQuery(["payment-return-deposits"], "/runtime/payments/deposits?scope=customer", true, 3000);
   const wallets = useLogisticsQuery(["customer-wallets"], "/runtime/wallets", true, 30000);
@@ -22,7 +23,7 @@ export function PaymentReturnScreen() {
   const deposit = useMemo(() => {
     const rows = deposits.data ?? [];
     if (requested) {
-      const exact = rows.find(item => asString(item, "id", "deposit_id", "depositId", "public_reference", "publicReference") === requested);
+      const exact = rows.find(item => asString(item, "id", "deposit_id", "depositId", "deposit_request_id", "depositRequestId", "public_reference", "publicReference") === requested);
       if (exact) return exact;
     }
     return [...rows].sort((a,b) => (Date.parse(asString(b, "created_at", "initialized_at") ?? "") || 0) - (Date.parse(asString(a, "created_at", "initialized_at") ?? "") || 0))[0] ?? null;
