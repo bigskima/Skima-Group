@@ -54,11 +54,9 @@ export function CustomerWalletWithdrawScreen() {
   const [receipt, setReceipt] = useState<Record<string, unknown> | null>(null);
   const [beneficiaryKey, setBeneficiaryKey] = useState(() => createClientIdempotencyKey("logistics.wallet.beneficiary", walletId ?? session?.user.id ?? "customer"));
   const [withdrawalKey, setWithdrawalKey] = useState(() => createClientIdempotencyKey("logistics.wallet.withdrawal", walletId ?? session?.user.id ?? "customer"));
-  const [retryKey, setRetryKey] = useState(() => createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId ?? session?.user.id ?? "customer"));
   useEffect(() => {
     setBeneficiaryKey(createClientIdempotencyKey("logistics.wallet.beneficiary", walletId ?? session?.user.id ?? "customer"));
     setWithdrawalKey(createClientIdempotencyKey("logistics.wallet.withdrawal", walletId ?? session?.user.id ?? "customer"));
-    setRetryKey(createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId ?? session?.user.id ?? "customer"));
   }, [walletId, session?.user.id]);
 
   const resolveAccount = useLogisticsFinanceMutation({ path: "/beneficiaries/resolve", schema: RecordSchema });
@@ -126,7 +124,6 @@ export function CustomerWalletWithdrawScreen() {
       });
       setReceipt(result); setFeePreview(null);
       setWithdrawalKey(createClientIdempotencyKey("logistics.wallet.withdrawal", walletId));
-      setRetryKey(createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId));
       await Promise.all([wallets.refetch(), balances.refetch(), beneficiaryQuery.refetch()]);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "The withdrawal could not be submitted."); }
   }
@@ -136,9 +133,8 @@ export function CustomerWalletWithdrawScreen() {
     if (!id) return;
     setMessage("");
     try {
-      const result = await retry.mutateAsync({ withdrawalRequestId: id, idempotencyKey: retryKey });
+      const result = await retry.mutateAsync({ withdrawalRequestId: id });
       setReceipt(result);
-      setRetryKey(createClientIdempotencyKey("logistics.wallet.withdrawal.retry", walletId ?? "customer"));
       await Promise.all([wallets.refetch(), balances.refetch()]);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : "The transfer retry could not be completed."); }
   }
