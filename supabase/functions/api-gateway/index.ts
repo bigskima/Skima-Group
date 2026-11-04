@@ -3478,7 +3478,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       supabase
         .from("storefront_settings")
         .select(
-          "id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,delivery_origin_label,delivery_origin_formatted_address,delivery_origin_latitude,delivery_origin_longitude,delivery_base_fee_amount,delivery_per_km_fee_amount,delivery_radius_km,free_delivery_minimum_amount,minimum_order_amount,pickup_location_label,pickup_formatted_address,pickup_instructions,metadata,created_at,updated_at",
+          "id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,delivery_origin_label,delivery_origin_formatted_address,delivery_origin_latitude,delivery_origin_longitude,delivery_base_fee_amount,delivery_per_km_fee_amount,delivery_radius_km,free_delivery_minimum_amount,minimum_order_amount,delivery_eta_min_business_days,delivery_eta_max_business_days,pickup_location_label,pickup_formatted_address,pickup_instructions,metadata,created_at,updated_at",
         )
         .order("updated_at", { ascending: false }),
       id,
