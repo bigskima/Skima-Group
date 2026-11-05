@@ -4,12 +4,14 @@ Production-facing public website for https://skima.online.
 
 ## Deploy on Vercel
 
-Create a Vercel project connected to bigskima/Skima-Group with the project root directory set to apps/website. This is a static site and does not need a build step.
+Create a Vercel project connected to bigskima/Skima-Group with the project root directory set to `apps/website`. This is a static site and does not need a build step.
 
 ## Public assets
 
-- assets/skima-mark.svg — SKIMA site mark.
-- assets/skima-home-hero.svg — generated hero campaign artwork embedded as a self-contained image asset.
+- `assets/skima-home-hero.svg` — original AI-generated photoreal campaign artwork embedded as a self-contained WebP image. It is illustrative, not a documentary photograph of SKIMA staff, vehicles or customers.
+- `assets/skima-mark.svg` — displays the existing SKIMA brand symbol from `apps/lpg-mobile/assets/skima-splash-logo.png`; it is not a newly invented logo.
+
+The service cards use native vector icons and CSS treatments. They do not use fabricated stock photographs.
 
 ## Product destinations
 
@@ -18,4 +20,4 @@ Create a Vercel project connected to bigskima/Skima-Group with the project root 
 - Bills: shown as coming soon.
 - Store: shown as coming soon.
 
-The site intentionally contains no fabricated performance metrics, testimonials, certifications, support contacts or claims that unfinished products are live.
+The site intentionally contains no invented performance metrics, testimonials, certifications, support contacts or claims that unfinished products are live.
