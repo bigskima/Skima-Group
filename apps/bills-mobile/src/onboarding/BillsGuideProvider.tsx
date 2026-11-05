@@ -366,7 +366,7 @@ export function GuideLaunchLink() {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1 },
-  fullDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(8,8,10,.68)" },
+  fullDim: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(8,8,10,.68)" },
   scrim: { position: "absolute", backgroundColor: "rgba(8,8,10,.68)" },
   spotlight: { position: "absolute", borderWidth: 2, borderRadius: 16, backgroundColor: "transparent", shadowColor: "#000", shadowOpacity: 0.45, shadowRadius: 12, elevation: 8 },
   tooltip: { position: "absolute", left: 14, borderWidth: 1, borderRadius: 20, padding: 16, gap: 11, alignSelf: "center", elevation: 16, shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 20 },
