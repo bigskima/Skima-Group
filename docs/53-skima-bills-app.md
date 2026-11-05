@@ -42,6 +42,17 @@ npm --prefix apps/bills-mobile run build:web
 
 The Expo web export is written to `apps/bills-mobile/dist`. Configure that as the Vercel output directory. The hostname belongs in the project environment, not the source.
 
+## Supabase Auth redirect configuration
+
+Add these URLs to the existing Supabase project under **Authentication → URL Configuration → Redirect URLs** before testing confirmation or password reset:
+
+- `skima-bills://`
+- `skima-bills://reset-password`
+- The deployed Bills origin and reset route, for example `https://<configured-bills-host>/` and `https://<configured-bills-host>/reset-password`
+- The local Expo web development origin used for testing.
+
+Use the final configured hostname rather than registering an assumed root domain. Signup confirmation and password recovery are sent back to the Bills app's own scheme or web origin.
+
 ## Build commands
 
 ```sh
