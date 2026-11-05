@@ -8,9 +8,9 @@ import { BillArraySchema, BillObjectSchema, asNumber, asString, makeIdempotencyK
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, Field, Notice, State } from "./BillsUI";
-import { AppField } from "../../../lpg-mobile/src/native/ui/AppField";
-import { AppButton } from "../../../lpg-mobile/src/native/ui/AppButton";
-import { AppModal } from "../../../lpg-mobile/src/native/ui/AppModal";
+import { AppField } from "../ui/AppField";
+import { AppButton } from "../ui/AppButton";
+import { AppModal } from "../ui/AppModal";
 
 type Row=Record<string,unknown>;
 const bankSchema=z.object({banks:z.array(z.record(z.string(),z.unknown())).default([])}).passthrough();
