@@ -41,7 +41,7 @@ const BASE = "/services/utility-billing";
 
 function buildSections(basePath: string) {
   return [
-  { key: "overview", label: "Overview", href: BASE, icon: LayoutDashboard },
+  { key: "overview", label: "Overview", href: basePath, icon: LayoutDashboard },
   { key: "providers", label: "Providers", href: `${basePath}/providers`, icon: ServerCog },
   { key: "catalogue", label: "Catalogue", href: `${basePath}/catalogue`, icon: Boxes },
   { key: "routing", label: "Routing", href: `${basePath}/routing`, icon: PlugZap },
@@ -49,9 +49,8 @@ function buildSections(basePath: string) {
   { key: "campaigns", label: "Campaigns", href: `${basePath}/campaigns`, icon: BadgePercent },
   { key: "operations", label: "Operations", href: `${basePath}/operations`, icon: Activity },
   { key: "live-test", label: "Live test", href: `${basePath}/live-test`, icon: FlaskConical },
-] as const
+  ] as const;
 }
-;
 
 export function UtilityBillingWorkspaceV2(props: {
   route: string;
@@ -252,7 +251,7 @@ function UtilityOverview(props: {
   return (
     <div className="utility-v2__screen">
       <AdminV2PageHeader
-        eyebrow="Services · Utility billing"
+        eyebrow={basePath === "/bills" ? "SKIMA Bills · Admin workspace" : "Services · Utility billing"}
         title="Start selling bills in a few steps"
         description="Connect a provider once, import its catalogue, set SKIMA profit rules and enable only the airtime, data, electricity and other services you want to sell."
         actions={<><Button icon={RefreshCcw} variant="outline" onClick={() => void props.refresh()}>Refresh</Button><Button icon={Settings2} variant="outline" onClick={() => props.onNavigate(`${basePath}/advanced`)}>Advanced</Button></>}
@@ -362,7 +361,7 @@ function UtilityOverview(props: {
 function UtilitySectionNav(props: { route: string; basePath?: string; onNavigate: (href: string) => void }) {
   const sections = buildSections(props.basePath ?? BASE);
   return (
-    <nav className="utility-v2__nav" aria-label="Utility billing sections">
+    <nav className="utility-v2__nav" aria-label={props.basePath === "/bills" ? "Bills administration sections" : "Utility billing sections"}>
       {sections.map((section) => {
         const Icon = section.icon;
         const active = props.route === section.href;
