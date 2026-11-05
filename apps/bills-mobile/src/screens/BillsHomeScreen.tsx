@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ChevronRight, Gift, Phone, Receipt, WalletCards, Wifi, Zap } from "lucide-react-native";
 import { z } from "zod";
@@ -29,6 +30,24 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
  const groups=useMemo(()=>groupProducts(catalog.data??[]),[catalog.data]);
  const active=groups.find(group=>group.key===category)??groups[0]??null;
  const userId=session?.user.id??"";
+ useEffect(()=>{
+  if(!userId||!catalog.data)return;
+  let active=true;
+  const key="skima:bills:pending-beneficiary:"+userId;
+  void AsyncStorage.getItem(key).then(async raw=>{
+   if(!active||!raw)return;
+   let saved:Row;
+   try{saved=JSON.parse(raw) as Row;}catch{await AsyncStorage.removeItem(key);return;}
+   const target=catalog.data?.find(row=>asString(row,"product_id")===asString(saved,"productId"));
+   if(target&&target.available===true){
+    setProduct(target);setIdentifier(asString(saved,"customerIdentifier")??"");setPhone(asString(saved,"recipientPhone")??"");
+    setValidated("");setValidationResult(null);setShowOptional(true);
+    setNotice("Saved details loaded for "+(asString(saved,"displayName")??"your biller")+". Review and validate before paying.");setNoticeSuccess(false);
+   }else{setNotice("This saved service is currently unavailable. Choose another active option.");setNoticeSuccess(false);}
+   await AsyncStorage.removeItem(key);
+  }).catch(()=>undefined);
+  return()=>{active=false;};
+ },[userId,catalog.data]);
  const currencySelected=asString(product,"currency_code","currencyCode")??"NGN";
  const wallet=(wallets.data??[]).find(w=>asString(w,"wallet_type","walletType")==="customer"&&asString(w,"owner_entity_type","ownerEntityType")==="user"&&asString(w,"owner_entity_id","ownerEntityId")===userId&&(asString(w,"currency_code","currencyCode")??"NGN")===currencySelected&&![ "closed","disabled" ].includes((asString(w,"status")??"").toLowerCase()))??null;
  const walletId=asString(wallet,"wallet_id","walletId","id");
