@@ -134,12 +134,10 @@ Deno.test("Store guided tour maps first-run steps to real Store controls", async
   ]);
   requireText(providers, "<StoreGuideProvider>", "Store guide provider");
   requireText(guide, "measureInWindow", "Store spotlight measurement");
-  requireText(guide, "targetKey: \\"store.shop.hero\\"", "Store hero guide mapping");
-  requireText(guide, "targetKey: \\"store.shop.categories\\"", "Store categories guide mapping");
-  requireText(guide, "targetKey: \\"store.shop.basket\\"", "Store basket guide mapping");
-  requireText(guide, "targetKey: \\"store.orders.history\\"", "Store orders guide mapping");
-  requireText(guide, "targetKey: \\"store.wallet.balance\\"", "Store wallet guide mapping");
-  requireText(guide, "targetKey: \\"store.account.profile\\"", "Store account guide mapping");
+  for (const key of [
+    "store.shop.hero", "store.shop.categories", "store.shop.basket",
+    "store.orders.history", "store.wallet.balance", "store.account.profile",
+  ]) requireText(guide, 'targetKey: "' + key + '"', "Store guide step mapping");
   for (const [source, target] of [
     [shop, "store.shop.hero"], [shop, "store.shop.categories"], [shop, "store.shop.basket"],
     [orders, "store.orders.history"], [wallet, "store.wallet.balance"], [account, "store.account.profile"],
