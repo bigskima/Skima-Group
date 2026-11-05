@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { SessionProvider } from "../session/SessionProvider";
+import { BillsGuideProvider } from "../onboarding/BillsGuideProvider";
 import { BillsNotificationLifecycle } from "../notifications/BillsNotificationLifecycle";
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -27,8 +28,10 @@ export function AppProviders({ children }: PropsWithChildren) {
         <ThemeProvider>
           <QueryClientProvider client={client}>
             <SessionProvider>
-              <BillsNotificationLifecycle />
-              {children}
+              <BillsGuideProvider>
+                <BillsNotificationLifecycle />
+                {children}
+              </BillsGuideProvider>
             </SessionProvider>
           </QueryClientProvider>
         </ThemeProvider>
