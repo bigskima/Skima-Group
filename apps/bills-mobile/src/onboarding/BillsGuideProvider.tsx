@@ -24,53 +24,54 @@ import { navigateBillsRoute, type BillsPage } from "../navigation/billsNavigatio
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 
-type TourPage = "shop" | "orders" | "wallet" | "account";
+type TourPage = "bills" | "activity" | "wallet" | "store" | "account";
 type TourStep = { page: TourPage; targetKey: string; title: string; body: string };
 type Rect = { x: number; y: number; width: number; height: number };
 
 const STEPS: TourStep[] = [
   {
-    page: "shop",
-    targetKey: "bills.shop.hero",
+    page: "bills",
+    targetKey: "bills.home.hero",
     title: "Welcome to SKIMA Bills",
-    body: "Browse products from participating sellers. The catalogue shows active products with current prices and available stock.",
+    body: "Discover supported electricity, airtime, data and TV services. Available billers and payment options are loaded from SKIMA's live utility catalogue.",
   },
   {
-    page: "shop",
-    targetKey: "bills.shop.categories",
-    title: "Find what you need",
-    body: "Search by product name and use the category filters to narrow the catalogue before adding items to your basket.",
+    page: "bills",
+    targetKey: "bills.home.services",
+    title: "Choose and validate a biller",
+    body: "Select a service, enter the required customer or meter details, validate the account when the provider supports it, then review the amount before paying.",
   },
   {
-    page: "shop",
-    targetKey: "bills.shop.basket",
-    title: "Review and place an order",
-    body: "Adjust quantities, choose delivery or pickup, confirm the delivery address when needed, and pay through your existing SKIMA customer wallet.",
-  },
-  {
-    page: "orders",
-    targetKey: "bills.orders.history",
-    title: "Track your orders",
-    body: "Follow preparation and delivery updates here. When an order is fulfilled, confirm receipt to complete its settlement.",
+    page: "activity",
+    targetKey: "bills.activity.history",
+    title: "Keep track of payments",
+    body: "Review pending, successful and reversed bill requests here. Open a record to view its receipt and transaction details.",
   },
   {
     page: "wallet",
     targetKey: "bills.wallet.balance",
-    title: "Use your SKIMA wallet",
-    body: "View available and reserved funds, add money, and withdraw through the same customer wallet used by your other SKIMA services.",
+    title: "Your shared customer wallet",
+    body: "Fund and withdraw from the existing SKIMA customer wallet. Bills does not create a separate balance, and your eligible SKIMA services use the same wallet.",
+  },
+  {
+    page: "store",
+    targetKey: "bills.store.catalogue",
+    title: "Explore SKIMA Store",
+    body: "Bills also gives you a route into the shared Store catalogue. Shopping orders and bill payments remain separate service workflows.",
   },
   {
     page: "account",
     targetKey: "bills.account.profile",
-    title: "Manage your account",
-    body: "Update your profile, review account settings, manage notifications and security, and replay this tour whenever you need it.",
+    title: "Manage your SKIMA account",
+    body: "Update your customer profile, manage security and notifications, save frequent billers, and replay this guide whenever you need it.",
   },
 ];
 
 const PAGE_ROUTES: Record<TourPage, string> = {
-  shop: "/shop",
-  orders: "/orders",
+  bills: "/bills",
+  activity: "/activity",
   wallet: "/wallet",
+  store: "/store",
   account: "/account",
 };
 const STORAGE_PREFIX = "skima:bills:guided-tour:v1:";
