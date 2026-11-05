@@ -29,6 +29,7 @@ interface SignUpInput {
   readonly displayName: string;
   readonly email: string;
   readonly password: string;
+  readonly redirectTo?: string;
 }
 
 interface SignUpResult {
@@ -303,7 +304,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         void apply(data.session);
         return true;
       },
-      signUp: async ({ displayName, email, password }) => {
+      signUp: async ({ displayName, email, password, redirectTo }) => {
         setError(null);
 
         const { data, error: authError } = await supabase.auth.signUp({
@@ -314,6 +315,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
               display_name: displayName.trim(),
               source: "skima.bills.mobile",
             },
+            ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
           },
         });
 
