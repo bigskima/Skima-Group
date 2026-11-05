@@ -10,6 +10,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, Field, Notice, State } from "./StoreUI";
 import { AppField } from "../ui/AppField";
 import { AppButton } from "../ui/AppButton";
+import { GuideTarget } from "../onboarding/StoreGuideProvider";
 import { AppModal } from "../ui/AppModal";
 
 type Row=Record<string,unknown>;
@@ -34,8 +35,8 @@ export function StoreWalletScreen({onOpenPage}:{onOpenPage:(page:any)=>void}){
  const refresh=()=>void Promise.all([wallets.refetch(),balances.refetch(),deposits.refetch(),withdrawals.refetch()]);
  const recentDeposits=(deposits.data??[]).slice(0,3);
  const recentWithdrawals=(withdrawals.data??[]).slice(0,3);
- return <Page refreshControl={<RefreshControl refreshing={wallets.isRefetching||balances.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
-  <Card style={{gap:12}}>
+ return <Page guidePage="wallet" refreshControl={<RefreshControl refreshing={wallets.isRefetching||balances.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
+  <GuideTarget page="wallet" targetKey="store.wallet.balance">  <Card style={{gap:12}}>
    <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between"}}><View style={{flexDirection:"row",alignItems:"center",gap:7}}><ShieldCheck color={palette.brand} size={16}/><Text style={{fontSize:10,fontWeight:"900",color:palette.muted}}>YOUR SKIMA CUSTOMER WALLET</Text></View><Text style={{fontSize:10,color:palette.success,fontWeight:"900"}}>Shared account</Text></View>
    <Text style={{fontSize:29,fontWeight:"900",color:palette.ink}}>{money(available,currency)}</Text>
    <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between"}}><Text style={{fontSize:11,color:palette.muted}}>Available balance</Text><Text style={{fontSize:11,color:palette.muted}}>Reserved · {money(pending,currency)}</Text></View>
@@ -44,7 +45,7 @@ export function StoreWalletScreen({onOpenPage}:{onOpenPage:(page:any)=>void}){
     <View style={{flex:1}}><ActionButton label="Withdraw" variant="secondary" onPress={()=>onOpenPage("withdraw")}/></View>
    </View>
    {!walletId&&!wallets.isPending?<Notice tone="warning" text="Your shared customer wallet is not active yet. Contact SKIMA support if it does not appear after refreshing."/>:null}
-  </Card>
+  </Card></GuideTarget>
   <View style={{gap:9}}><SectionTitle title="Quick actions"/><View style={{flexDirection:"row",gap:8}}><View style={{flex:1}}><ActionButton label="Shop now" variant="secondary" small onPress={()=>onOpenPage("shop")}/></View><View style={{flex:1}}><ActionButton label="Refresh balance" variant="quiet" small onPress={refresh}/></View></View></View>
   <View style={{gap:9}}><SectionTitle title="Funding activity"/>{deposits.isPending?<ActivityIndicator color={palette.brand}/>:deposits.error?<State title="Funding history unavailable" body="Please try again." retry={()=>void deposits.refetch()}/>:recentDeposits.length?recentDeposits.map((row,i)=><FinanceRow key={asString(row,"id")??String(i)} icon={<ArrowDownLeft color={palette.success} size={17}/>} title="Wallet funding" subtitle={(asString(row,"public_reference")??"Deposit")+" · "+statusName(asString(row,"status")??"pending")} amount={money(asNumber(row,"amount")??0,asString(row,"currency_code")??currency)}/>):<State title="No funding activity yet" body="Your wallet deposits will appear here after you add funds."/>}</View>
   <View style={{gap:9}}><SectionTitle title="Withdrawal activity"/>{withdrawals.isPending?<ActivityIndicator color={palette.brand}/>:withdrawals.error?<State title="Withdrawal history unavailable" body="Please try again." retry={()=>void withdrawals.refetch()}/>:recentWithdrawals.length?recentWithdrawals.map((row,i)=><FinanceRow key={asString(row,"id")??String(i)} icon={<ArrowUpRight color={palette.brand} size={17}/>} title="Wallet withdrawal" subtitle={(asString(row,"public_reference")??"Withdrawal")+" · "+statusName(asString(row,"status")??"pending")} amount={money(asNumber(row,"amount")??0,asString(row,"currency_code")??currency)}/>):<State title="No withdrawals yet" body="Completed and pending withdrawals will appear here."/>}</View>
