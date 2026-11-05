@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Eye, EyeOff, LockKeyhole, Mail, UserRound, ArrowLeft } from "lucide-react-native";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Linking from "expo-linking";
 import { LinearGradient } from "expo-linear-gradient";
@@ -92,7 +93,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
   );
 }
 
-function Field(props: {label:string;value:string;onChangeText:(value:string)=>void;placeholder:string;icon:React.ReactNode;right?:React.ReactNode;secureTextEntry?:boolean;keyboardType?:"email-address"|"default";autoCapitalize?:"none"|"sentences"}) {
+function Field(props: {label:string;value:string;onChangeText:(value:string)=>void;placeholder:string;icon:ReactNode;right?:React.ReactNode;secureTextEntry?:boolean;keyboardType?:"email-address"|"default";autoCapitalize?:"none"|"sentences"}) {
   const {palette}=useAppTheme();
   const [focused,setFocused]=useState(false);
   return <View style={{gap:7}}>
