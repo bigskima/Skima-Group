@@ -147,4 +147,6 @@ Deno.test("Store guided tour maps first-run steps to real Store controls", async
   requireText(guide, "AsyncStorage.getItem", "Store per-customer tour eligibility");
   requireText(guide, "Remind me in 7 days", "Store tour snooze control");
   rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Store authentication reference footer");
+  rejectText(auth, "in one secure place", "Store authentication filler copy");
+  rejectText(auth, "One SKIMA account across your services", "Store authentication cross-app tagline");
 });
