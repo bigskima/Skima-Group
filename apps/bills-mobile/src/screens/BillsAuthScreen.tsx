@@ -102,7 +102,6 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
               </Pressable>
               {mode==="login"?<Text style={[styles.footer,{color:palette.muted}]}>New to SKIMA? <Text onPress={()=>{setNotice("");setMode("register");}} style={{color:palette.brand,fontWeight:"900"}}>Create an account</Text></Text>:mode==="register"?<Text style={[styles.footer,{color:palette.muted}]}>Already use SKIMA? <Text onPress={()=>{setNotice("");setMode("login");}} style={{color:palette.brand,fontWeight:"900"}}>Sign in</Text></Text>:null}
             </View>
-            <Text style={[styles.privacy,{color:palette.muted}]}>Secure payments · Shared SKIMA wallet · One customer account</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
