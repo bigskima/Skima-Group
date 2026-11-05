@@ -7,7 +7,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { requestStoreNotificationPermission } from "../notifications/StoreNotificationLifecycle";
 import { navigateStoreRoute } from "../navigation/storeNavigation";
-import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
+import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./StoreUI";
 
 const Center=z.object({items:z.array(z.record(z.string(),z.unknown())),unreadCount:z.number().int().nonnegative(),totalCount:z.number().int().nonnegative(),offset:z.number().int().nonnegative(),limit:z.number().int().positive(),hasMore:z.boolean()});
 type Row=Record<string,unknown>;
