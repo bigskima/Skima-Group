@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, Text, View } from "react-native";
 import { Bell, CheckCheck, ChevronRight } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,9 +17,9 @@ export function BillsNotificationsScreen(){
  const query=useQuery({queryKey:["skima-bills","inbox",40],enabled:session.status==="authenticated",refetchInterval:30000,queryFn:async()=>{const r=await session.supabase.rpc("read_notification_center",{target_limit:40,target_offset:0,target_include_read:true});if(r.error)throw r.error;return Center.parse(r.data);}});
  const mark=useMutation({mutationFn:async(id:string)=>{const r=await session.supabase.rpc("mark_notification_read",{target_message_id:id,target_read:true});if(r.error)throw r.error;return r.data;},onSuccess:()=>client.invalidateQueries({queryKey:["skima-bills","inbox"]})});
  const markAll=useMutation({mutationFn:async()=>{const r=await session.supabase.rpc("mark_all_notifications_read");if(r.error)throw r.error;return r.data;},onSuccess:()=>client.invalidateQueries({queryKey:["skima-bills","inbox"]})});
- const enable=async()=>{try{await requestBillsNotificationPermission();AlertFeedback("Device notification permission is enabled.");}catch(e){AlertFeedback(e instanceof Error?e.message:"Notification permission was not granted.");}};
- const AlertFeedback=(message:string)=>{client.setQueryData(["skima-bills","notification-feedback"],message);};
- const feedback=client.getQueryData<string>(["skima-bills","notification-feedback"]);
+ const [feedback,setFeedback]=useState("");
+ const enable=async()=>{try{await requestBillsNotificationPermission();setFeedback("Device notification permission is enabled. Remote push still requires provider credentials and device registration.");}catch(e){setFeedback(e instanceof Error?e.message:"Notification permission was not granted.");}};
+
  const rows=useMemo(()=>query.data?.items??[],[query.data]);
  return <Page refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={()=>void query.refetch()} tintColor={palette.brand}/>}>
   <SectionTitle title="Notifications" caption="Important updates from your SKIMA Bills account." action={query.data?.unreadCount?<ActionButton label="Mark all read" variant="quiet" small onPress={()=>markAll.mutate()}/>:null}/>
