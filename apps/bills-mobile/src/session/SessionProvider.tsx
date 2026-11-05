@@ -46,6 +46,7 @@ interface SessionValue {
   clearAuthError(): void;
   signIn(email: string, password: string): Promise<boolean>;
   signUp(input: SignUpInput): Promise<SignUpResult>;
+  resendSignupConfirmation(email: string, redirectTo: string): Promise<void>;
   requestPasswordReset(email: string, redirectTo: string): Promise<void>;
   updatePassword(password: string): Promise<void>;
   signOut(): Promise<void>;
@@ -336,6 +337,22 @@ export function SessionProvider({ children }: PropsWithChildren) {
           sessionStarted: Boolean(data.session),
           confirmationRequired: !data.session,
         };
+      },
+      resendSignupConfirmation: async (email, redirectTo) => {
+        setError(null);
+        const { error: resendError } = await supabase.auth.resend({
+          type: "signup",
+          email: email.trim().toLowerCase(),
+          options: { emailRedirectTo: redirectTo },
+        });
+        if (resendError) {
+          throw new Error(
+            friendlyError(
+              resendError,
+              "We couldn't resend the confirmation email. Check the address and try again.",
+            ),
+          );
+        }
       },
       requestPasswordReset: async (email, redirectTo) => {
         setError(null);
