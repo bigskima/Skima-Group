@@ -115,6 +115,8 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/operations")).toBe("/operations");
     expect(resolveAdminPath("/money")).toBe("/money");
     expect(resolveAdminPath("/services")).toBe("/services");
+    expect(resolveAdminPath("/refill")).toBe("/refill");
+    expect(resolveAdminPath("/bills")).toBe("/bills");
     expect(resolveAdminPath("/store")).toBe("/store");
     expect(resolveAdminPath("/logistics")).toBe("/logistics");
     expect(resolveAdminPath("/intelligence")).toBe("/intelligence");
@@ -201,6 +203,7 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "refill", label: "Refill", href: "/refill", icon: "refill" },
       { key: "operations", label: "Operations", href: "/operations", icon: "operations" },
       { key: "stations", label: "Stations", href: "/stations", icon: "stations" },
+      { key: "drivers", label: "Drivers", href: "/drivers", icon: "drivers" },
       { key: "inventory", label: "Inventory", href: "/station-inventory", icon: "inventory" },
       { key: "coverage", label: "Coverage", href: "/coverage", icon: "coverage" },
       { key: "fuel", label: "Fuel", href: "/services/fuel", icon: "fuel" },
@@ -212,6 +215,7 @@ describe("SKIMA Admin V2 navigation", () => {
       "/refill",
       "/refill/orders",
       "/refill/stations",
+      "/refill/drivers",
       "/refill/inventory",
       "/refill/coverage",
       "/refill/fuel",
