@@ -79,7 +79,7 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
  const refresh=()=>void Promise.all([catalog.refetch(),offers.refetch(),requests.refetch(),wallets.refetch()]);
  return <Page guidePage="bills" refreshControl={<RefreshControl refreshing={catalog.isRefetching||requests.isRefetching||wallets.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
   <GuideTarget page="bills" targetKey="bills.home.hero"><View style={[styles.hero,{backgroundColor:palette.brand}]}>
-   <View style={{flex:1,gap:6}}><Text style={styles.heroEyebrow}>EVERYDAY PAYMENTS</Text><Text style={styles.heroTitle}>Bills, made simpler.</Text><Text style={styles.heroBody}>Airtime, data, electricity, TV and more — in one secure place.</Text></View>
+   <View style={{flex:1,gap:6}}><Text style={styles.heroEyebrow}>EVERYDAY PAYMENTS</Text><Text style={styles.heroTitle}>Bills, made simpler.</Text><Text style={styles.heroBody}>Pay for airtime, data, electricity and TV services.</Text></View>
    <View style={styles.heroIcon}><Receipt color="#fff" size={27}/></View>
   </View></GuideTarget>
   <View style={styles.walletRow}>
