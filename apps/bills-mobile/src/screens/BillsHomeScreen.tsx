@@ -25,7 +25,7 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
  const [category,setCategory]=useState("");const [product,setProduct]=useState<Row|null>(null);
  const [identifier,setIdentifier]=useState("");const [amount,setAmount]=useState("");const [phone,setPhone]=useState("");const [promo,setPromo]=useState("");
  const [validated,setValidated]=useState("");const [validationResult,setValidationResult]=useState<Row|null>(null);
- const [showOptional,setShowOptional]=useState(false);const [notice,setNotice]=useState("");const [noticeSuccess,setNoticeSuccess]=useState(false);
+ const [showOptional,setShowOptional]=useState(false);const [notice,setNotice]=useState("");const [noticeSuccess,setNoticeSuccess]=useState(false);const [paymentKey,setPaymentKey]=useState(()=>makeIdempotencyKey("bills-payment"));
  const validate=useBillsMutation("/runtime/utility-billing/validate",ValidationSchema);
  const pay=useBillsMutation("/runtime/utility-billing/requests",PaymentIdSchema,[["utility","requests"],["wallets"]]);
  const groups=useMemo(()=>groupProducts(catalog.data??[]),[catalog.data]);
@@ -41,7 +41,7 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
    try{saved=JSON.parse(raw) as Row;}catch{await AsyncStorage.removeItem(key);return;}
    const target=catalog.data?.find(row=>asString(row,"product_id")===asString(saved,"productId"));
    if(target&&target.available===true){
-    setProduct(target);setIdentifier(asString(saved,"customerIdentifier")??"");setPhone(asString(saved,"recipientPhone")??"");
+    setProduct(target);setPaymentKey(makeIdempotencyKey("bills-payment"));setIdentifier(asString(saved,"customerIdentifier")??"");setPhone(asString(saved,"recipientPhone")??"");
     setValidated("");setValidationResult(null);setShowOptional(true);
     setNotice("Saved details loaded for "+(asString(saved,"displayName")??"your biller")+". Review and validate before paying.");setNoticeSuccess(false);
    }else{setNotice("This saved service is currently unavailable. Choose another active option.");setNoticeSuccess(false);}
@@ -62,8 +62,8 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
  const canContinue=Boolean(product&&walletId&&identifier.trim()&&amountValid&&!amountError);
  const available=groups.reduce((sum,g)=>sum+g.products.filter(p=>p.available===true).length,0);
  const recent=(requests.data??[]).slice(0,3);
- const closePay=()=>{if(validate.isPending||pay.isPending)return;setProduct(null);setIdentifier("");setAmount("");setPhone("");setPromo("");setValidated("");setValidationResult(null);setShowOptional(false);};
- const pick=(item:Row,preFill="")=>{setProduct(item);setIdentifier(preFill);setAmount("");setPhone("");setPromo("");setValidated("");setValidationResult(null);setNotice("");};
+ const closePay=()=>{if(validate.isPending||pay.isPending)return;setProduct(null);setPaymentKey(makeIdempotencyKey("bills-payment"));setIdentifier("");setAmount("");setPhone("");setPromo("");setValidated("");setValidationResult(null);setShowOptional(false);};
+ const pick=(item:Row,preFill="")=>{setProduct(item);setPaymentKey(makeIdempotencyKey("bills-payment"));setIdentifier(preFill);setAmount("");setPhone("");setPromo("");setValidated("");setValidationResult(null);setNotice("");};
  const submit=async()=>{
   if(!product||!canContinue)return;const productId=asString(product,"product_id");if(!productId||!walletId)return;
   if(validated!==identifier.trim()){
@@ -71,7 +71,7 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
    catch(error){setValidated("");setValidationResult(null);setNotice(error instanceof Error?error.message:"Account details could not be validated.");setNoticeSuccess(false);return;}
   }
   try{
-   await pay.mutateAsync({productId,walletId,customerIdentifier:identifier.trim(),amount:amountValue,recipientPhone:phone.trim()||undefined,promotionKey:promo.trim()||undefined,idempotencyKey:makeIdempotencyKey("bills-payment"),metadata:{channel:"skima-bills-mobile",customerValidated:true,validationSkipped:validationResult?.validationSkipped===true}});
+   await pay.mutateAsync({productId,walletId,customerIdentifier:identifier.trim(),amount:amountValue,recipientPhone:phone.trim()||undefined,promotionKey:promo.trim()||undefined,idempotencyKey:paymentKey,metadata:{channel:"skima-bills-mobile",customerValidated:true,validationSkipped:validationResult?.validationSkipped===true}});
    closePay();setNotice("Your bill request has been accepted. The amount is reserved in your shared SKIMA Wallet while the provider completes the service.");setNoticeSuccess(true);
   }catch(error){setNotice(error instanceof Error?error.message:"The bill payment could not be prepared. Please try again.");setNoticeSuccess(false);}
  };
@@ -103,11 +103,11 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
     <Row label="Wallet balance" value={money(balance,currency)}/>{fixed!==null?<Row label="Bill amount" value={money(fixed,currency)}/>:null}
     {amountValue>0&&fee>0?<Row label="Service fee" value={money(fee,currency)}/>:null}{amountValid?<Row label="Estimated total" value={money(total,currency)} strong/>:null}
    </View>
-   <AppField label={asString(product,"customer_identifier_label")??"Account or phone number"} value={identifier} onChangeText={v=>{setIdentifier(v);setValidated("");setValidationResult(null);}} placeholder={asString(product,"customer_identifier_hint")??"Enter customer details"}/>
+   <AppField label={asString(product,"customer_identifier_label")??"Account or phone number"} value={identifier} onChangeText={v=>{setIdentifier(v);setPaymentKey(makeIdempotencyKey("bills-payment"));setValidated("");setValidationResult(null);}} placeholder={asString(product,"customer_identifier_hint")??"Enter customer details"}/>
    {validationResult?<Notice text={(validationResult.validationSkipped===true?"Recipient details are ready. ":"Account validated. ")+(asString(validationResult,"customerName")??identifier)} tone="success"/>:null}
-   {fixed===null?<AppField label="Amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" error={amountError??undefined}/>:null}
+   {fixed===null?<AppField label="Amount" value={amount} onChangeText={v=>{setAmount(v);setPaymentKey(makeIdempotencyKey("bills-payment"));}} keyboardType="decimal-pad" placeholder="0.00" error={amountError??undefined}/>:null}
    {amountError?<Text style={{color:palette.danger,fontSize:11,fontWeight:"700"}}>{amountError}</Text>:null}
-   {showOptional?<><AppField label="Recipient phone (optional)" value={phone} onChangeText={setPhone} keyboardType="phone-pad"/><AppField label="Promo code (optional)" value={promo} onChangeText={setPromo} autoCapitalize="none"/></>:<Pressable onPress={()=>setShowOptional(true)}><Text style={{color:palette.brand,fontSize:11,fontWeight:"900"}}>Add recipient phone or promo code</Text></Pressable>}
+   {showOptional?<><AppField label="Recipient phone (optional)" value={phone} onChangeText={v=>{setPhone(v);setPaymentKey(makeIdempotencyKey("bills-payment"));}} keyboardType="phone-pad"/><AppField label="Promo code (optional)" value={promo} onChangeText={v=>{setPromo(v);setPaymentKey(makeIdempotencyKey("bills-payment"));}} autoCapitalize="none"/></>:<Pressable onPress={()=>setShowOptional(true)}><Text style={{color:palette.brand,fontSize:11,fontWeight:"900"}}>Add recipient phone or promo code</Text></Pressable>}
    <View style={{flexDirection:"row",gap:9}}><View style={{flex:1}}><AppButton label="Cancel" variant="secondary" fullWidth onPress={closePay}/></View><View style={{flex:1}}><AppButton label={validated===identifier.trim()?"Pay bill":"Validate details"} fullWidth disabled={!canContinue} loading={validate.isPending||pay.isPending} onPress={()=>void submit()}/></View></View>
   </AppModal>
   <AppModal visible={Boolean(notice)} title={noticeSuccess?"Payment request received":"Payment not completed"} description={notice} tone={noticeSuccess?"success":"danger"} onClose={()=>setNotice("")}><AppButton label="Done" onPress={()=>setNotice("")}/></AppModal>

@@ -34,7 +34,7 @@ Deno.test("Bills uses the canonical utility billing catalogue, validation and pa
   requireText(home, "/runtime/utility-billing/validate", "Bills home");
   requireText(home, "/runtime/utility-billing/requests", "Bills home");
   requireText(home, "customerValidated:true", "Bills payment metadata");
-  requireText(home, "idempotencyKey", "Bills payment payload");
+  requireText(home, "idempotencyKey:paymentKey", "Bills stable payment idempotency");
   requireText(home, "walletId", "Bills payment payload");
 });
 
@@ -46,6 +46,10 @@ Deno.test("Bills funding and withdrawal go through shared finance runtime wallet
     requireText(wallet, route, "Bills wallet screens");
   }
   requireText(wallet, "ensure_wallet_account", "Bills shared wallet funding");
+  requireText(wallet, "idempotencyKey:depositKey", "Bills stable deposit idempotency");
+  requireText(wallet, "idempotencyKey:withdrawalKey", "Bills stable withdrawal idempotency");
+  requireText(wallet, "accountNumberValid=/^\\d{10}$/.test", "Bills 10-digit NUBAN validation");
+  requireText(wallet, "verifiedBeneficiaries", "Bills wallet-scoped verified withdrawal beneficiary");
   requireText(wallet, 'target_wallet_type:"customer"', "Bills shared wallet funding");
 });
 
@@ -58,6 +62,7 @@ Deno.test("Bills Store uses the shared catalogue, stock and canonical checkout",
   requireText(store, 'sales_channel!=="skima_store"', "Bills Store catalogue filter");
   requireText(store, "/runtime/storefront/checkout", "Bills Store checkout");
   requireText(store, "customerWalletId", "Bills Store checkout");
+  requireText(store, "idempotencyKey:checkoutKey", "Bills stable Store checkout idempotency");
   requireText(store, "/runtime/storefront/orders/confirm-receipt", "Bills Store order lifecycle");
 });
 
