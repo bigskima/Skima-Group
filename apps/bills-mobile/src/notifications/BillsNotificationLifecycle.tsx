@@ -19,7 +19,18 @@ const FIXED_ROUTES = new Set([
 
 function safeRoute(value: unknown): string | null {
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) return null;
-  if (FIXED_ROUTES.has(value) || /^\\/\\(customer\\)\\/receipt\\/[0-9a-f-]{36}$/i.test(value)) return value;
+  if (FIXED_ROUTES.has(value)) return value;
+  const receiptPrefix = "/(customer)/receipt/";
+  if (value.startsWith(receiptPrefix)) {
+    const id = value.slice(receiptPrefix.length);
+    const groups = id.split("-");
+    const expectedLengths = [8, 4, 4, 4, 12];
+    const validUuid = groups.length === 5 && groups.every((group, index) =>
+      group.length === expectedLengths[index] &&
+      [...group].every((character) => "0123456789abcdef".includes(character.toLowerCase()))
+    );
+    if (validUuid) return value;
+  }
   return null;
 }
 
