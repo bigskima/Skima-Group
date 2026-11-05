@@ -1,0 +1,111 @@
+import type { ReactNode } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type PressableProps,
+} from "react-native";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { controlHeights, radii, shadows, spacing, typography } from "../theme/tokens";
+
+export function AppButton({
+  label,
+  icon,
+  trailingIcon,
+  variant = "primary",
+  size = "md",
+  loading = false,
+  fullWidth = false,
+  disabled,
+  ...props
+}: Omit<PressableProps, "children" | "style"> & {
+  label: string;
+  icon?: ReactNode;
+  trailingIcon?: ReactNode;
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "sm" | "md" | "lg";
+  loading?: boolean;
+  fullWidth?: boolean;
+}) {
+  const { palette } = useAppTheme();
+  const inactive = Boolean(disabled || loading);
+
+  const backgroundColor =
+    variant === "primary"
+      ? palette.brand
+      : variant === "danger"
+        ? palette.danger
+        : variant === "secondary"
+          ? palette.surface
+          : "transparent";
+  const borderColor =
+    variant === "primary"
+      ? palette.brand
+      : variant === "danger"
+        ? palette.danger
+        : variant === "secondary"
+          ? palette.borderStrong
+          : "transparent";
+  const textColor =
+    variant === "primary" || variant === "danger"
+      ? "#FFFFFF"
+      : variant === "ghost"
+        ? palette.brand
+        : palette.ink;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={props.accessibilityLabel ?? label}
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
+      hitSlop={size === "sm" ? 4 : 2}
+      {...props}
+      style={({ pressed }) => [
+        styles.base,
+        size === "sm" && styles.sm,
+        size === "md" && styles.md,
+        size === "lg" && styles.lg,
+        fullWidth && styles.fullWidth,
+        variant !== "ghost" && shadows.soft,
+        {
+          backgroundColor: pressed && variant === "ghost" ? palette.brandSoft : backgroundColor,
+          borderColor,
+          opacity: inactive ? 0.46 : 1,
+          transform: [{ scale: pressed && !inactive ? 0.975 : 1 }],
+        },
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator color={textColor} size="small" />
+      ) : (
+        <View style={styles.content}>
+          {icon ? <View style={styles.icon}>{icon}</View> : null}
+          <Text numberOfLines={2} style={[styles.label, { color: textColor }]}>{label}</Text>
+          {trailingIcon ? <View style={styles.icon}>{trailingIcon}</View> : null}
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  base: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    overflow: "hidden",
+  },
+  sm: { minHeight: controlHeights.sm + 2, paddingHorizontal: 14 },
+  md: { minHeight: controlHeights.md + 2, paddingHorizontal: 18 },
+  lg: { minHeight: controlHeights.lg + 2, paddingHorizontal: spacing.lg },
+  fullWidth: { width: "100%" },
+  content: { maxWidth: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  icon: { flexShrink: 0, alignItems: "center", justifyContent: "center" },
+  label: { flexShrink: 1, minWidth: 0, ...typography.bodyStrong, fontSize: 14, lineHeight: 18, letterSpacing: -0.08, textAlign: "center" },
+});
