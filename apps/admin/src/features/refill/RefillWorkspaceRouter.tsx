@@ -1,4 +1,4 @@
-import { Boxes, ClipboardList, Fuel, MapPinned, Settings2, ShieldCheck, Store, Truck } from "lucide-react";
+import { Boxes, ClipboardList, Fuel, MapPinned, Settings2, Store, Truck } from "lucide-react";
 
 import { MoneyWorkspaceRouter } from "../money/MoneyWorkspaceRouter";
 import { OperationsWorkspaceRouter } from "../operations/OperationsWorkspaceRouter";
@@ -39,6 +39,15 @@ export function RefillWorkspaceRouter(props: {
             permissionKey: "stations",
           },
           {
+            key: "refill-drivers",
+            title: "Drivers & fleet readiness",
+            description: "Review driver participation and fleet readiness for refill fulfilment.",
+            href: "/refill/drivers",
+            icon: Truck,
+            meta: "Fulfilment teams",
+            permissionKey: "drivers",
+          },
+          {
             key: "refill-inventory",
             title: "Station inventory",
             description: "Review LPG stock, installed capacity and station inventory controls.",
@@ -72,7 +81,7 @@ export function RefillWorkspaceRouter(props: {
             href: "/refill/fulfillment",
             icon: Settings2,
             meta: "Managed fulfilment",
-            anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
+            permissionKey: "delivery-pricing",
           },
         ]}
       />
@@ -84,6 +93,9 @@ export function RefillWorkspaceRouter(props: {
   }
   if (props.route === "/refill/stations" || props.route.startsWith("/refill/stations/")) {
     return <PartnersWorkspaceRouter route={"/partners/stations" + props.route.slice("/refill/stations".length)} onNavigate={onNavigate} />;
+  }
+  if (props.route === "/refill/drivers" || props.route.startsWith("/refill/drivers/")) {
+    return <PartnersWorkspaceRouter route={"/partners/drivers" + props.route.slice("/refill/drivers".length)} onNavigate={onNavigate} />;
   }
   if (props.route === "/refill/inventory") {
     return <OperationsWorkspaceRouter route="/operations/inventory" onNavigate={onNavigate} />;
@@ -122,6 +134,7 @@ function toRefillRoute(href: string): string {
     ["/operations/inventory", "/refill/inventory"],
     ["/operations/coverage", "/refill/coverage"],
     ["/partners/stations", "/refill/stations"],
+    ["/partners/drivers", "/refill/drivers"],
     ["/stations", "/refill/stations"],
     ["/services/fuel", "/refill/fuel"],
     ["/money/pricing/launch-assurance", "/refill/fulfillment"],
