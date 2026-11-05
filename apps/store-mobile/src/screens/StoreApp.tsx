@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Bell, Package, ShoppingBag, UserRound, WalletCards } from "lucide-react-native";
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -9,6 +9,7 @@ import { StoreOrdersScreen } from "./StoreOrdersScreen";
 import { StoreWalletScreen, StoreTopUpScreen, StoreWithdrawScreen } from "./StoreWalletScreens";
 import { StoreAccountScreen } from "./StoreAccountScreen";
 import { StoreNotificationsScreen } from "./StoreNotificationsScreen";
+import { useStoreGuide } from "../onboarding/StoreGuideProvider";
 
 const tabs = [
   { key: "shop", label: "Shop", icon: ShoppingBag },
@@ -19,15 +20,19 @@ const tabs = [
 
 export function StoreApp() {
   const { palette } = useAppTheme();
+  const guide = useStoreGuide();
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
   const [page, setPage] = useState<StorePage>("shop");
-  useEffect(() => subscribeStoreNavigation((event) => setPage(event.page)), []);
+  const open = useCallback((next: StorePage) => {
+    setPage(next);
+    guide.setCurrentPage(next);
+  }, [guide.setCurrentPage]);
+  useEffect(() => subscribeStoreNavigation((event) => open(event.page)), [open]);
   const title = page === "shop" ? "Shop SKIMA" : page === "orders" ? "Your orders" :
     page === "wallet" ? "SKIMA Wallet" : page === "account" ? "Account" :
     page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : "Notifications";
   const isTab = tabs.some((tab) => tab.key === page);
-  const open = (next: StorePage) => setPage(next);
   const navigationItem = (tab: typeof tabs[number], variant: "side" | "bottom") => {
     const Icon = tab.icon;
     const selected = tab.key === page;
