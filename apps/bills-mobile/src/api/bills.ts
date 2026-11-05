@@ -8,9 +8,9 @@ export const BillObjectSchema = BillRecordSchema.nullable();
 export const BillActionSchema = z.union([z.string(), BillRecordSchema, z.null()]);
 export type BillRecord = z.infer<typeof BillRecordSchema>;
 
-export function useBillsQuery(key: readonly unknown[], path: string, schema: z.ZodTypeAny, enabled = true, refetchInterval?: number) {
+export function useBillsQuery<TSchema extends z.ZodTypeAny>(key: readonly unknown[], path: string, schema: TSchema, enabled = true, refetchInterval?: number) {
   const { api, session, status } = useSession();
-  return useQuery({
+  return useQuery<z.infer<TSchema>, Error>({
     queryKey: ["skima-bills", ...key, session?.user.id ?? "anonymous"],
     enabled: status === "authenticated" && Boolean(session?.access_token) && enabled,
     queryFn: ({ signal }) => api.get(path, schema, { signal }),
