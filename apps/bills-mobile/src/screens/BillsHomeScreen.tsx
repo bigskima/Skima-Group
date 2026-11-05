@@ -6,6 +6,7 @@ import { z } from "zod";
 import { useBillsMutation, useBillsQuery, BillArraySchema, asNumber, asString, money, makeIdempotencyKey } from "../api/bills";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
+import { GuideTarget } from "../onboarding/BillsGuideProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
 import { AppField } from "../ui/AppField";
 import { AppModal } from "../ui/AppModal";
@@ -76,23 +77,24 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
   }catch(error){setNotice(error instanceof Error?error.message:"The bill payment could not be prepared. Please try again.");setNoticeSuccess(false);}
  };
  const refresh=()=>void Promise.all([catalog.refetch(),offers.refetch(),requests.refetch(),wallets.refetch()]);
- return <Page refreshControl={<RefreshControl refreshing={catalog.isRefetching||requests.isRefetching||wallets.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
-  <View style={[styles.hero,{backgroundColor:palette.brand}]}>
-   <View style={{flex:1,gap:6}}><Text style={styles.heroEyebrow}>EVERYDAY PAYMENTS</Text><Text style={styles.heroTitle}>Bills, made simpler.</Text><Text style={styles.heroBody}>Airtime, data, electricity, TV and more — in one secure place.</Text></View>
+ return <Page guidePage="bills" refreshControl={<RefreshControl refreshing={catalog.isRefetching||requests.isRefetching||wallets.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
+  <GuideTarget page="bills" targetKey="bills.home.hero"><View style={[styles.hero,{backgroundColor:palette.brand}]}>
+   <View style={{flex:1,gap:6}}><Text style={styles.heroEyebrow}>EVERYDAY PAYMENTS</Text><Text style={styles.heroTitle}>Bills, made simpler.</Text><Text style={styles.heroBody}>Pay for airtime, data, electricity and TV services.</Text></View>
    <View style={styles.heroIcon}><Receipt color="#fff" size={27}/></View>
-  </View>
+  </View></GuideTarget>
   <View style={styles.walletRow}>
    <Card style={{flex:1,gap:4}}><View style={{flexDirection:"row",alignItems:"center",gap:7}}><WalletCards size={16} color={palette.brand}/><Text style={{fontSize:10,fontWeight:"900",color:palette.muted}}>SHARED WALLET</Text></View><Text style={{fontSize:22,fontWeight:"900",color:palette.ink}}>{money(balance,currency)}</Text><Text style={{fontSize:10,color:palette.muted}}>Same balance across Refill, Logistics and Bills</Text></Card>
    <ActionButton label="Add funds" small onPress={()=>onOpenPage("top-up")}/>
   </View>
   {offers.data?.length?<View style={{gap:9}}><SectionTitle title="Offers and savings" caption="Available offers configured by SKIMA"/><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:9}}>{offers.data.slice(0,6).map((offer,i)=><Card key={asString(offer,"offer_key")??String(i)} style={{width:205,flexDirection:"row",alignItems:"center",gap:9}}><View style={[styles.offerIcon,{backgroundColor:palette.brandSoft}]}><Gift color={palette.brand} size={18}/></View><View style={{flex:1,gap:2}}><Text style={{color:palette.brand,fontSize:11,fontWeight:"900"}}>{asString(offer,"value_label")??"Offer"}</Text><Text numberOfLines={2} style={{color:palette.ink,fontSize:11,fontWeight:"800"}}>{asString(offer,"offer_name")??"Bill offer"}</Text></View></Card>)}</ScrollView></View>:null}
-  <View style={{gap:10}}>
+  <GuideTarget page="bills" targetKey="bills.home.services">  <View style={{gap:10}}>
    <SectionTitle title="Choose a service" caption={catalog.isPending?"Loading live services…":available+" payment options currently available"}/>
    {catalog.isPending?<View style={{padding:20,alignItems:"center"}}><ActivityIndicator color={palette.brand}/></View>:catalog.error?<State title="Bill services unavailable" body="We could not load the active SKIMA utility catalogue." retry={()=>void catalog.refetch()}/>:!groups.length?<State title="No services are enabled yet" body="Only services activated by SKIMA Admin will appear here."/>:<>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8,paddingBottom:2}}>{groups.map(group=>{const selected=group.key===active?.key;return <Pressable key={group.key} onPress={()=>setCategory(group.key)} style={[styles.category,{backgroundColor:selected?palette.brandSoft:palette.surface,borderColor:selected?palette.brand:palette.border}]}>{iconFor(group.icon,selected?palette.brand:palette.muted,16)}<Text style={{fontSize:11,fontWeight:"900",color:selected?palette.brand:palette.ink}}>{group.name}</Text></Pressable>;})}</ScrollView>
     {active?<View style={styles.productGrid}>{active.products.map((item,i)=>{const enabled=item.available===true;return <Pressable key={asString(item,"product_id")??String(i)} disabled={!enabled} onPress={()=>pick(item)} style={[styles.product,{width:width>=1200?"31.7%":width>=760?"48.5%":"48.5%",backgroundColor:palette.surface,borderColor:palette.border,opacity:enabled?1:.48}]}><View style={[styles.productIcon,{backgroundColor:enabled?palette.brandSoft:palette.surfaceSubtle}]}>{iconFor(active.icon,enabled?palette.brand:palette.muted,19)}</View><View style={{flex:1,gap:3}}><Text numberOfLines={2} style={{fontSize:12,fontWeight:"900",color:palette.ink}}>{asString(item,"product_name")??"Bill payment"}</Text><Text style={{fontSize:10,fontWeight:"800",color:enabled?palette.brand:palette.muted}}>{enabled?"Pay now":"Unavailable"}</Text></View>{enabled?<ChevronRight size={17} color={palette.muted}/>:null}</Pressable>;})}</View>:null}
    </>}
-  </View>
+  </View></GuideTarget>
+
   <View style={{gap:10}}>
    <SectionTitle title="Recent bill activity" action={<ActionButton label="View all" variant="quiet" small onPress={()=>onOpenPage("activity")}/>}/>
    {requests.isPending?<ActivityIndicator color={palette.brand}/>:requests.error?<State title="Activity unavailable" body="Your payment records are safe. Try again shortly." retry={()=>void requests.refetch()}/>:recent.length?recent.map((row,i)=><Pressable key={asString(row,"id")??String(i)} onPress={()=>onReceipt(asString(row,"id")??"")}><Card style={{flexDirection:"row",alignItems:"center"}}><View style={[styles.productIcon,{backgroundColor:palette.brandSoft}]}><Receipt size={17} color={palette.brand}/></View><View style={{flex:1,gap:3}}><Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>{asString(row,"product_name","biller_name")??"Bill payment"}</Text><Text style={{fontSize:10,color:palette.muted}}>{asString(row,"public_reference")??asString(row,"customer_identifier")??"Request"} · {statusLabel(asString(row,"status")??"pending")}</Text></View><Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>{money(asNumber(row,"total_amount","subtotal_amount","amount")??0,asString(row,"currency_code")??"NGN")}</Text><ChevronRight size={16} color={palette.muted}/></Card></Pressable>):<State title="No bill payments yet" body="Your completed and pending utility payments will appear here."/>}

@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { SessionProvider } from "../session/SessionProvider";
+import { StoreGuideProvider } from "../onboarding/StoreGuideProvider";
 import { StoreNotificationLifecycle } from "../notifications/StoreNotificationLifecycle";
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -27,8 +28,10 @@ export function AppProviders({ children }: PropsWithChildren) {
         <ThemeProvider>
           <QueryClientProvider client={client}>
             <SessionProvider>
-              <StoreNotificationLifecycle />
-              {children}
+              <StoreGuideProvider>
+                <StoreNotificationLifecycle />
+                {children}
+              </StoreGuideProvider>
             </SessionProvider>
           </QueryClientProvider>
         </ThemeProvider>

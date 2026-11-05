@@ -1,11 +1,23 @@
 import type { ReactElement, ReactNode } from "react";
-import { useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type RefreshControlProps } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { findNodeHandle, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type RefreshControlProps } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
+import type { StorePage } from "../navigation/storeNavigation";
+import { useOptionalStoreGuide } from "../onboarding/StoreGuideProvider";
 
-export function Page({children,refreshControl}:{children:ReactNode;refreshControl?:ReactElement<RefreshControlProps>}){
- const {palette}=useAppTheme();const {width}=useWindowDimensions();
- return <ScrollView refreshControl={refreshControl} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:width<600?16:24,paddingBottom:30,alignItems:"center"}}>
+export function Page({children,refreshControl,guidePage}:{children:ReactNode;refreshControl?:ReactElement<RefreshControlProps>;guidePage?:StorePage}){
+ const {width}=useWindowDimensions();
+ const guide=useOptionalStoreGuide();
+ const scrollRef=useRef<ScrollView|null>(null);
+ useEffect(()=>{
+  if(!guidePage||!guide)return;
+  return guide.registerScroller(guidePage,(target)=>{
+   const scrollHandle=findNodeHandle(scrollRef.current);
+   if(scrollHandle===null)return;
+   target.measureLayout(scrollHandle,(_x,y)=>scrollRef.current?.scrollTo({y:Math.max(0,y-56),animated:true}),()=>undefined);
+  });
+ },[guidePage,guide?.registerScroller]);
+ return <ScrollView ref={scrollRef} refreshControl={refreshControl} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:width<600?16:24,paddingBottom:30,alignItems:"center"}}>
   <View style={{width:"100%",maxWidth:width>=1100?1120:840,gap:15}}>{children}</View>
  </ScrollView>;
 }

@@ -108,3 +108,46 @@ Deno.test("Store authentication screen displays Store branding instead of Bills 
   requireText(auth, ">STORE</Text>", "Store login brand label");
   rejectText(auth, ">BILLS</Text>", "Store login brand label");
 });
+
+
+Deno.test("Store auth startup ignores a stale getSession snapshot after a newer auth event", async () => {
+  const session = await read("apps/store-mobile/src/session/SessionProvider.tsx");
+  const subscription = session.indexOf("supabase.auth.onAuthStateChange");
+  const initialRead = session.indexOf("supabase.auth.getSession");
+  if (subscription < 0 || initialRead < 0 || subscription > initialRead) {
+    throw new Error("Store must subscribe to auth changes before loading the initial session");
+  }
+  requireText(session, "authEventVersion === initialAuthEventVersion", "Store auth startup race guard");
+  requireText(session, "mounted = false", "Store auth startup cleanup");
+});
+
+Deno.test("Store guided tour maps first-run steps to real Store controls", async () => {
+  const [guide, providers, app, shop, orders, wallet, account, auth] = await Promise.all([
+    read("apps/store-mobile/src/onboarding/StoreGuideProvider.tsx"),
+    read("apps/store-mobile/src/providers/AppProviders.tsx"),
+    read("apps/store-mobile/src/screens/StoreApp.tsx"),
+    read("apps/store-mobile/src/screens/StoreShopScreen.tsx"),
+    read("apps/store-mobile/src/screens/StoreOrdersScreen.tsx"),
+    read("apps/store-mobile/src/screens/StoreWalletScreens.tsx"),
+    read("apps/store-mobile/src/screens/StoreAccountScreen.tsx"),
+    read("apps/store-mobile/src/screens/StoreAuthScreen.tsx"),
+  ]);
+  requireText(providers, "<StoreGuideProvider>", "Store guide provider");
+  requireText(guide, "measureInWindow", "Store spotlight measurement");
+  requireText(guide, 'position: "absolute"', "Store full-screen tour overlay style");
+  for (const key of [
+    "store.shop.hero", "store.shop.categories", "store.shop.basket",
+    "store.orders.history", "store.wallet.balance", "store.account.profile",
+  ]) requireText(guide, 'targetKey: "' + key + '"', "Store guide step mapping");
+  for (const [source, target] of [
+    [shop, "store.shop.hero"], [shop, "store.shop.categories"], [shop, "store.shop.basket"],
+    [orders, "store.orders.history"], [wallet, "store.wallet.balance"], [account, "store.account.profile"],
+  ]) requireText(source, target, "Store visible guide target");
+  requireText(account, "GuideLaunchLink", "Store replay-tour entry");
+  requireText(app, "guide.setCurrentPage(next)", "Store tour navigation synchronization");
+  requireText(guide, "AsyncStorage.getItem", "Store per-customer tour eligibility");
+  requireText(guide, "Remind me in 7 days", "Store tour snooze control");
+  rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Store authentication reference footer");
+  rejectText(auth, "in one secure place", "Store authentication filler copy");
+  rejectText(auth, "One SKIMA account across your services", "Store authentication cross-app tagline");
+});

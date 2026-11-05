@@ -4,6 +4,9 @@ async function read(path: string): Promise<string> {
 function requireText(source: string, value: string, file: string) {
   if (!source.includes(value)) throw new Error(file + " must contain " + value);
 }
+function rejectText(source: string, value: string, file: string) {
+  if (source.includes(value)) throw new Error(file + " must not contain " + value);
+}
 
 Deno.test("Bills has its own Expo and native application identity", async () => {
   const [manifest, config, assets] = await Promise.all([
@@ -114,4 +117,59 @@ Deno.test("Bills uses the existing SKIMA brand artwork and updates the canonical
   requireText(account, '.from("profiles")', "Bills profile editing");
   requireText(account, '.update({ display_name: nextName })', "Bills canonical profile update");
   requireText(account, "confirmSignOut", "Bills cross-platform sign-out confirmation");
+});
+
+
+Deno.test("Bills auth startup ignores a stale getSession snapshot after a newer auth event", async () => {
+  const session = await read("apps/bills-mobile/src/session/SessionProvider.tsx");
+  const subscription = session.indexOf("supabase.auth.onAuthStateChange");
+  const initialRead = session.indexOf("supabase.auth.getSession");
+  if (subscription < 0 || initialRead < 0 || subscription > initialRead) {
+    throw new Error("Bills must subscribe to auth changes before loading the initial session");
+  }
+  requireText(session, "authEventVersion === initialAuthEventVersion", "Bills auth startup race guard");
+  requireText(session, "mounted = false", "Bills auth startup cleanup");
+});
+
+Deno.test("Bills guided tour maps first-run steps to the live Bills workspace", async () => {
+  const [guide, providers, app, home, activity, wallet, store, account, auth] = await Promise.all([
+    read("apps/bills-mobile/src/onboarding/BillsGuideProvider.tsx"),
+    read("apps/bills-mobile/src/providers/AppProviders.tsx"),
+    read("apps/bills-mobile/src/screens/BillsApp.tsx"),
+    read("apps/bills-mobile/src/screens/BillsHomeScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsActivityScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsWalletScreens.tsx"),
+    read("apps/bills-mobile/src/screens/BillsStoreScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsAccountScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsAuthScreen.tsx"),
+  ]);
+  requireText(providers, "<BillsGuideProvider>", "Bills guide provider");
+  requireText(guide, "measureInWindow", "Bills spotlight measurement");
+  for (const key of [
+    "bills.home.hero", "bills.home.services", "bills.activity.history",
+    "bills.wallet.balance", "bills.store.catalogue", "bills.account.profile",
+  ]) requireText(guide, 'targetKey: "' + key + '"', "Bills guide step mapping");
+  for (const [source, target] of [
+    [home, "bills.home.hero"], [home, "bills.home.services"],
+    [activity, "bills.activity.history"], [wallet, "bills.wallet.balance"],
+    [store, "bills.store.catalogue"], [account, "bills.account.profile"],
+  ]) requireText(source, target, "Bills visible guide target");
+  requireText(account, "GuideLaunchLink", "Bills replay-tour entry");
+  requireText(app, "guide.setCurrentPage(next)", "Bills tour navigation synchronization");
+  requireText(guide, "AsyncStorage.getItem", "Bills per-customer tour eligibility");
+  requireText(guide, "Remind me in 7 days", "Bills tour snooze control");
+  rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Bills authentication reference footer");
+  rejectText(auth, "in one secure place", "Bills authentication filler copy");
+  rejectText(auth, "One SKIMA account across your services", "Bills authentication cross-app tagline");
+});
+
+
+Deno.test("Public landing page avoids repeated cross-app wallet and account marketing", async () => {
+  const site = await read("apps/website/index.html");
+  rejectText(site, '<section class="band">', "Public landing page redundant cross-app band");
+  rejectText(site, "One connected experience", "Public landing page repeated tagline");
+  rejectText(site, "One SKIMA account and wallet", "Public landing page repeated wallet claim");
+  requireText(site, 'id="services"', "Public landing page service directory");
+  requireText(site, 'href="https://store.skima.online/"', "Public landing page Store destination");
+  requireText(site, 'href="https://bills.skima.online/"', "Public landing page Bills destination");
 });

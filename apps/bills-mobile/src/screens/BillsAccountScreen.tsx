@@ -7,6 +7,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { AppButton } from "../ui/AppButton";
 import { AppModal } from "../ui/AppModal";
+import { GuideLaunchLink, GuideTarget } from "../onboarding/BillsGuideProvider";
 import { Page, Card, SectionTitle, ActionButton, Field, Notice } from "./BillsUI";
 
 export function BillsAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => void }) {
@@ -73,9 +74,10 @@ export function BillsAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
   };
 
   return (
-    <Page>
-      <SectionTitle title="Your account" caption="One SKIMA identity across Refill, Logistics and Bills." />
-      <Card style={{ alignItems: "center", paddingVertical: 20 }}>
+    <Page guidePage="account">
+      <SectionTitle title="Your account" caption="Manage your Bills profile and settings." />
+      <GuideLaunchLink />
+      <GuideTarget page="account" targetKey="bills.account.profile"><Card style={{ alignItems: "center", paddingVertical: 20 }}>
         <View style={{ width: 62, height: 62, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: palette.brandSoft }}>
           <UserRound color={palette.brand} size={28} />
         </View>
@@ -85,7 +87,7 @@ export function BillsAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
           <ShieldCheck color={palette.success} size={13} />
           <Text style={{ fontSize: 9, color: palette.success, fontWeight: "900" }}>Authenticated SKIMA account</Text>
         </View>
-      </Card>
+      </Card></GuideTarget>
       <Card>
         <SectionTitle title="Profile details" />
         <Field label="Display name" value={name} onChangeText={setName} placeholder="Your name" />
