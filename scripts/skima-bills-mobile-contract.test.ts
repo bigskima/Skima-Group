@@ -159,4 +159,6 @@ Deno.test("Bills guided tour maps first-run steps to the live Bills workspace", 
   requireText(guide, "AsyncStorage.getItem", "Bills per-customer tour eligibility");
   requireText(guide, "Remind me in 7 days", "Bills tour snooze control");
   rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Bills authentication reference footer");
+  rejectText(auth, "in one secure place", "Bills authentication filler copy");
+  rejectText(auth, "One SKIMA account across your services", "Bills authentication cross-app tagline");
 });
