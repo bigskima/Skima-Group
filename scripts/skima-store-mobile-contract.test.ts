@@ -101,3 +101,10 @@ Deno.test("Store reuses the two existing production schema migrations", async ()
   requireText(delivery, "delivery_base_fee_amount", "Store delivery fee configuration");
   requireText(delivery, "minimum_order_amount", "Store minimum-order configuration");
 });
+
+Deno.test("Store authentication screen displays Store branding instead of Bills branding", async () => {
+  const auth = await read("apps/store-mobile/src/screens/StoreAuthScreen.tsx");
+  requireText(auth, "Welcome to SKIMA Store", "Store login screen");
+  requireText(auth, ">STORE</Text>", "Store login brand label");
+  rejectText(auth, ">BILLS</Text>", "Store login brand label");
+});
