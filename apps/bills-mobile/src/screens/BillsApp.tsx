@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { subscribeBillsNavigation } from "../navigation/billsNavigation";
 import { Bell, BookOpen, History, ShoppingBag, UserRound, WalletCards, ArrowLeft } from "lucide-react-native";
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -20,6 +21,7 @@ const tabs:{key:Page;label:string;icon:any}[]=[
 export function BillsApp(){
  const {palette}=useAppTheme();const {width}=useWindowDimensions();
  const [page,setPage]=useState<Page>("bills");const [receiptId,setReceiptId]=useState<string|null>(null);
+ useEffect(()=>subscribeBillsNavigation(event=>{setPage(event.page);setReceiptId(event.receiptId??null);}),[]);
  const onReceipt=(id:string)=>{setReceiptId(id);setPage("receipt");};
  const isTab=tabs.some(t=>t.key===page);
  const title=page==="bills"?"Pay bills":page==="activity"?"Bill activity":page==="wallet"?"SKIMA Wallet":page==="store"?"SKIMA Store":page==="account"?"Account":page==="top-up"?"Add funds":page==="withdraw"?"Withdraw funds":page==="notifications"?"Notifications":page==="saved"?"Saved billers":"Receipt";
