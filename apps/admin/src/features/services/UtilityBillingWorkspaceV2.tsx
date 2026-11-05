@@ -39,21 +39,26 @@ import "./utility-billing-v2.css";
 
 const BASE = "/services/utility-billing";
 
-const sections = [
+function buildSections(basePath: string) {
+  return [
   { key: "overview", label: "Overview", href: BASE, icon: LayoutDashboard },
-  { key: "providers", label: "Providers", href: `${BASE}/providers`, icon: ServerCog },
-  { key: "catalogue", label: "Catalogue", href: `${BASE}/catalogue`, icon: Boxes },
-  { key: "routing", label: "Routing", href: `${BASE}/routing`, icon: PlugZap },
-  { key: "economics", label: "Economics", href: `${BASE}/economics`, icon: BadgeDollarSign },
-  { key: "campaigns", label: "Campaigns", href: `${BASE}/campaigns`, icon: BadgePercent },
-  { key: "operations", label: "Operations", href: `${BASE}/operations`, icon: Activity },
-  { key: "live-test", label: "Live test", href: `${BASE}/live-test`, icon: FlaskConical },
-] as const;
+  { key: "providers", label: "Providers", href: `${basePath}/providers`, icon: ServerCog },
+  { key: "catalogue", label: "Catalogue", href: `${basePath}/catalogue`, icon: Boxes },
+  { key: "routing", label: "Routing", href: `${basePath}/routing`, icon: PlugZap },
+  { key: "economics", label: "Economics", href: `${basePath}/economics`, icon: BadgeDollarSign },
+  { key: "campaigns", label: "Campaigns", href: `${basePath}/campaigns`, icon: BadgePercent },
+  { key: "operations", label: "Operations", href: `${basePath}/operations`, icon: Activity },
+  { key: "live-test", label: "Live test", href: `${basePath}/live-test`, icon: FlaskConical },
+] as const
+}
+;
 
 export function UtilityBillingWorkspaceV2(props: {
   route: string;
+  basePath?: string;
   onNavigate: (href: string) => void;
 }) {
+  const basePath = props.basePath ?? BASE;
   const { api, status, supabase } = useSessionState();
   const snapshot = useQuery({
     queryKey: ["admin-utility-billing-v2"],
@@ -82,10 +87,10 @@ export function UtilityBillingWorkspaceV2(props: {
     },
   });
 
-  if (props.route === `${BASE}/advanced`) {
+  if (props.route === `${basePath}/advanced`) {
     return (
       <div className="utility-v2">
-        <UtilitySectionNav route={props.route} onNavigate={props.onNavigate} />
+        <UtilitySectionNav route={props.route} basePath={basePath} onNavigate={props.onNavigate} />
         <section className="admin-notice">
           <strong>Advanced utility setup</strong>
           <p>This compatibility console contains manual service-type/company/plan creation and the original all-in-one controls. Normal provider, catalogue, economics, routing, campaign and payment work should use the focused V2 screens.</p>
@@ -102,11 +107,11 @@ export function UtilityBillingWorkspaceV2(props: {
 
   const data = snapshot.data;
   const refresh = async () => { await snapshot.refetch(); };
-  const content = routeContent(props.route, data, refresh, props.onNavigate);
+  const content = routeContent(props.route, data, refresh, props.onNavigate, basePath);
 
   return (
     <div className="utility-v2">
-      {props.route !== BASE ? <UtilitySectionNav route={props.route} onNavigate={props.onNavigate} /> : null}
+      {props.route !== basePath ? <UtilitySectionNav route={props.route} basePath={basePath} onNavigate={props.onNavigate} /> : null}
       {content}
     </div>
   );
@@ -117,22 +122,25 @@ function routeContent(
   data: ReturnType<typeof UtilitySnapshotSchema.parse>,
   refresh: () => Promise<void>,
   onNavigate: (href: string) => void,
+  basePath: string,
 ) {
-  if (route === `${BASE}/providers`) return <UtilityProvidersScreen data={data} refresh={refresh} />;
-  if (route === `${BASE}/catalogue`) return <UtilityCatalogueScreen data={data} refresh={refresh} onNavigate={onNavigate} />;
-  if (route === `${BASE}/routing`) return <UtilityRoutingScreen data={data} refresh={refresh} />;
-  if (route === `${BASE}/economics`) return <UtilityEconomicsScreen data={data} refresh={refresh} />;
-  if (route === `${BASE}/campaigns`) return <UtilityCampaignsScreen data={data} refresh={refresh} />;
-  if (route === `${BASE}/operations`) return <UtilityOperationsScreen data={data} refresh={refresh} />;
-  if (route === `${BASE}/live-test`) return <UtilityLiveTestScreen data={data} refresh={refresh} />;
-  return <UtilityOverview data={data} refresh={refresh} onNavigate={onNavigate} />;
+  if (route === `${basePath}/providers`) return <UtilityProvidersScreen data={data} refresh={refresh} />;
+  if (route === `${basePath}/catalogue`) return <UtilityCatalogueScreen data={data} refresh={refresh} onNavigate={onNavigate} />;
+  if (route === `${basePath}/routing`) return <UtilityRoutingScreen data={data} refresh={refresh} />;
+  if (route === `${basePath}/economics`) return <UtilityEconomicsScreen data={data} refresh={refresh} />;
+  if (route === `${basePath}/campaigns`) return <UtilityCampaignsScreen data={data} refresh={refresh} />;
+  if (route === `${basePath}/operations`) return <UtilityOperationsScreen data={data} refresh={refresh} />;
+  if (route === `${basePath}/live-test`) return <UtilityLiveTestScreen data={data} refresh={refresh} />;
+  return <UtilityOverview data={data} refresh={refresh} onNavigate={onNavigate} basePath={basePath} />;
 }
 
 function UtilityOverview(props: {
   data: ReturnType<typeof UtilitySnapshotSchema.parse>;
   refresh: () => Promise<void>;
   onNavigate: (href: string) => void;
+  basePath: string;
 }) {
+  const basePath = props.basePath;
   const { api } = useSessionState();
   const provider = props.data.providers.find((item) => utilityText(item, "status") !== "disabled") ?? props.data.providers[0];
   const providerKey = utilityText(provider, "key");
@@ -189,7 +197,7 @@ function UtilityOverview(props: {
       actionLabel: providerKey ? "Test connection" : "Add provider",
       disabled: Boolean(providerKey && !secretReady),
       loading: testProvider.isPending,
-      action: () => providerKey ? testProvider.mutate() : props.onNavigate(`${BASE}/providers`),
+      action: () => providerKey ? testProvider.mutate() : props.onNavigate(`${basePath}/providers`),
     },
     {
       key: "catalogue",
@@ -202,7 +210,7 @@ function UtilityOverview(props: {
       actionLabel: catalogueReady ? "Review catalogue" : "Sync catalogue",
       disabled: !providerKey || !syncReady,
       loading: syncCatalogue.isPending,
-      action: () => catalogueReady ? props.onNavigate(`${BASE}/catalogue`) : syncCatalogue.mutate(),
+      action: () => catalogueReady ? props.onNavigate(`${basePath}/catalogue`) : syncCatalogue.mutate(),
     },
     {
       key: "economics",
@@ -215,7 +223,7 @@ function UtilityOverview(props: {
       actionLabel: economicsReady ? "Review pricing" : "Set pricing",
       disabled: false,
       loading: false,
-      action: () => props.onNavigate(`${BASE}/economics`),
+      action: () => props.onNavigate(`${basePath}/economics`),
     },
     {
       key: "routes",
@@ -228,7 +236,7 @@ function UtilityOverview(props: {
       actionLabel: routesReady ? "Live test" : "Enable services",
       disabled: false,
       loading: false,
-      action: () => props.onNavigate(routesReady ? `${BASE}/live-test` : `${BASE}/routing`),
+      action: () => props.onNavigate(routesReady ? `${basePath}/live-test` : `${basePath}/routing`),
     },
   ] as const;
 
@@ -236,9 +244,9 @@ function UtilityOverview(props: {
   const canActivateProvider = Boolean(providerKey && runtimeReady && secretReady && catalogueReady && economicsReady && routesReady && !providerActive);
 
   const tasks = [
-    { key: "campaigns", title: "Campaigns", description: "Create cashback and discounts without crossing your protected profit floor.", href: `${BASE}/campaigns`, icon: BadgePercent },
-    { key: "operations", title: "Payment operations", description: "Review provider outcomes and reconcile ambiguous utility transactions safely.", href: `${BASE}/operations`, icon: Activity },
-    { key: "live-test", title: "Live provider test", description: "Run a small real-money vend before releasing a service widely to customers.", href: `${BASE}/live-test`, icon: FlaskConical },
+    { key: "campaigns", title: "Campaigns", description: "Create cashback and discounts without crossing your protected profit floor.", href: `${basePath}/campaigns`, icon: BadgePercent },
+    { key: "operations", title: "Payment operations", description: "Review provider outcomes and reconcile ambiguous utility transactions safely.", href: `${basePath}/operations`, icon: Activity },
+    { key: "live-test", title: "Live provider test", description: "Run a small real-money vend before releasing a service widely to customers.", href: `${basePath}/live-test`, icon: FlaskConical },
   ] as const;
 
   return (
@@ -247,7 +255,7 @@ function UtilityOverview(props: {
         eyebrow="Services · Utility billing"
         title="Start selling bills in a few steps"
         description="Connect a provider once, import its catalogue, set SKIMA profit rules and enable only the airtime, data, electricity and other services you want to sell."
-        actions={<><Button icon={RefreshCcw} variant="outline" onClick={() => void props.refresh()}>Refresh</Button><Button icon={Settings2} variant="outline" onClick={() => props.onNavigate(`${BASE}/advanced`)}>Advanced</Button></>}
+        actions={<><Button icon={RefreshCcw} variant="outline" onClick={() => void props.refresh()}>Refresh</Button><Button icon={Settings2} variant="outline" onClick={() => props.onNavigate(`${basePath}/advanced`)}>Advanced</Button></>}
       />
 
       <section className="skima-grid skima-grid--compact">
@@ -301,14 +309,14 @@ function UtilityOverview(props: {
           </div>
         ) : null}
 
-        {(!secretReady && providerKey) ? <section className="admin-notice"><strong>Provider secret is not ready</strong><p>Add the provider API key as a Supabase Edge secret, then return here and tap Test connection. The key value is never stored in the database.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate(`${BASE}/providers`)}>Open provider setup</Button></section> : null}
+        {(!secretReady && providerKey) ? <section className="admin-notice"><strong>Provider secret is not ready</strong><p>Add the provider API key as a Supabase Edge secret, then return here and tap Test connection. The key value is never stored in the database.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate(`${basePath}/providers`)}>Open provider setup</Button></section> : null}
         {testProvider.error || syncCatalogue.error || activateProvider.error ? <StatusBadge tone="danger">{utilityError(testProvider.error ?? syncCatalogue.error ?? activateProvider.error)}</StatusBadge> : null}
       </section>
 
       <section className="sk-panel">
         <div className="sk-panel__header">
           <div><h2>Services you can configure</h2><p className="skima-muted">These service types come from SKIMA configuration. Provider plans appear automatically after catalogue sync.</p></div>
-          <Button size="sm" variant="outline" onClick={() => props.onNavigate(`${BASE}/catalogue`)}>Open catalogue</Button>
+          <Button size="sm" variant="outline" onClick={() => props.onNavigate(`${basePath}/catalogue`)}>Open catalogue</Button>
         </div>
         <div className="utility-v2__service-chips">
           {activeCategories.map((category) => (
@@ -324,7 +332,7 @@ function UtilityOverview(props: {
         </div>
       </section>
 
-      {unresolved ? <section className="admin-notice"><strong>Payments need attention</strong><p>{unresolved} utility payment{unresolved === 1 ? "" : "s"} still require provider reconciliation. Open Payment Operations before making assumptions about failure or refund.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate(`${BASE}/operations`)}>Review payments</Button></section> : null}
+      {unresolved ? <section className="admin-notice"><strong>Payments need attention</strong><p>{unresolved} utility payment{unresolved === 1 ? "" : "s"} still require provider reconciliation. Open Payment Operations before making assumptions about failure or refund.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate(`${basePath}/operations`)}>Review payments</Button></section> : null}
 
       <section>
         <div className="utility-v2__section-heading"><div><h2>After setup</h2><p className="skima-muted">These are day-to-day tools; they do not need to be part of the initial configuration flow.</p></div></div>
@@ -351,7 +359,8 @@ function UtilityOverview(props: {
   );
 }
 
-function UtilitySectionNav(props: { route: string; onNavigate: (href: string) => void }) {
+function UtilitySectionNav(props: { route: string; basePath?: string; onNavigate: (href: string) => void }) {
+  const sections = buildSections(props.basePath ?? BASE);
   return (
     <nav className="utility-v2__nav" aria-label="Utility billing sections">
       {sections.map((section) => {
