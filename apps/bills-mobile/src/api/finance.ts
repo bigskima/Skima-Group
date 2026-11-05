@@ -6,7 +6,7 @@ type FinanceEnvelope<T> = { ok: boolean; data?: T; message?: string };
 function endpoint() {
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
   if (!url) throw new Error("SKIMA finance configuration is unavailable.");
-  return url.replace(/\\/$/, "") + "/functions/v1/finance-runtime";
+  return (url.endsWith("/") ? url.slice(0, -1) : url) + "/functions/v1/finance-runtime";
 }
 async function request<T>(input: { path: string; token: string; schema: z.ZodType<T>; method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
