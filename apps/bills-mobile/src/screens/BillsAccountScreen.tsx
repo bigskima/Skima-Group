@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { Bell, ChevronRight, LockKeyhole, LogOut, Moon, ShieldCheck, UserRound, WalletCards } from "lucide-react-native";
 import * as Linking from "expo-linking";
@@ -49,4 +50,4 @@ export function BillsAccountScreen({onOpenPage}:{onOpenPage:(page:any)=>void}){
  </Page>;
 }
 function ReceiptIcon(){return <ShieldCheck color="#E21D2F" size={18}/>;}
-function AccountLink({icon,title,subtitle,onPress}:{icon:React.ReactNode;title:string;subtitle:string;onPress:()=>void}){const {palette}=useAppTheme();return <Pressable onPress={onPress} style={{minHeight:58,flexDirection:"row",alignItems:"center",gap:10,padding:11,borderRadius:15,backgroundColor:palette.surface,borderWidth:0.5,borderColor:palette.border}}>{icon}<View style={{flex:1,gap:2}}><Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>{title}</Text><Text style={{fontSize:10,color:palette.muted}}>{subtitle}</Text></View><ChevronRight color={palette.muted} size={16}/></Pressable>;}
+function AccountLink({icon,title,subtitle,onPress}:{icon:ReactNode;title:string;subtitle:string;onPress:()=>void}){const {palette}=useAppTheme();return <Pressable onPress={onPress} style={{minHeight:58,flexDirection:"row",alignItems:"center",gap:10,padding:11,borderRadius:15,backgroundColor:palette.surface,borderWidth:0.5,borderColor:palette.border}}>{icon}<View style={{flex:1,gap:2}}><Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>{title}</Text><Text style={{fontSize:10,color:palette.muted}}>{subtitle}</Text></View><ChevronRight color={palette.muted} size={16}/></Pressable>;}
