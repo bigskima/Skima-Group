@@ -162,3 +162,14 @@ Deno.test("Bills guided tour maps first-run steps to the live Bills workspace", 
   rejectText(auth, "in one secure place", "Bills authentication filler copy");
   rejectText(auth, "One SKIMA account across your services", "Bills authentication cross-app tagline");
 });
+
+
+Deno.test("Public landing page avoids repeated cross-app wallet and account marketing", async () => {
+  const site = await read("apps/website/index.html");
+  rejectText(site, '<section class="band">', "Public landing page redundant cross-app band");
+  rejectText(site, "One connected experience", "Public landing page repeated tagline");
+  rejectText(site, "One SKIMA account and wallet", "Public landing page repeated wallet claim");
+  requireText(site, 'id="services"', "Public landing page service directory");
+  requireText(site, 'href="https://store.skima.online/"', "Public landing page Store destination");
+  requireText(site, 'href="https://bills.skima.online/"', "Public landing page Bills destination");
+});
