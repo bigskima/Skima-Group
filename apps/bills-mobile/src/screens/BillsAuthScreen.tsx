@@ -22,6 +22,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
   const [pending,setPending] = useState(false);
   const [notice,setNotice] = useState("");
   const [success,setSuccess] = useState(false);
+  const [confirmationEmail,setConfirmationEmail] = useState("");
   const resetUrl = Platform.OS === "web" ? Linking.createURL("reset-password") : "skima-bills://reset-password";
 
   const submit = async () => {
@@ -35,6 +36,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
       } else if(mode==="register") {
         const result=await session.signUp({displayName:name,email,password});
         setSuccess(true);
+        setConfirmationEmail(result.confirmationRequired ? email.trim().toLowerCase() : "");
         setNotice(result.confirmationRequired ? "Your account has been created. Check your email to confirm it, then sign in." : "Your SKIMA account is ready.");
         if(result.sessionStarted) router.replace("/");
       } else if(mode==="forgot") {
@@ -48,6 +50,18 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
       }
     } catch(error) { setNotice(error instanceof Error?error.message:"We could not complete that request. Please try again."); }
     finally { setPending(false); }
+  };
+
+  const resendConfirmation = async () => {
+    if (!confirmationEmail || pending) return;
+    setPending(true);setNotice("");setSuccess(false);
+    try {
+      const confirmationUrl = Platform.OS === "web" ? Linking.createURL("/") : "skima-bills://";
+      await session.resendSignupConfirmation(confirmationEmail, confirmationUrl);
+      setSuccess(true);setNotice("A fresh confirmation email has been sent when the account is eligible.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The confirmation email could not be resent.");
+    } finally { setPending(false); }
   };
 
   const title = mode==="login"?"Welcome to SKIMA Bills":mode==="register"?"Create your SKIMA account":mode==="forgot"?"Recover your account":"Set a new password";
@@ -77,6 +91,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
                 {mode==="reset"?<Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Enter password again" secureTextEntry={!visible} icon={<LockKeyhole size={17} color={palette.muted}/>}/>:null}
                 {mode==="login"?<Pressable onPress={()=>setMode("forgot")} style={styles.forgot}><Text style={{color:palette.brand,fontWeight:"900",fontSize:11}}>Forgot password?</Text></Pressable>:null}
               </View>
+              {confirmationEmail ? <Pressable onPress={() => void resendConfirmation()}><Text style={{color:palette.brand,fontSize:11,fontWeight:"900"}}>Resend confirmation email</Text></Pressable> : null}
               {notice? <View style={[styles.notice,{backgroundColor:success?palette.successSoft:palette.dangerSoft,borderColor:success?palette.success:palette.danger}]}><Text style={{color:success?palette.success:palette.danger,fontSize:12,lineHeight:18,fontWeight:"700"}}>{notice}</Text></View>:null}
               <Pressable disabled={!canSubmit||pending} onPress={()=>void submit()} style={{opacity:!canSubmit||pending?0.5:1}}>
                 <LinearGradient colors={[colors.brand,"#F33C4E",colors.brandDark]} style={styles.submit}>
