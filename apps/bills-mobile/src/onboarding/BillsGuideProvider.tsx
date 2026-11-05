@@ -50,14 +50,14 @@ const STEPS: TourStep[] = [
   {
     page: "wallet",
     targetKey: "bills.wallet.balance",
-    title: "Your shared customer wallet",
-    body: "Fund and withdraw from the existing SKIMA customer wallet. Bills does not create a separate balance, and your eligible SKIMA services use the same wallet.",
+    title: "Manage wallet funds",
+    body: "Check your available balance, add money, request a supported withdrawal, and review recent funding activity.",
   },
   {
     page: "store",
     targetKey: "bills.store.catalogue",
     title: "Explore SKIMA Store",
-    body: "Bills also gives you a route into the shared Store catalogue. Shopping orders and bill payments remain separate service workflows.",
+    body: "Browse the Store catalogue and place shopping orders. Orders and bill payments follow separate service flows.",
   },
   {
     page: "account",
