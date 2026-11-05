@@ -96,7 +96,7 @@ Deno.test("Bills inbox uses the canonical shared notification center", async () 
 
 Deno.test("Saved billers deny anonymous table privileges and scope policies to signed-in customers", async () => {
   const migration = await read("supabase/migrations/20261105010000_skima_bills_saved_beneficiaries_access_hardening.sql");
-  const normalized = migration.replace(/\\s+/g, " ").toLowerCase();
+  const normalized = migration.replace(/\s+/g, " ").toLowerCase();
   requireText(normalized, "revoke all on table public.utility_saved_beneficiaries from anon, public", "Saved biller anonymous privilege revocation");
   requireText(normalized, "grant select, insert, update, delete on table public.utility_saved_beneficiaries to authenticated, service_role", "Saved biller trusted role grants");
   requireText(normalized, "to authenticated", "Saved biller authenticated-only policies");
