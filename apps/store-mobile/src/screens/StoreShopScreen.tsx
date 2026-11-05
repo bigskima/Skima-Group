@@ -9,6 +9,7 @@ import { useStorefrontData, useStoreRecords, asNumber, asString, money, makeIdem
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./StoreUI";
 import { AppButton } from "../ui/AppButton";
+import { GuideTarget } from "../onboarding/StoreGuideProvider";
 
 type Row=Record<string,unknown>;
 type CartLine={itemId:string;variantId:string|null;name:string;variantName:string|null;quantity:number;unitAmount:number;currencyCode:string;stock:number|null};
@@ -87,11 +88,13 @@ export function StoreShopScreen(){
  const busy=store.modules.isPending||store.settings.isPending;
  if(busy)return <Page><State title="Opening SKIMA Store" body="Loading the shared Store configuration."/></Page>;
  if(!store.storeModule||!settings)return <Page><State title="Store is not currently available" body="SKIMA Store will appear here when the platform administrator enables it."/></Page>;
- return <Page refreshControl={<RefreshControl refreshing={store.items.isRefetching||store.prices.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
-  <Card style={{backgroundColor:palette.brand,borderColor:palette.brand,padding:17}}><Text style={{fontSize:9,color:"rgba(255,255,255,.75)",fontWeight:"900",letterSpacing:1.2}}>SKIMA STORE</Text><Text style={{fontSize:23,color:"#fff",fontWeight:"900"}}>Shop essentials.</Text><Text style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>One catalogue. Live availability. Shared checkout.</Text><Text style={{fontSize:10,color:"#fff",marginTop:5}}>Wallet · {money(balance,currency)}</Text></Card>
+ return <Page guidePage="shop" refreshControl={<RefreshControl refreshing={store.items.isRefetching||store.prices.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
+  <GuideTarget page="shop" targetKey="store.shop.hero"><Card style={{backgroundColor:palette.brand,borderColor:palette.brand,padding:17}}><Text style={{fontSize:9,color:"rgba(255,255,255,.75)",fontWeight:"900",letterSpacing:1.2}}>SKIMA STORE</Text><Text style={{fontSize:23,color:"#fff",fontWeight:"900"}}>Shop essentials.</Text><Text style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>One catalogue. Live availability. Shared checkout.</Text><Text style={{fontSize:10,color:"#fff",marginTop:5}}>Wallet · {money(balance,currency)}</Text></Card></GuideTarget>
+  <GuideTarget page="shop" targetKey="store.shop.categories"><View style={{gap:10}}>
   <View style={[styles.search,{borderColor:palette.border,backgroundColor:palette.surface}]}><Search size={16} color={palette.muted}/><TextInput value={search} onChangeText={setSearch} placeholder="Search products" placeholderTextColor={palette.muted} style={{flex:1,color:palette.ink,fontSize:12}}/>{search?<Pressable onPress={()=>setSearch("")}><X size={16} color={palette.muted}/></Pressable>:null}</View>
   <SectionTitle title="Shop by category" caption="Browse the shared catalogue available to SKIMA Store customers."/>
   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}><CategoryChip title="All" selected={category==="all"} onPress={()=>setCategory("all")}/>{categories.map(c=><CategoryChip key={asString(c,"id")??""} title={asString(c,"display_name","name")??"Category"} selected={category===asString(c,"id")} onPress={()=>setCategory(asString(c,"id")??"all")}/>)}</ScrollView>
+  </View></GuideTarget>
   {store.items.isPending||store.prices.isPending||store.availability.isPending?<State title="Loading products" body="Reading live prices and stock availability."/>:store.items.error||store.prices.error||store.availability.error?<State title="Products unavailable" body="Try refreshing the shared catalogue." retry={refresh}/>:filtered.length?<View style={styles.grid}>{filtered.map(p=><View key={p.id+":"+(p.variantId??"base")} style={[styles.product,{backgroundColor:palette.surface,borderColor:palette.border,width:width>=1100?"23.8%":width>=700?"31.8%":"48.5%"}]}>
     <View style={styles.media}><StoreImage assetId={p.imageAssetId} label={p.name}/></View>
     <Text style={{color:palette.muted,fontSize:9}} numberOfLines={1}>{asString(p.item,"category_name","category")??"SKIMA Store"}</Text>
@@ -101,7 +104,7 @@ export function StoreShopScreen(){
     <Text style={{fontSize:9,color:palette.success,fontWeight:"800"}}>{p.stock===null?"Available":p.stock+" in stock"}</Text>
     <ActionButton small label="Add to basket" disabled={checkout.isPending} onPress={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setCart(cur=>{const found=cur.find(x=>x.itemId===p.id&&x.variantId===p.variantId);if(found)return cur.map(x=>x===found?{...x,quantity:p.stock===null?x.quantity+1:Math.min(p.stock,x.quantity+1)}:x);return [...cur,{itemId:p.id,variantId:p.variantId,name:p.name,variantName:p.variantName,quantity:1,unitAmount:p.amount,currencyCode:p.currency,stock:p.stock}];});}}/>
    </View>)}</View>:<State title="No products available" body="Products appear when they have an active price and available stock."/>}
-  <Card>
+  <GuideTarget page="shop" targetKey="store.shop.basket"><Card>
    <SectionTitle title={"Your basket · "+cart.reduce((s,l)=>s+l.quantity,0)+" items"} caption={cart.length?money(subtotal,cartCurrency):"Add a product to start shopping."}/>
    {cart.length?cart.map(line=><View key={line.itemId+":"+(line.variantId??"base")} style={styles.cartLine}><View style={{flex:1,gap:2}}><Text style={{color:palette.ink,fontSize:11,fontWeight:"900"}}>{line.name}</Text>{line.variantName?<Text style={{color:palette.muted,fontSize:9}}>{line.variantName}</Text>:null}<Text style={{color:palette.muted,fontSize:10}}>{money(line.unitAmount*line.quantity,line.currencyCode)}</Text></View><Pressable disabled={checkout.isPending} onPress={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setCart(cur=>cur.map(x=>x.itemId===line.itemId&&x.variantId===line.variantId?{...x,quantity:Math.max(0,x.quantity-1)}:x).filter(x=>x.quantity>0));}}><Minus size={16} color={palette.muted}/></Pressable><Text style={{fontSize:11,color:palette.ink,fontWeight:"900"}}>{line.quantity}</Text><Pressable disabled={checkout.isPending} onPress={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setCart(cur=>cur.map(x=>x.itemId===line.itemId&&x.variantId===line.variantId?{...x,quantity:x.stock===null?x.quantity+1:Math.min(x.stock,x.quantity+1)}:x));}}><Plus size={16} color={palette.brand}/></Pressable></View>):null}
    {cart.length?<View style={{gap:10}}>
@@ -116,7 +119,7 @@ export function StoreShopScreen(){
     <Pressable onPress={()=>Alert.alert("Shared SKIMA Wallet","Your Store purchases use the existing SKIMA customer wallet.")}><Text style={{fontSize:10,color:palette.brand,fontWeight:"900"}}>Using your shared SKIMA customer wallet across all apps</Text></Pressable>
     <AppButton label={"Pay "+money(total,currency)} fullWidth disabled={!canCheckout} loading={checkout.isPending} onPress={()=>checkout.mutate()}/>
    </View>:null}
-  </Card>
+  </Card></GuideTarget>
   <View style={{gap:9}}><SectionTitle title="Your Store orders" caption="Track deliveries and confirm receipt."/>
    {orders.isPending?<ActivityIndicator color={palette.brand}/>:orders.error?<State title="Orders unavailable" body="Your previous Store orders are safe. Try again." retry={()=>void orders.refetch()}/>:orders.data?.length?orders.data.slice(0,6).map(o=><Card key={asString(o,"id")??""} style={{gap:7}}><View style={{flexDirection:"row",justifyContent:"space-between",gap:10}}><Text style={{fontSize:11,color:palette.ink,fontWeight:"900"}}>{"Order "+(asString(o,"id")??"").slice(0,8).toUpperCase()}</Text><Text style={{fontSize:10,color:palette.brand,fontWeight:"900"}}>{(asString(o,"status")??"received").replaceAll("_"," ")}</Text></View><Text style={{fontSize:10,color:palette.muted}}>{asString(o,"fulfillment_method")??"delivery"} · {money(asNumber(o,"total_amount")??0,asString(o,"currency_code")??currency)}</Text>{asString(o,"status")==="fulfilled"?<ActionButton small label="Confirm receipt" onPress={()=>receipt.mutate(asString(o,"id")??"")} loading={receipt.isPending}/>:null}{asString(o,"status")==="completed"?<Text style={{fontSize:10,color:palette.success,fontWeight:"800"}}>Receipt confirmed · settlement completed</Text>:null}</Card>):<State title="No Store orders yet" body="Your Store purchases and delivery updates appear here."/>}
   </View>
