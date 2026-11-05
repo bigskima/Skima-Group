@@ -10,6 +10,14 @@ vi.mock("../features/logistics/LogisticsWorkspace", () => ({
   LogisticsWorkspace: ({ route }: { route: string }) => "logistics-workspace-mounted:" + route,
 }));
 
+vi.mock("../features/refill/RefillWorkspaceRouter", () => ({
+  RefillWorkspaceRouter: ({ route }: { route: string }) => "refill-workspace-mounted:" + route,
+}));
+
+vi.mock("../features/services/UtilityBillingWorkspaceV2", () => ({
+  UtilityBillingWorkspaceV2: ({ route, basePath }: { route: string; basePath: string }) => "bills-workspace-mounted:" + basePath + ":" + route,
+}));
+
 vi.mock("../admin-workspace-router", () => ({
   AdminWorkspaceRouter: () => "legacy-overview-fallback",
 }));
@@ -26,6 +34,32 @@ describe("AdminV2WorkspaceRouter", () => {
         }),
       );
       expect(markup).toContain("logistics-workspace-mounted:" + route);
+      expect(markup).not.toContain("legacy-overview-fallback");
+    }
+  });
+
+  it("opens the dedicated Refill workspace without falling through to the legacy router", () => {
+    const markup = renderToStaticMarkup(
+      createElement(AdminV2WorkspaceRouter, {
+        route: "/refill/orders",
+        onNavigate: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("refill-workspace-mounted:/refill/orders");
+    expect(markup).not.toContain("legacy-overview-fallback");
+  });
+
+  it("opens the existing utility billing runtime inside the dedicated Bills route base", () => {
+    for (const route of ["/bills", "/bills/providers", "/bills/catalogue", "/bills/operations"]) {
+      const markup = renderToStaticMarkup(
+        createElement(AdminV2WorkspaceRouter, {
+          route,
+          onNavigate: () => undefined,
+        }),
+      );
+
+      expect(markup).toContain("bills-workspace-mounted:/bills:" + route);
       expect(markup).not.toContain("legacy-overview-fallback");
     }
   });
