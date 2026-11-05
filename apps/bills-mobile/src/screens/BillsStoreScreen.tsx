@@ -39,7 +39,7 @@ export function BillsStoreScreen(){
  const settings=store.activeSettings;const currency=asString(settings,"currency_code")??"NGN";
  const customerWallet=(wallets.data??[]).find(w=>asString(w,"wallet_type")==="customer"&&asString(w,"owner_entity_type")==="user"&&asString(w,"owner_entity_id")===userId&&asString(w,"currency_code")===currency&&asString(w,"status")==="active")??null;
  const walletId=asString(customerWallet,"id");const balance=asNumber((balances.data??[]).find(b=>asString(b,"wallet_id")===walletId),"balance")??0;
- const configuredMethods=Array.isArray(settings?.fulfillment_methods)?settings.fulfillment_methods.filter((v):v is "delivery"|"pickup"=>v==="delivery"||v==="pickup"):[];const allowedMethods=configuredMethods.length?configuredMethods:(settings?.fulfillment_method==="pickup"?["pickup" as const]:["delivery" as const,"pickup" as const]);
+ const configuredMethods:("delivery"|"pickup")[]=Array.isArray(settings?.fulfillment_methods)?settings.fulfillment_methods.filter((v):v is "delivery"|"pickup"=>v==="delivery"||v==="pickup"):[];const allowedMethods:("delivery"|"pickup")[]=configuredMethods.length?configuredMethods:(settings?.fulfillment_method==="pickup"?["pickup"]:["delivery","pickup"]);
  useEffect(()=>{if(!allowedMethods.includes(fulfillment))setFulfillment(allowedMethods[0]??"delivery");},[allowedMethods.join("|"),fulfillment]);
  const addresses=(locations.data??[]).filter(l=>![ "inactive","disabled","deleted" ].includes((asString(l,"status")??"").toLowerCase()));
  useEffect(()=>{if(!locationId&&addresses.length){const preferred=addresses.find(l=>l.is_default===true)??addresses[0];setLocationId(asString(preferred,"id")??"");}},[addresses,locationId]);
