@@ -4,6 +4,9 @@ async function read(path: string): Promise<string> {
 function requireText(source: string, value: string, file: string) {
   if (!source.includes(value)) throw new Error(file + " must contain " + value);
 }
+function rejectText(source: string, value: string, file: string) {
+  if (source.includes(value)) throw new Error(file + " must not contain " + value);
+}
 
 Deno.test("Bills has its own Expo and native application identity", async () => {
   const [manifest, config, assets] = await Promise.all([
