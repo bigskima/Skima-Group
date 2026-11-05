@@ -102,3 +102,16 @@ Deno.test("Saved billers deny anonymous table privileges and scope policies to s
   requireText(normalized, "to authenticated", "Saved biller authenticated-only policies");
   requireText(normalized, "(select auth.uid()) = customer_user_id", "Saved biller initplan owner guard");
 });
+
+Deno.test("Bills uses the existing SKIMA brand artwork and updates the canonical customer profile", async () => {
+  const brand = await read("apps/bills-mobile/src/ui/BrandMark.tsx");
+  const auth = await read("apps/bills-mobile/src/screens/BillsAuthScreen.tsx");
+  const app = await read("apps/bills-mobile/src/screens/BillsApp.tsx");
+  const account = await read("apps/bills-mobile/src/screens/BillsAccountScreen.tsx");
+  requireText(brand, 'require("../../assets/skima-splash-logo.png")', "Bills brand mark");
+  requireText(auth, "BillsBrandMark", "Bills authentication brand");
+  requireText(app, "BillsBrandMark", "Bills app navigation brand");
+  requireText(account, '.from("profiles")', "Bills profile editing");
+  requireText(account, '.update({ display_name: nextName })', "Bills canonical profile update");
+  requireText(account, "confirmSignOut", "Bills cross-platform sign-out confirmation");
+});
