@@ -1,0 +1,431 @@
+import "react-native-url-polyfill/auto";
+import {
+  createClient,
+  type Session,
+  type SupabaseClient,
+} from "@supabase/supabase-js";
+import {
+  ApiGatewayClient,
+  SessionContextSchema,
+  type SessionContext,
+} from "@skima/frontend-core";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from "react";
+import { AppState, Linking, Platform } from "react-native";
+import { secureSessionStorage } from "../storage/secureStorage";
+import { friendlyError } from "../utilities/friendlyError";
+
+type Status = "loading" | "authenticated" | "unauthenticated" | "error";
+
+interface SignUpInput {
+  readonly displayName: string;
+  readonly email: string;
+  readonly password: string;
+  readonly redirectTo?: string;
+}
+
+interface SignUpResult {
+  readonly sessionStarted: boolean;
+  readonly confirmationRequired: boolean;
+}
+
+interface SessionValue {
+  status: Status;
+  session: Session | null;
+  context: SessionContext | null;
+  error: string | null;
+  api: ApiGatewayClient;
+  supabase: SupabaseClient;
+  clearAuthError(): void;
+  signIn(email: string, password: string): Promise<boolean>;
+  signUp(input: SignUpInput): Promise<SignUpResult>;
+  resendSignupConfirmation(email: string, redirectTo: string): Promise<void>;
+  requestPasswordReset(email: string, redirectTo: string): Promise<void>;
+  updatePassword(password: string): Promise<void>;
+  signOut(): Promise<void>;
+  refresh(): Promise<void>;
+}
+
+const Context = createContext<SessionValue | null>(null);
+
+export function SessionProvider({ children }: PropsWithChildren) {
+  const config = useMemo(readConfig, []);
+  const supabase = useMemo(
+    () =>
+      createClient(config.url, config.anonKey, {
+        auth: {
+          storage: Platform.OS === "web" ? undefined : secureSessionStorage,
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: Platform.OS === "web",
+        },
+        global: { headers: { "x-skima-client": "skima-store-expo" } },
+      }),
+    [config],
+  );
+  const sessionRef = useRef<Session | null>(null);
+  const applyVersionRef = useRef(0);
+  const [session, setSession] = useState<Session | null>(null);
+  const [context, setContext] = useState<SessionContext | null>(null);
+  const [status, setStatus] = useState<Status>("loading");
+  const [error, setError] = useState<string | null>(null);
+  const api = useMemo(
+    () =>
+      new ApiGatewayClient({
+        apiGatewayUrl: config.gateway,
+        anonKey: config.anonKey,
+        getAccessToken: async () => sessionRef.current?.access_token ?? null,
+        developmentLogger: __DEV__ ? console.info : undefined,
+      }),
+    [config],
+  );
+
+  const apply = useCallback(
+    async (next: Session | null) => {
+      const applyVersion = ++applyVersionRef.current;
+      sessionRef.current = next;
+      setSession(next);
+      setError(null);
+      if (!next) {
+
+        if (applyVersion !== applyVersionRef.current) return false;
+        setContext(null);
+        setStatus("unauthenticated");
+        return false;
+      }
+
+      // A valid Supabase session is sufficient to enter the customer app.
+      // Role and organization context is hydrated immediately afterwards and
+      // must never send an already-authenticated user back to the login page.
+      setStatus("authenticated");
+      try {
+        const nextContext = await api.get(
+          "/runtime/session-context",
+          SessionContextSchema,
+        );
+        if (
+          applyVersion !== applyVersionRef.current ||
+          sessionRef.current?.access_token !== next.access_token
+        )
+          return false;
+        setContext(nextContext);
+        setStatus("authenticated");
+        return true;
+      } catch (cause) {
+        if (applyVersion !== applyVersionRef.current) return false;
+        if (__DEV__) console.info("SKIMA session context refresh unavailable", cause);
+        setContext(null);
+        setStatus("authenticated");
+        return true;
+      }
+    },
+    [api],
+  );
+
+  const handleNativeAuthUrl = useCallback(
+    async (url: string | null) => {
+      if (Platform.OS === "web" || !url) return;
+
+      try {
+        const parsed = new URL(url);
+        const query = parsed.searchParams;
+        const hash = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+        const callbackError =
+          query.get("error_description") ??
+          hash.get("error_description") ??
+          query.get("error") ??
+          hash.get("error");
+
+        if (callbackError) {
+          setError(
+            friendlyError(
+              callbackError,
+              "We couldn't complete the secure recovery link. Request a new reset email and try again.",
+            ),
+          );
+          return;
+        }
+
+        const code = query.get("code");
+        if (code) {
+          const { data, error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            throw exchangeError;
+          }
+          if (data.session) {
+            await apply(data.session);
+          }
+          return;
+        }
+
+        const accessToken =
+          hash.get("access_token") ?? query.get("access_token");
+        const refreshToken =
+          hash.get("refresh_token") ?? query.get("refresh_token");
+
+        if (!accessToken || !refreshToken) return;
+
+        const { data, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError) {
+          throw sessionError;
+        }
+        if (data.session) {
+          await apply(data.session);
+        }
+      } catch (cause) {
+        setError(
+          friendlyError(
+            cause,
+            "We couldn't complete the secure recovery link. Request a new reset email and try again.",
+          ),
+        );
+      }
+    },
+    [apply, supabase],
+  );
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => apply(data.session));
+    const { data } = supabase.auth.onAuthStateChange(
+      (_event, next) => void apply(next),
+    );
+    const appState =
+      Platform.OS === "web"
+        ? null
+        : AppState.addEventListener("change", (state) => {
+            if (state === "active") {
+              supabase.auth.startAutoRefresh();
+              void apply(sessionRef.current);
+            } else supabase.auth.stopAutoRefresh();
+          });
+    const deepLink =
+      Platform.OS === "web"
+        ? null
+        : Linking.addEventListener("url", ({ url }) => {
+            void handleNativeAuthUrl(url);
+          });
+
+    if (Platform.OS !== "web") {
+      void Linking.getInitialURL().then((url) => handleNativeAuthUrl(url));
+    }
+
+    return () => {
+      data.subscription.unsubscribe();
+      appState?.remove();
+      deepLink?.remove();
+    };
+  }, [apply, handleNativeAuthUrl, supabase]);
+
+  const value = useMemo<SessionValue>(
+    () => ({
+      api,
+      context,
+      error,
+      session,
+      status,
+      supabase,
+      clearAuthError: () => setError(null),
+      refresh: async () => {
+        const current = sessionRef.current;
+        if (!current) {
+          await apply(null);
+          return;
+        }
+
+        // A query retry alone reuses an expired access token. Force Supabase
+        // to exchange the stored refresh token first, then rebuild role context.
+        const { data, error: refreshError } = await supabase.auth.refreshSession({
+          refresh_token: current.refresh_token,
+        });
+        if (refreshError || !data.session) {
+          const message = (refreshError?.message ?? "").toLowerCase();
+          const statusCode = Number(refreshError?.status ?? 0);
+          const sessionIsInvalid =
+            !data.session ||
+            [400, 401, 403].includes(statusCode) ||
+            /invalid refresh token|refresh token not found|session not found|refresh token has already been used/.test(message);
+
+          setError(
+            friendlyError(
+              refreshError ?? new Error("The session could not be renewed."),
+              "Your secure session could not be refreshed. Check your connection and try again.",
+            ),
+          );
+          // Only clear authentication when the auth server rejects the refresh
+          // credential itself. A temporary network failure must not sign the
+          // customer out or clear their locally saved refill information.
+          if (sessionIsInvalid) await apply(null);
+          return;
+        }
+
+        await apply(data.session);
+      },
+      signIn: async (email, password) => {
+        setError(null);
+        setStatus("loading");
+        const { data, error: authError } =
+          await supabase.auth.signInWithPassword({
+            email: email.trim().toLowerCase(),
+            password,
+          });
+
+        if (authError) {
+          setError(
+            friendlyError(
+              authError,
+              "We couldn't sign you in. Check your details and try again.",
+            ),
+          );
+          setStatus("unauthenticated");
+          return false;
+        }
+
+        if (!data.session) {
+          setError("We couldn't start your secure session. Please try again.");
+          setStatus("unauthenticated");
+          return false;
+        }
+
+        sessionRef.current = data.session;
+        setSession(data.session);
+        setStatus("authenticated");
+        void apply(data.session);
+        return true;
+      },
+      signUp: async ({ displayName, email, password, redirectTo }) => {
+        setError(null);
+
+        const { data, error: authError } = await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            data: {
+              display_name: displayName.trim(),
+              source: "skima.store.mobile",
+            },
+            ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
+          },
+        });
+
+        if (authError) {
+          throw new Error(
+            friendlyError(
+              authError,
+              "We couldn't create your account. Check your details or sign in if you already use SKIMA.",
+            ),
+          );
+        }
+
+        if (data.session) {
+          sessionRef.current = data.session;
+          setSession(data.session);
+          setStatus("authenticated");
+          void apply(data.session);
+        }
+
+        return {
+          sessionStarted: Boolean(data.session),
+          confirmationRequired: !data.session,
+        };
+      },
+      resendSignupConfirmation: async (email, redirectTo) => {
+        setError(null);
+        const { error: resendError } = await supabase.auth.resend({
+          type: "signup",
+          email: email.trim().toLowerCase(),
+          options: { emailRedirectTo: redirectTo },
+        });
+        if (resendError) {
+          throw new Error(
+            friendlyError(
+              resendError,
+              "We couldn't resend the confirmation email. Check the address and try again.",
+            ),
+          );
+        }
+      },
+      requestPasswordReset: async (email, redirectTo) => {
+        setError(null);
+
+        const { error: authError } = await supabase.auth.resetPasswordForEmail(
+          email.trim().toLowerCase(),
+          { redirectTo },
+        );
+        if (authError) {
+          throw new Error(
+            friendlyError(
+              authError,
+              "We couldn't send the reset email. Check your connection and try again.",
+            ),
+          );
+        }
+      },
+      updatePassword: async (password) => {
+        setError(null);
+
+        const { error: authError } = await supabase.auth.updateUser({ password });
+        if (authError) {
+          throw new Error(
+            friendlyError(
+              authError,
+              "We couldn't update your password. Open the newest reset email and try again.",
+            ),
+          );
+        }
+      },
+      signOut: async () => {
+        await supabase.auth.signOut();
+        await apply(null);
+      },
+    }),
+    [
+      api,
+      apply,
+      context,
+      error,
+      session,
+      status,
+      supabase,
+    ],
+  );
+
+  return <Context.Provider value={value}>{children}</Context.Provider>;
+}
+
+export function useSession() {
+  const value = useContext(Context);
+  if (!value)
+    throw new Error("useSession must be used within SessionProvider.");
+  return value;
+}
+
+function readConfig() {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const configuredGateway = process.env.EXPO_PUBLIC_API_GATEWAY_URL?.trim();
+
+  if (!url || !anonKey)
+    throw new Error(
+      "EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are required.",
+    );
+
+  return {
+    url: url.replace(/\/$/, ""),
+    anonKey,
+    gateway:
+      configuredGateway ||
+      `${url.replace(/\/$/, "")}/functions/v1/api-gateway`,
+  };
+}

@@ -1,0 +1,101 @@
+async function read(path: string): Promise<string> {
+  return await Deno.readTextFile(new URL("../" + path, import.meta.url));
+}
+function requireText(source: string, value: string, file: string) {
+  if (!source.includes(value)) throw new Error(file + " must contain " + value);
+}
+function rejectText(source: string, value: string, file: string) {
+  if (source.includes(value)) throw new Error(file + " must not contain " + value);
+}
+
+Deno.test("Store is a standalone Expo app with a separate native identity and configurable origin", async () => {
+  const [manifest, config, docs] = await Promise.all([
+    read("apps/store-mobile/package.json"), read("apps/store-mobile/app.config.ts"), read("apps/store-mobile/README.md"),
+  ]);
+  requireText(manifest, "@skima/store-mobile", "Store package manifest");
+  requireText(config, 'slug: "skima-store"', "Store Expo config");
+  requireText(config, 'scheme: "skima-store"', "Store Expo config");
+  requireText(config, "com.skima.store", "Store Expo config");
+  requireText(config, "EXPO_PUBLIC_STORE_EAS_PROJECT_ID", "Store Expo config");
+  requireText(docs, "EXPO_PUBLIC_SKIMA_STORE_BASE_URL", "Store deployment documentation");
+  rejectText(config, "store.skima.online", "Store Expo config must not hard-code its production hostname");
+});
+
+Deno.test("Store uses the existing SKIMA customer authentication identity", async () => {
+  const session = await read("apps/store-mobile/src/session/SessionProvider.tsx");
+  requireText(session, "EXPO_PUBLIC_SUPABASE_URL", "Store session provider");
+  requireText(session, "EXPO_PUBLIC_SUPABASE_ANON_KEY", "Store session provider");
+  requireText(session, "skima-store-expo", "Store API client identity");
+  requireText(session, "skima.store.mobile", "Store signup source");
+  rejectText(session, "stopDriverTracking", "Store session provider");
+});
+
+Deno.test("Store reads canonical catalogue, pricing, stock and media", async () => {
+  const api = await read("apps/store-mobile/src/api/store.ts");
+  const shop = await read("apps/store-mobile/src/screens/StoreShopScreen.tsx");
+  for (const route of ["/runtime/catalog/categories", "/runtime/catalog/items", "/runtime/catalog/variants", "/runtime/catalog/prices", "/runtime/catalog/availability", "/runtime/catalog/media"]) {
+    requireText(api, route, "Store catalogue API");
+  }
+  requireText(shop, 'sales_channel!=="skima_store"', "Store sales-channel filter");
+  requireText(shop, "/runtime/media/read-sessions", "Store private media access");
+});
+
+Deno.test("Store checkout uses the existing customer wallet and escrow flow", async () => {
+  const shop = await read("apps/store-mobile/src/screens/StoreShopScreen.tsx");
+  requireText(shop, "/runtime/storefront/checkout", "Store checkout");
+  requireText(shop, "customerWalletId", "Store checkout wallet linkage");
+  requireText(shop, "idempotencyKey:checkoutKey", "Store checkout idempotency");
+  requireText(shop, "SKIMA checkout escrow", "Store checkout reservation confirmation");
+  requireText(shop, "/runtime/wallets", "Store shared customer wallet");
+  requireText(shop, "/runtime/wallet-balances", "Store wallet balance");
+});
+
+Deno.test("Store funding and withdrawal reuse finance-runtime rather than a separate Store wallet", async () => {
+  const finance = await read("apps/store-mobile/src/api/finance.ts");
+  const wallet = await read("apps/store-mobile/src/screens/StoreWalletScreens.tsx");
+  requireText(finance, "/functions/v1/finance-runtime", "Store finance client");
+  for (const route of ["/deposits/preview", "/deposits", "/beneficiaries", "/withdrawals/preview", "/withdrawals"]) {
+    requireText(wallet, route, "Store wallet");
+  }
+  requireText(wallet, 'target_wallet_type:"customer"', "Store shared wallet funding");
+  rejectText(wallet, 'target_wallet_type:"store"', "Store wallet must not create another balance");
+});
+
+Deno.test("Store has order history and canonical receipt confirmation", async () => {
+  const orders = await read("apps/store-mobile/src/screens/StoreOrdersScreen.tsx");
+  requireText(orders, "/runtime/storefront/orders", "Store order history");
+  requireText(orders, "/runtime/storefront/orders/confirm-receipt", "Store receipt confirmation");
+  requireText(orders, "fulfillment_method", "Store order fulfilment details");
+});
+
+Deno.test("Store account, notifications and navigation are independent of Bills routing", async () => {
+  const app = await read("apps/store-mobile/src/screens/StoreApp.tsx");
+  const notifications = await read("apps/store-mobile/src/screens/StoreNotificationsScreen.tsx");
+  const navigation = await read("apps/store-mobile/src/navigation/storeNavigation.ts");
+  requireText(app, "StoreShopScreen", "Store app navigation");
+  requireText(app, "StoreOrdersScreen", "Store app navigation");
+  requireText(app, "StoreWalletScreen", "Store app navigation");
+  requireText(app, "StoreAccountScreen", "Store app navigation");
+  requireText(notifications, "read_notification_center", "Store in-app inbox");
+  requireText(notifications, "mark_all_notifications_read", "Store in-app inbox");
+  requireText(navigation, '"/orders": "orders"', "Store deep-link routing");
+});
+
+Deno.test("Existing Admin, Refill and Logistics Store experiences retain the canonical storefront", async () => {
+  const admin = await read("apps/admin/src/features/store/StoreWorkspace.tsx");
+  const lpg = await read("apps/lpg-mobile/app/(customer)/store.tsx");
+  const logistics = await read("apps/logistics-mobile/src/screens/LogisticsStoreScreen.tsx");
+  requireText(admin, "/runtime/storefront/products", "Store Admin product management");
+  requireText(admin, "/runtime/storefront/orders/refund", "Store Admin refund controls");
+  requireText(lpg, "/runtime/storefront/checkout", "Existing Refill Store checkout");
+  requireText(logistics, "/runtime/storefront/checkout", "Existing Logistics Store checkout");
+});
+
+Deno.test("Store reuses the two existing production schema migrations", async () => {
+  const [foundation, delivery] = await Promise.all([
+    read("supabase/migrations/20261102112220_skima_store_foundation.sql"),
+    read("supabase/migrations/20261103131401_skima_store_checkout_delivery.sql"),
+  ]);
+  requireText(foundation, "catalog_items", "Store foundation migration");
+  requireText(delivery, "storefront_settings", "Store checkout and delivery migration");
+});
