@@ -8,6 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { useSession } from "../session/SessionProvider";
+import { BillsBrandMark } from "../ui/BrandMark";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode }) {
@@ -76,7 +77,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
         <ScrollView contentContainerStyle={styles.outer} keyboardShouldPersistTaps="handled">
           <View style={styles.shell}>
             <View style={styles.brandRow}>
-              <View style={[styles.brandMark,{backgroundColor:palette.surface,borderColor:palette.border}]}><Text style={[styles.markText,{color:palette.brand}]}>S</Text></View>
+              <BillsBrandMark size={48} />
               <View><Text style={[styles.brand,{color:palette.ink}]}>SKIMA</Text><Text style={[styles.brandSub,{color:palette.muted}]}>BILLS</Text></View>
             </View>
             <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
@@ -125,7 +126,6 @@ function Field(props: {label:string;value:string;onChangeText:(value:string)=>vo
 const styles=StyleSheet.create({
  root:{flex:1},fill:{flex:1},outer:{flexGrow:1,alignItems:"center",justifyContent:"center",padding:20,paddingVertical:32},
  shell:{width:"100%",maxWidth:460,gap:20},brandRow:{flexDirection:"row",alignItems:"center",gap:10},
- brandMark:{width:44,height:44,borderWidth:1,borderRadius:15,alignItems:"center",justifyContent:"center"},markText:{fontSize:24,fontWeight:"900"},
  brand:{fontSize:15,fontWeight:"900",letterSpacing:1},brandSub:{fontSize:9,fontWeight:"900",letterSpacing:1.5},
  card:{borderWidth:1,borderRadius:30,padding:24,gap:15,overflow:"hidden"},accent:{height:3,width:44,borderRadius:4,marginBottom:5},
  eyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1.1},title:{fontSize:29,fontWeight:"900",letterSpacing:-.8},subtitle:{fontSize:13,lineHeight:19},
