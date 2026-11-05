@@ -134,6 +134,7 @@ Deno.test("Store guided tour maps first-run steps to real Store controls", async
   ]);
   requireText(providers, "<StoreGuideProvider>", "Store guide provider");
   requireText(guide, "measureInWindow", "Store spotlight measurement");
+  requireText(guide, 'position: "absolute"', "Store full-screen tour overlay style");
   for (const key of [
     "store.shop.hero", "store.shop.categories", "store.shop.basket",
     "store.orders.history", "store.wallet.balance", "store.account.profile",
