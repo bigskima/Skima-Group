@@ -246,6 +246,7 @@ const refillScreenLabels: Readonly<Record<string, string>> = {
   "/refill": "Refill overview",
   "/refill/orders": "Orders & dispatch",
   "/refill/stations": "Stations & refill partners",
+  "/refill/drivers": "Drivers & fleet readiness",
   "/refill/inventory": "Station inventory",
   "/refill/coverage": "Service coverage",
   "/refill/fuel": "Fuel products",
@@ -559,6 +560,7 @@ function buildRefillWorkspaceNavigation(items: readonly NavigationItem[]): reado
   const sections = [
     ["operations", "Orders & dispatch", "/refill/orders"],
     ["stations", "Stations & refill partners", "/refill/stations"],
+    ["drivers", "Drivers & fleet readiness", "/refill/drivers"],
     ["inventory", "Station inventory", "/refill/inventory"],
     ["coverage", "Service coverage", "/refill/coverage"],
     ["fuel", "Fuel products", "/refill/fuel"],
