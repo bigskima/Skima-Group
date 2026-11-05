@@ -48,7 +48,7 @@ Deno.test("Bills funding and withdrawal go through shared finance runtime wallet
   requireText(wallet, "ensure_wallet_account", "Bills shared wallet funding");
   requireText(wallet, "idempotencyKey:depositKey", "Bills stable deposit idempotency");
   requireText(wallet, "idempotencyKey:withdrawalKey", "Bills stable withdrawal idempotency");
-  requireText(wallet, "accountNumberValid=/^\d{10}$/.test", "Bills 10-digit NUBAN validation");
+  requireText(wallet, "accountNumberValid=/^\\d{10}$/.test", "Bills 10-digit NUBAN validation");
   requireText(wallet, "verifiedBeneficiaries", "Bills wallet-scoped verified withdrawal beneficiary");
   requireText(wallet, 'target_wallet_type:"customer"', "Bills shared wallet funding");
 });
