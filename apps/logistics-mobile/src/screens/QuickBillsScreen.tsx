@@ -2,24 +2,28 @@ import { Linking, Pressable, Text, View } from "react-native";
 import { ArrowRight, Receipt } from "lucide-react-native";
 import { useLogisticsQuery, asString } from "../api/logistics";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { Page, Card, SectionTitle, ActionButton, State } from "./BillsUI";
+import { Screen } from "../ui/Screen";
+import { StatePanel } from "../ui/StatePanel";
+import { AppButton } from "../ui/AppButton";
 
-export function BillsQuickEntry(){
+export function QuickBillsScreen(){
  const {palette}=useAppTheme();
  const catalog=useLogisticsQuery(["utility","catalog"],"/runtime/utility-billing/catalog",true,60000);
  const groups=[...new Map((catalog.data??[]).filter(row=>row.available===true).map(row=>[asString(row,"category_key")??"other",asString(row,"category_name")??"More services"])).entries()];
- const open=async()=>{
-  try{await Linking.openURL("skima-bills://");return;}catch{}
-  const base=process.env.EXPO_PUBLIC_SKIMA_BILLS_BASE_URL?.trim();
-  if(base){try{await Linking.openURL(base);return;}catch{}}
- };
- return <Page>
-  <Card style={{backgroundColor:palette.brand,borderColor:palette.brand,padding:17}}>
-   <Receipt color="#fff" size={24}/><Text style={{fontSize:22,color:"#fff",fontWeight:"900"}}>Pay bills with SKIMA</Text><Text style={{fontSize:11,color:"rgba(255,255,255,.86)",lineHeight:17}}>A dedicated Bills experience for payments, saved billers, shared wallet, receipts and Store purchases.</Text>
-   <ActionButton label="Open SKIMA Bills" onPress={()=>void open()}/>
-  </Card>
-  <SectionTitle title="Services available" caption="Live products configured by SKIMA Admin."/>
-  {catalog.isPending?<State title="Loading services" body="Checking the active utility catalogue."/>:catalog.error?<State title="Services unavailable" body="Try again to reload the SKIMA service catalogue." retry={()=>void catalog.refetch()}/>:groups.length?<View style={{gap:8}}>{groups.map(([key,name])=><Card key={key} style={{flexDirection:"row",alignItems:"center",gap:9}}><View style={{width:35,height:35,borderRadius:12,backgroundColor:palette.brandSoft,alignItems:"center",justifyContent:"center"}}><Receipt color={palette.brand} size={17}/></View><Text style={{flex:1,fontSize:11,fontWeight:"900",color:palette.ink}}>{name}</Text><ArrowRight color={palette.muted} size={16}/></Card>)}</View>:<State title="No utility services enabled" body="Services will appear once activated in SKIMA Admin."/>}
-  <Text style={{fontSize:10,color:palette.muted,lineHeight:15}}>Bills opened from Logistics continues to use the same SKIMA customer account and wallet. Your delivery workspace remains unchanged.</Text>
- </Page>;
+ const open=async()=>{try{await Linking.openURL("skima-bills://");return;}catch{}const base=process.env.EXPO_PUBLIC_SKIMA_BILLS_BASE_URL?.trim();if(base){try{await Linking.openURL(base);return;}catch{}}};
+ return <Screen title="Bills" eyebrow="Everyday services" subtitle="Reach the dedicated SKIMA Bills application and keep all payments on your shared customer account.">
+  <View style={{padding:17,borderRadius:20,backgroundColor:palette.brand,gap:9}}>
+   <Receipt color="#fff" size={24}/>
+   <Text style={{fontSize:22,color:"#fff",fontWeight:"900"}}>Pay bills with SKIMA</Text>
+   <Text style={{fontSize:11,color:"rgba(255,255,255,.86)",lineHeight:17}}>A dedicated Bills experience for service discovery, account validation, payments, saved billers, receipts and Store checkout.</Text>
+   <AppButton label="Open SKIMA Bills" onPress={()=>void open()}/>
+  </View>
+  <View style={{gap:8}}>
+   <Text style={{fontSize:14,fontWeight:"900",color:palette.ink}}>Services available</Text>
+   <Text style={{fontSize:10,color:palette.muted}}>Live services configured by SKIMA Admin.</Text>
+   {catalog.isPending?<StatePanel title="Loading services" description="Checking the active utility catalogue."/>:catalog.error?<StatePanel title="Services unavailable" description="Try again to reload the SKIMA service catalogue." retry={()=>void catalog.refetch()}/>:groups.length?groups.map(([key,name])=><View key={key} style={{minHeight:49,padding:11,borderRadius:14,backgroundColor:palette.surface,borderColor:palette.border,borderWidth:StyleSheet.hairlineWidth,flexDirection:"row",alignItems:"center",gap:9}}><Receipt color={palette.brand} size={16}/><Text style={{flex:1,fontSize:11,fontWeight:"900",color:palette.ink}}>{name}</Text><ArrowRight color={palette.muted} size={15}/></View>):<StatePanel title="No utility services enabled" description="Services will appear once activated in SKIMA Admin."/>}
+  </View>
+  <Text style={{fontSize:10,color:palette.muted,lineHeight:15}}>Your customer sign-in and SKIMA Wallet remain shared. Opening Bills does not change your Logistics workspace or active bookings.</Text>
+ </Screen>;
 }
+import { StyleSheet } from "react-native";
