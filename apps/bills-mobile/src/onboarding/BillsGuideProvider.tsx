@@ -93,7 +93,7 @@ export function BillsGuideProvider({ children }: PropsWithChildren) {
   const userId = session.session?.user.id ?? null;
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
-  const [currentPage, setCurrentPageState] = useState<BillsPage>("shop");
+  const [currentPage, setCurrentPageState] = useState<BillsPage>("bills");
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
   const [targetUnavailable, setTargetUnavailable] = useState(false);
   const [targetsRevision, setTargetsRevision] = useState(0);
