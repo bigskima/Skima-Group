@@ -7,6 +7,7 @@ import { useSession } from "../session/SessionProvider";
 import { useStoreRecords, asNumber, asString, makeIdempotencyKey, money } from "../api/store";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./StoreUI";
+import { GuideTarget } from "../onboarding/StoreGuideProvider";
 
 const ActionSchema = z.union([z.string(), z.record(z.string(), z.unknown()), z.null()]);
 const statusLabel = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -34,8 +35,8 @@ export function StoreOrdersScreen() {
   const refresh = () => void orders.refetch();
 
   return (
-    <Page refreshControl={<RefreshControl refreshing={orders.isRefetching} onRefresh={refresh} tintColor={palette.brand} />}>
-      <SectionTitle title="Your orders" caption="Follow each Store purchase from checkout through delivery and receipt." />
+    <Page guidePage="orders" refreshControl={<RefreshControl refreshing={orders.isRefetching} onRefresh={refresh} tintColor={palette.brand} />}>
+      <GuideTarget page="orders" targetKey="store.orders.history"><SectionTitle title="Your orders" caption="Follow each Store purchase from checkout through delivery and receipt." /></GuideTarget>
       {confirmReceipt.isError ? <Notice tone="error" text={confirmReceipt.error instanceof Error ? confirmReceipt.error.message : "Receipt confirmation could not be completed. Try again."} /> : null}
       {confirmReceipt.isSuccess ? <Notice tone="success" text="Your receipt has been confirmed and the order settlement has been updated." /> : null}
       {orders.isPending ? <ActivityIndicator color={palette.brand} /> :
