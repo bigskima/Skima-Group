@@ -48,7 +48,7 @@ const navigationAnyOfPermissions: Readonly<Record<string, readonly string[]>> = 
   refill: [
     "lpg.orders.manage", "lpg.dispatch.execute", "lpg.cylinders.manage", "lpg.safety.manage", "lpg.config.manage",
     "platform.partner_price.manage", "platform.inventory.manage", "platform.coverage.read", "platform.coverage.manage",
-    "platform.fuel.read", "platform.financial_policy.read",
+    "platform.fuel.read", "platform.financial_policy.read", "platform.drivers.read", "platform.drivers.manage", "platform.dispatch.manage",
   ],
   bills: ["platform.billing.read", "platform.billing.manage"],
   logistics: ["logistics.marketplace.read", "logistics.marketplace.manage"],
@@ -63,6 +63,7 @@ const navigationAnyOfPermissions: Readonly<Record<string, readonly string[]>> = 
     "lpg.cylinders.manage",
     "lpg.safety.manage",
     "lpg.config.manage",
+    "platform.dispatch.manage",
   ],
   coverage: [
     "platform.coverage.read",
