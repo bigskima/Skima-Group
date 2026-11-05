@@ -45,7 +45,7 @@ const STEPS: TourStep[] = [
     page: "shop",
     targetKey: "store.shop.basket",
     title: "Review and place an order",
-    body: "Adjust quantities, choose delivery or pickup, confirm the delivery address when needed, and pay through your existing SKIMA customer wallet.",
+    body: "Adjust quantities, choose delivery or pickup, confirm the delivery address when needed, and complete checkout.",
   },
   {
     page: "orders",
@@ -57,7 +57,7 @@ const STEPS: TourStep[] = [
     page: "wallet",
     targetKey: "store.wallet.balance",
     title: "Use your SKIMA wallet",
-    body: "View available and reserved funds, add money, and withdraw through the same customer wallet used by your other SKIMA services.",
+    body: "View available and reserved funds, add money, and withdraw to a verified bank account when supported.",
   },
   {
     page: "account",
