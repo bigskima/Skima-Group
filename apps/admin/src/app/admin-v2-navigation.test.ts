@@ -182,7 +182,7 @@ describe("SKIMA Admin V2 navigation", () => {
     ]);
   });
 
-  it("splits Services into utility billing, catalog and availability screens", () => {
+  it("keeps global Services focused on the shared catalogue and availability controls", () => {
     const items: NavigationItem[] = [
       { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
       { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
@@ -190,7 +190,6 @@ describe("SKIMA Admin V2 navigation", () => {
 
     expect(getAdminWorkspaceNavigation("services", items).map((item) => item.href)).toEqual([
       "/services",
-      "/services/utility-billing",
       "/services/catalog",
       "/services/availability",
     ]);
