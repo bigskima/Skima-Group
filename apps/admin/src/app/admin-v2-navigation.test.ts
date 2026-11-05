@@ -53,6 +53,8 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "finance", label: "Balances", href: "/finance", icon: "finance" },
       { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
       { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
+      { key: "refill", label: "Refill", href: "/refill", icon: "refill" },
+      { key: "bills", label: "Bills", href: "/bills", icon: "bills" },
       { key: "store", label: "Store", href: "/store", icon: "store" },
       { key: "logistics", label: "Logistics", href: "/logistics", icon: "logistics" },
       { key: "ai", label: "SKIMA Intelligence", href: "/ai", icon: "ai" },
@@ -72,6 +74,8 @@ describe("SKIMA Admin V2 navigation", () => {
       "operations",
       "money",
       "services",
+      "refill",
+      "bills",
       "store",
       "logistics",
       "intelligence",
@@ -82,6 +86,8 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(categories.find((item) => item.key === "operations")?.href).toBe("/operations");
     expect(categories.find((item) => item.key === "money")?.href).toBe("/money");
     expect(categories.find((item) => item.key === "services")?.href).toBe("/services");
+    expect(categories.find((item) => item.key === "refill")?.href).toBe("/refill");
+    expect(categories.find((item) => item.key === "bills")?.href).toBe("/bills");
     expect(categories.find((item) => item.key === "store")?.href).toBe("/store");
     expect(categories.find((item) => item.key === "intelligence")?.href).toBe("/intelligence");
     expect(categories.find((item) => item.key === "experience")?.href).toBe("/experience");
@@ -109,6 +115,8 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/operations")).toBe("/operations");
     expect(resolveAdminPath("/money")).toBe("/money");
     expect(resolveAdminPath("/services")).toBe("/services");
+    expect(resolveAdminPath("/refill")).toBe("/refill");
+    expect(resolveAdminPath("/bills")).toBe("/bills");
     expect(resolveAdminPath("/store")).toBe("/store");
     expect(resolveAdminPath("/logistics")).toBe("/logistics");
     expect(resolveAdminPath("/intelligence")).toBe("/intelligence");
@@ -176,7 +184,7 @@ describe("SKIMA Admin V2 navigation", () => {
     ]);
   });
 
-  it("splits Services into utility billing, catalog and availability screens", () => {
+  it("keeps global Services focused on the shared catalogue and availability controls", () => {
     const items: NavigationItem[] = [
       { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
       { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
@@ -184,12 +192,56 @@ describe("SKIMA Admin V2 navigation", () => {
 
     expect(getAdminWorkspaceNavigation("services", items).map((item) => item.href)).toEqual([
       "/services",
-      "/services/utility-billing",
       "/services/catalog",
       "/services/availability",
     ]);
   });
 
+
+  it("groups existing LPG and fuel controls in a dedicated Refill workspace", () => {
+    const items: NavigationItem[] = [
+      { key: "refill", label: "Refill", href: "/refill", icon: "refill" },
+      { key: "operations", label: "Operations", href: "/operations", icon: "operations" },
+      { key: "stations", label: "Stations", href: "/stations", icon: "stations" },
+      { key: "drivers", label: "Drivers", href: "/drivers", icon: "drivers" },
+      { key: "inventory", label: "Inventory", href: "/station-inventory", icon: "inventory" },
+      { key: "coverage", label: "Coverage", href: "/coverage", icon: "coverage" },
+      { key: "fuel", label: "Fuel", href: "/services/fuel", icon: "fuel" },
+      { key: "delivery-pricing", label: "Delivery pricing", href: "/delivery-pricing", icon: "deliveryPricing" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceForRoute("/refill/stations").key).toBe("refill");
+    expect(getAdminWorkspaceNavigation("refill", items).map((item) => item.href)).toEqual([
+      "/refill",
+      "/refill/orders",
+      "/refill/stations",
+      "/refill/drivers",
+      "/refill/inventory",
+      "/refill/coverage",
+      "/refill/fuel",
+      "/refill/fulfillment",
+    ]);
+  });
+
+  it("gives Bills its own provider, catalogue, routing and operations navigation", () => {
+    const items: NavigationItem[] = [
+      { key: "bills", label: "Bills", href: "/bills", icon: "bills" },
+      { key: "billing", label: "Utility billing", href: "/utility-billing", icon: "billing" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceForRoute("/bills/providers").key).toBe("bills");
+    expect(getAdminWorkspaceNavigation("bills", items).map((item) => item.href)).toEqual([
+      "/bills",
+      "/bills/providers",
+      "/bills/catalogue",
+      "/bills/routing",
+      "/bills/economics",
+      "/bills/campaigns",
+      "/bills/operations",
+      "/bills/live-test",
+    ]);
+    expect(getAdminWorkspaceNavigation("services", items)).toEqual([]);
+  });
 
   it("keeps Store in its own focused admin workspace", () => {
     const items: NavigationItem[] = [

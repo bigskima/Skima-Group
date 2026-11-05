@@ -8,6 +8,8 @@ import { PlatformWorkspaceRouter } from "../features/platform/PlatformWorkspaceR
 import { ServicesWorkspaceRouter } from "../features/services/ServicesWorkspaceRouter";
 import { StoreWorkspace } from "../features/store/StoreWorkspace";
 import { LogisticsWorkspace } from "../features/logistics/LogisticsWorkspace";
+import { RefillWorkspaceRouter } from "../features/refill/RefillWorkspaceRouter";
+import { UtilityBillingWorkspaceV2 } from "../features/services/UtilityBillingWorkspaceV2";
 import { toLegacyAdminWorkspacePath } from "./admin-v2-navigation";
 
 export function AdminV2WorkspaceRouter(props: {
@@ -24,6 +26,14 @@ export function AdminV2WorkspaceRouter(props: {
 
   if (props.route === "/operations" || props.route.startsWith("/operations/")) {
     return <OperationsWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === "/refill" || props.route.startsWith("/refill/")) {
+    return <RefillWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === "/bills" || props.route.startsWith("/bills/")) {
+    return <UtilityBillingWorkspaceV2 route={props.route} basePath="/bills" onNavigate={props.onNavigate} />;
   }
 
   if (props.route === "/services" || props.route.startsWith("/services/")) {
