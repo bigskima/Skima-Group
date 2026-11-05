@@ -12,7 +12,7 @@ import {
   Zap,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 
 import { domainQueries } from "../api/domains";
@@ -264,12 +264,20 @@ export function UtilityBillsScreen() {
       title="Pay bills"
       subtitle="Choose a service, select what you want to pay for, then confirm the details."
       action={
-        <AppButton
-          label="Back"
-          size="sm"
-          variant="ghost"
-          onPress={() => router.back()}
-        />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+          <AppButton
+            label="Bills app"
+            size="sm"
+            variant="secondary"
+            onPress={() => void openDedicatedBillsApp()}
+          />
+          <AppButton
+            label="Back"
+            size="sm"
+            variant="ghost"
+            onPress={() => router.back()}
+          />
+        </View>
       }
     >
       <View
@@ -766,6 +774,16 @@ export function UtilityBillsScreen() {
       </AppModal>
     </Screen>
   );
+}
+
+async function openDedicatedBillsApp() {
+  try {
+    await Linking.openURL("skima-bills://");
+    return;
+  } catch {
+    const baseUrl = process.env.EXPO_PUBLIC_SKIMA_BILLS_BASE_URL?.trim();
+    if (baseUrl) await Linking.openURL(baseUrl);
+  }
 }
 
 function groupCatalog(records: readonly PlatformRecord[]): CatalogGroup[] {

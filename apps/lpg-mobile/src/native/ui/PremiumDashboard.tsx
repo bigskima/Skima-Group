@@ -306,6 +306,12 @@ export function CustomerDashboard() {
               href="/(customer)/wallet"
             />
             <UtilityLink
+              icon={Zap}
+              label="Pay bills"
+              value="Airtime, data, electricity & TV"
+              href="/(customer)/bills"
+            />
+            <UtilityLink
               icon={Building2}
               label="Nearby stations"
               value={`${stations.data?.length ?? 0} available`}
