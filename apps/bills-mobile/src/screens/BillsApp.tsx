@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Bell, BookOpen, History, ShoppingBag, UserRound, WalletCards, ArrowLeft } from "lucide-react-native";
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -12,6 +12,7 @@ import { BillsAccountScreen } from "./BillsAccountScreen";
 import { BillsNotificationsScreen } from "./BillsNotificationsScreen";
 import { BillsBeneficiariesScreen } from "./BillsBeneficiariesScreen";
 import { BillsReceiptScreen } from "./BillsReceiptScreen";
+import { useBillsGuide } from "../onboarding/BillsGuideProvider";
 
 type Page = "bills" | "activity" | "wallet" | "store" | "account" | "top-up" | "withdraw" | "notifications" | "saved" | "receipt";
 const tabs = [
@@ -24,19 +25,25 @@ const tabs = [
 
 export function BillsApp() {
   const { palette } = useAppTheme();
+  const guide = useBillsGuide();
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
   const [page, setPage] = useState<Page>("bills");
   const [receiptId, setReceiptId] = useState<string | null>(null);
 
+  const open = useCallback((next: Page) => {
+    setPage(next);
+    guide.setCurrentPage(next);
+  }, [guide.setCurrentPage]);
+
   useEffect(() => subscribeBillsNavigation((event) => {
-    setPage(event.page);
+    open(event.page);
     setReceiptId(event.receiptId ?? null);
-  }), []);
+  }), [open]);
 
   const onReceipt = (id: string) => {
     setReceiptId(id);
-    setPage("receipt");
+    open("receipt");
   };
   const isTab = tabs.some((tab) => tab.key === page);
   const title = page === "bills" ? "Pay bills"
@@ -48,7 +55,6 @@ export function BillsApp() {
     : page === "withdraw" ? "Withdraw funds"
     : page === "notifications" ? "Notifications"
     : page === "saved" ? "Saved billers" : "Receipt";
-  const open = (next: Page) => setPage(next);
 
   const navigationItem = (tab: typeof tabs[number], variant: "side" | "bottom") => {
     const Icon = tab.icon;
