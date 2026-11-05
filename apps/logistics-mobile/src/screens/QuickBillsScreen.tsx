@@ -1,12 +1,12 @@
 import { Linking, Pressable, Text, View } from "react-native";
 import { ArrowRight, Receipt } from "lucide-react-native";
-import { useBillsQuery, BillArraySchema, asString } from "../api/bills";
+import { useLogisticsQuery, asString } from "../api/logistics";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State } from "./BillsUI";
 
 export function BillsQuickEntry(){
  const {palette}=useAppTheme();
- const catalog=useBillsQuery(["utility","catalog"],"/runtime/utility-billing/catalog",BillArraySchema,true,60000);
+ const catalog=useLogisticsQuery(["utility","catalog"],"/runtime/utility-billing/catalog",true,60000);
  const groups=[...new Map((catalog.data??[]).filter(row=>row.available===true).map(row=>[asString(row,"category_key")??"other",asString(row,"category_name")??"More services"])).entries()];
  const open=async()=>{
   try{await Linking.openURL("skima-bills://");return;}catch{}
