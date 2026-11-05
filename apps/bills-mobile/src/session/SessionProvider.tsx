@@ -197,10 +197,22 @@ export function SessionProvider({ children }: PropsWithChildren) {
   );
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => apply(data.session));
-    const { data } = supabase.auth.onAuthStateChange(
-      (_event, next) => void apply(next),
-    );
+    // Subscribe before reading the persisted session. A sign-in event that
+    // arrives while getSession() is pending must win over that stale snapshot.
+    let authEventVersion = 0;
+    let mounted = true;
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      authEventVersion += 1;
+      void apply(next);
+    });
+    const initialAuthEventVersion = authEventVersion;
+    void supabase.auth.getSession().then(({ data: initial }) => {
+      if (mounted && authEventVersion === initialAuthEventVersion) {
+        void apply(initial.session);
+      }
+    }).catch((cause) => {
+      if (mounted && __DEV__) console.info("SKIMA initial session read unavailable", cause);
+    });
     const appState =
       Platform.OS === "web"
         ? null
@@ -222,6 +234,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
 
     return () => {
+      mounted = false;
       data.subscription.unsubscribe();
       appState?.remove();
       deepLink?.remove();
