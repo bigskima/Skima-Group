@@ -27,6 +27,8 @@ export const foundationNavigation: readonly NavigationItem[] = [
   { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies", requiredPermissions: ["platform.policy.read"] },
   { key: "branding", label: "App Branding", href: "/branding", icon: "branding", requiredPermissions: ["platform.configuration.read"] },
   { key: "catalog", label: "Services", href: "/catalog", icon: "catalog", requiredPermissions: ["platform.configuration.read"] },
+  { key: "refill", label: "Refill", href: "/refill", icon: "refill" },
+  { key: "bills", label: "Bills", href: "/bills", icon: "bills" },
   { key: "store", label: "Store", href: "/store", icon: "store", requiredPermissions: ["platform.store.manage"] },
   { key: "logistics", label: "Logistics", href: "/logistics", icon: "logistics" },
   { key: "fuel", label: "Fuel administration", href: "/services/fuel", icon: "inventory", requiredPermissions: ["platform.fuel.read"] },
@@ -43,6 +45,12 @@ export interface AdminNavigationPermissionRule {
 }
 
 const navigationAnyOfPermissions: Readonly<Record<string, readonly string[]>> = {
+  refill: [
+    "lpg.orders.manage", "lpg.dispatch.execute", "lpg.cylinders.manage", "lpg.safety.manage", "lpg.config.manage",
+    "platform.partner_price.manage", "platform.inventory.manage", "platform.coverage.read", "platform.coverage.manage",
+    "platform.fuel.read", "platform.financial_policy.read",
+  ],
+  bills: ["platform.billing.read", "platform.billing.manage"],
   logistics: ["logistics.marketplace.read", "logistics.marketplace.manage"],
   verification: [
     "platform.verification.read",
