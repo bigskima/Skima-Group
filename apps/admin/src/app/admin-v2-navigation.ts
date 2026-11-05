@@ -6,6 +6,8 @@ export type AdminWorkspaceKey =
   | "operations"
   | "money"
   | "services"
+  | "refill"
+  | "bills"
   | "store"
   | "logistics"
   | "intelligence"
@@ -41,6 +43,8 @@ const screenRoutes: Readonly<Record<string, string>> = {
   "delivery-pricing": "/money/pricing/delivery",
   "driver-pricing": "/money/pricing/drivers",
   billing: "/services/utility-billing",
+  refill: "/refill",
+  bills: "/bills",
   catalog: "/services/catalog",
   store: "/store",
   logistics: "/logistics",
@@ -95,7 +99,23 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     description: "Utility billing, service catalogue and service availability.",
     basePath: "/services",
     icon: "services",
-    screenKeys: ["billing", "catalog", "fuel"],
+    screenKeys: ["catalog"],
+  },
+  {
+    key: "refill",
+    label: "Refill",
+    description: "Manage SKIMA LPG refill operations, stations, stock, service coverage and supported fuel products from one dedicated workspace.",
+    basePath: "/refill",
+    icon: "refill",
+    screenKeys: ["refill"],
+  },
+  {
+    key: "bills",
+    label: "Bills",
+    description: "Manage bill-payment providers, product catalogue, routing, pricing, campaigns and transaction operations.",
+    basePath: "/bills",
+    icon: "bills",
+    screenKeys: ["bills"],
   },
   {
     key: "store",
@@ -222,6 +242,28 @@ const servicesScreenLabels: Readonly<Record<string, string>> = {
   "/services/availability": "Service availability",
 };
 
+const refillScreenLabels: Readonly<Record<string, string>> = {
+  "/refill": "Refill overview",
+  "/refill/orders": "Orders & dispatch",
+  "/refill/stations": "Stations & refill partners",
+  "/refill/inventory": "Station inventory",
+  "/refill/coverage": "Service coverage",
+  "/refill/fuel": "Fuel products",
+  "/refill/fulfillment": "SKIMA fulfillment",
+};
+
+const billsScreenLabels: Readonly<Record<string, string>> = {
+  "/bills": "Bills overview",
+  "/bills/providers": "Providers",
+  "/bills/catalogue": "Bills catalogue",
+  "/bills/routing": "Provider routing",
+  "/bills/economics": "Pricing & economics",
+  "/bills/campaigns": "Campaigns",
+  "/bills/operations": "Payment operations",
+  "/bills/live-test": "Live provider test",
+  "/bills/advanced": "Advanced utility setup",
+};
+
 const storeScreenLabels: Readonly<Record<string, string>> = {
   "/store": "SKIMA Store",
 };
@@ -276,6 +318,8 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
       "partners",
       "operations",
       "services",
+      "refill",
+      "bills",
       "store",
       "logistics",
       "intelligence",
@@ -301,6 +345,8 @@ export function getAdminWorkspaceNavigation(
   if (workspaceKey === "partners") return buildPartnersWorkspaceNavigation(items);
   if (workspaceKey === "operations") return buildOperationsWorkspaceNavigation(items);
   if (workspaceKey === "services") return buildServicesWorkspaceNavigation(items);
+  if (workspaceKey === "refill") return buildRefillWorkspaceNavigation(items);
+  if (workspaceKey === "bills") return buildBillsWorkspaceNavigation(items);
   if (workspaceKey === "intelligence") return buildIntelligenceWorkspaceNavigation(items);
   if (workspaceKey === "experience") return buildExperienceWorkspaceNavigation(items);
   if (workspaceKey === "platform") return buildPlatformWorkspaceNavigation(items);
@@ -326,6 +372,8 @@ export function getAdminScreenLabel(route: string, items: readonly NavigationIte
   if (partnerScreenLabels[path]) return partnerScreenLabels[path];
   if (operationsScreenLabels[path]) return operationsScreenLabels[path];
   if (servicesScreenLabels[path]) return servicesScreenLabels[path];
+  if (refillScreenLabels[path]) return refillScreenLabels[path];
+  if (billsScreenLabels[path]) return billsScreenLabels[path];
   if (logisticsScreenLabels[path]) return logisticsScreenLabels[path];
   if (intelligenceScreenLabels[path]) return intelligenceScreenLabels[path];
   if (experienceScreenLabels[path]) return experienceScreenLabels[path];
@@ -351,6 +399,8 @@ export function resolveAdminPath(rawPath: string): string {
   if (
     path === "/operations" ||
     path === "/services" ||
+    path === "/refill" ||
+    path === "/bills" ||
     path === "/intelligence" ||
     path === "/experience" ||
     path === "/platform"
@@ -502,11 +552,46 @@ function buildOperationsWorkspaceNavigation(items: readonly NavigationItem[]): r
   ];
 }
 
-function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+
+function buildRefillWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const root = items.find((item) => item.key === "refill");
+  if (!root) return [];
+  const sections = [
+    ["operations", "Orders & dispatch", "/refill/orders"],
+    ["stations", "Stations & refill partners", "/refill/stations"],
+    ["inventory", "Station inventory", "/refill/inventory"],
+    ["coverage", "Service coverage", "/refill/coverage"],
+    ["fuel", "Fuel products", "/refill/fuel"],
+    ["delivery-pricing", "SKIMA fulfillment", "/refill/fulfillment"],
+  ] as const;
+  return [
+    { ...root, key: "refill-overview", label: "Overview", href: "/refill" },
+    ...sections.flatMap(([sourceKey, label, href]) => {
+      const source = items.find((item) => item.key === sourceKey);
+      return source ? [{ ...source, key: "refill-" + sourceKey, label, href }] : [];
+    }),
+  ];
+}
+
+function buildBillsWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const root = items.find((item) => item.key === "bills");
   const billing = items.find((item) => item.key === "billing");
+  if (!root || !billing) return [];
+  return [
+    { ...root, key: "bills-overview", label: "Overview", href: "/bills" },
+    { ...billing, key: "bills-providers", label: "Providers", href: "/bills/providers" },
+    { ...billing, key: "bills-catalogue", label: "Catalogue", href: "/bills/catalogue" },
+    { ...billing, key: "bills-routing", label: "Routing", href: "/bills/routing" },
+    { ...billing, key: "bills-economics", label: "Economics", href: "/bills/economics" },
+    { ...billing, key: "bills-campaigns", label: "Campaigns", href: "/bills/campaigns" },
+    { ...billing, key: "bills-operations", label: "Operations", href: "/bills/operations" },
+    { ...billing, key: "bills-live-test", label: "Live test", href: "/bills/live-test" },
+  ];
+}
+
+function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
   const catalog = items.find((item) => item.key === "catalog");
-  const fuel = items.find((item) => item.key === "fuel");
-  const first = billing ?? catalog ?? fuel;
+  const first = catalog;
 
   if (!first) return [];
 
@@ -520,10 +605,6 @@ function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): rea
     },
   ];
 
-  if (billing) {
-    navigation.push({ ...billing, label: "Utility billing", href: "/services/utility-billing" });
-  }
-
   if (catalog) {
     navigation.push(
       { ...catalog, label: "Service catalog", href: "/services/catalog" },
@@ -534,10 +615,6 @@ function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): rea
         href: "/services/availability",
       },
     );
-  }
-
-  if (fuel) {
-    navigation.push({ ...fuel, label: "Fuel administration", href: "/services/fuel" });
   }
 
   return navigation;
