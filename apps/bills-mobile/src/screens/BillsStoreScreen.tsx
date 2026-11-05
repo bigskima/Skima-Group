@@ -13,6 +13,7 @@ type Row=Record<string,unknown>;
 type CartLine={itemId:string;variantId:string|null;name:string;variantName:string|null;quantity:number;unitAmount:number;currencyCode:string;stock:number|null};
 type Product={item:Row;id:string;variantId:string|null;name:string;variantName:string|null;description:string|null;amount:number;compareAtAmount:number|null;currency:string;stock:number|null;imageAssetId:string|null};
 const OrderSchema=z.union([z.string(),z.record(z.string(),z.unknown())]);
+const ActionSchema=z.union([z.string(),z.record(z.string(),z.unknown()),z.null()]);
 const MediaSchema=z.object({assetId:z.string(),contentType:z.string().nullable(),expiresInSeconds:z.number().positive(),signedUrl:z.string().url()});
 const record=(v:unknown):Row=>v&&typeof v==="object"&&!Array.isArray(v)?v as Row:{};
 const metadata=(v:Row)=>record(v.metadata);
@@ -80,7 +81,7 @@ export function BillsStoreScreen(){
   onSuccess:async(result)=>{const obj=record(result);const orderId=asString(obj,"orderId")??(typeof result==="string"?result:"");setCart([]);setNote("");setNotice(orderId?"Your order "+orderId.slice(0,8).toUpperCase()+" was received. The amount is reserved in SKIMA checkout escrow.":"Your Store order was submitted. The shared wallet and order status are being updated.");await Promise.all([wallets.refetch(),balances.refetch(),orders.refetch()]);await cache.invalidateQueries({queryKey:["skima-bills"]});},
   onError:(error)=>Alert.alert("Checkout unavailable",error instanceof Error?error.message:"Please review your basket and try again.")
  });
- const receipt=useMutation({mutationFn:(id:string)=>session.api.post("/runtime/storefront/orders/confirm-receipt",{orderId:id,idempotencyKey:"bills-store-receipt:"+id},actionSchema),onSuccess:async()=>{await orders.refetch();await wallets.refetch();await balances.refetch();Alert.alert("Receipt confirmed","Your Store receipt has been saved.");}});
+ const receipt=useMutation({mutationFn:(id:string)=>session.api.post("/runtime/storefront/orders/confirm-receipt",{orderId:id,idempotencyKey:"bills-store-receipt:"+id},ActionSchema),onSuccess:async()=>{await orders.refetch();await wallets.refetch();await balances.refetch();Alert.alert("Receipt confirmed","Your Store receipt has been saved.");}});
  const refresh=()=>void Promise.all([store.items.refetch(),store.prices.refetch(),store.availability.refetch(),orders.refetch(),wallets.refetch(),balances.refetch()]);
  const busy=store.modules.isPending||store.settings.isPending;
  if(busy)return <Page><State title="Opening SKIMA Store" body="Loading the shared Store configuration."/></Page>;
