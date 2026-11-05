@@ -7,8 +7,9 @@ import { useBillsMutation, useBillsQuery, BillArraySchema, asNumber, asString, m
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
-import { AppField } from "../../../lpg-mobile/src/native/ui/AppField";
-import { AppModal } from "../../../lpg-mobile/src/native/ui/AppModal";
+import { AppField } from "../ui/AppField";
+import { AppModal } from "../ui/AppModal";
+import { AppButton } from "../ui/AppButton";
 type Row=Record<string,unknown>;
 type Group={key:string;name:string;icon:string;products:Row[]};
 const ValidationSchema=z.record(z.string(),z.unknown());
