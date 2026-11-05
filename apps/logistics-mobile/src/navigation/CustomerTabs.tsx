@@ -43,6 +43,7 @@ export function CustomerTabs() {
       <Tabs.Screen name="wallet/top-up" options={{ href: null }} />
       <Tabs.Screen name="wallet/withdraw" options={{ href: null }} />
       <Tabs.Screen name="store" options={{ href: null }} />
+      <Tabs.Screen name="bills" options={{ href: null }} />
       <Tabs.Screen name="jobs/[id]" options={{ href: null }} />
       <Tabs.Screen name="bookings/[id]" options={{ href: null }} />
     </Tabs>
