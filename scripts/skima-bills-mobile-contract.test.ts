@@ -115,3 +115,45 @@ Deno.test("Bills uses the existing SKIMA brand artwork and updates the canonical
   requireText(account, '.update({ display_name: nextName })', "Bills canonical profile update");
   requireText(account, "confirmSignOut", "Bills cross-platform sign-out confirmation");
 });
+
+
+Deno.test("Bills auth startup ignores a stale getSession snapshot after a newer auth event", async () => {
+  const session = await read("apps/bills-mobile/src/session/SessionProvider.tsx");
+  const subscription = session.indexOf("supabase.auth.onAuthStateChange");
+  const initialRead = session.indexOf("supabase.auth.getSession");
+  if (subscription < 0 || initialRead < 0 || subscription > initialRead) {
+    throw new Error("Bills must subscribe to auth changes before loading the initial session");
+  }
+  requireText(session, "authEventVersion === initialAuthEventVersion", "Bills auth startup race guard");
+  requireText(session, "mounted = false", "Bills auth startup cleanup");
+});
+
+Deno.test("Bills guided tour maps first-run steps to the live Bills workspace", async () => {
+  const [guide, providers, app, home, activity, wallet, store, account, auth] = await Promise.all([
+    read("apps/bills-mobile/src/onboarding/BillsGuideProvider.tsx"),
+    read("apps/bills-mobile/src/providers/AppProviders.tsx"),
+    read("apps/bills-mobile/src/screens/BillsApp.tsx"),
+    read("apps/bills-mobile/src/screens/BillsHomeScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsActivityScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsWalletScreens.tsx"),
+    read("apps/bills-mobile/src/screens/BillsStoreScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsAccountScreen.tsx"),
+    read("apps/bills-mobile/src/screens/BillsAuthScreen.tsx"),
+  ]);
+  requireText(providers, "<BillsGuideProvider>", "Bills guide provider");
+  requireText(guide, "measureInWindow", "Bills spotlight measurement");
+  for (const key of [
+    "bills.home.hero", "bills.home.services", "bills.activity.history",
+    "bills.wallet.balance", "bills.store.catalogue", "bills.account.profile",
+  ]) requireText(guide, 'targetKey: "' + key + '"', "Bills guide step mapping");
+  for (const [source, target] of [
+    [home, "bills.home.hero"], [home, "bills.home.services"],
+    [activity, "bills.activity.history"], [wallet, "bills.wallet.balance"],
+    [store, "bills.store.catalogue"], [account, "bills.account.profile"],
+  ]) requireText(source, target, "Bills visible guide target");
+  requireText(account, "GuideLaunchLink", "Bills replay-tour entry");
+  requireText(app, "guide.setCurrentPage(next)", "Bills tour navigation synchronization");
+  requireText(guide, "AsyncStorage.getItem", "Bills per-customer tour eligibility");
+  requireText(guide, "Remind me in 7 days", "Bills tour snooze control");
+  rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Bills authentication reference footer");
+});
