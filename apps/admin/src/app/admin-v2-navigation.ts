@@ -96,7 +96,7 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
   {
     key: "services",
     label: "Services",
-    description: "Utility billing, service catalogue and service availability.",
+    description: "Shared service catalogue and service availability controls across SKIMA products.",
     basePath: "/services",
     icon: "services",
     screenKeys: ["catalog"],
