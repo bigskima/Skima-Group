@@ -7,7 +7,7 @@ import { useBillsQuery, BillArraySchema, asNumber, asString, money } from "../ap
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
 
-function escapeHtml(value:string){return value.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]??c));}
+function escapeHtml(value:string){const map:Record<string,string>={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};return value.replace(/[&<>"']/g,character=>map[character]??character);}
 export function BillsReceiptScreen({id}:{id:string}){
  const {palette}=useAppTheme();const [busy,setBusy]=useState(false);const [notice,setNotice]=useState("");
  const query=useBillsQuery(["utility","requests"],"/runtime/utility-billing/requests",BillArraySchema,true,15000);
