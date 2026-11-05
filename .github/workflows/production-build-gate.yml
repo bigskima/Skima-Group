@@ -8,6 +8,7 @@ on:
       - "apps/lpg-mobile/**"
       - "apps/logistics-mobile/**"
       - "apps/bills-mobile/**"
+      - "apps/store-mobile/**"
       - "packages/frontend-core/**"
       - "packages/ui/**"
       - "packages/core/**"
@@ -28,6 +29,7 @@ on:
       - "scripts/skima-whatsapp-lifecycle-contract.test.ts"
       - "scripts/skima-logistics-*-contract.test.ts"
       - "scripts/skima-bills-mobile-contract.test.ts"
+      - "scripts/skima-store-mobile-contract.test.ts"
       - "scripts/in-app-guide-target-contract.test.ts"
       - "scripts/payout-runtime-production-contract.test.ts"
       - "scripts/verification-runtime-contract.test.ts"
@@ -178,6 +180,33 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
           EXPO_PUBLIC_API_GATEWAY_URL: https://example.supabase.co/functions/v1/api-gateway
         run: npm --prefix apps/bills-mobile run build:web
+
+  store-mobile:
+    name: SKIMA Store typecheck, contract and web export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Store Expo dependencies
+        run: npm --prefix apps/store-mobile install --no-audit --no-fund
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test Store customer and commerce contracts
+        run: deno test --allow-read scripts/skima-store-mobile-contract.test.ts
+      - name: Typecheck Store app
+        run: npm --prefix apps/store-mobile run check
+      - name: Build Store web export
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          EXPO_PUBLIC_API_GATEWAY_URL: https://example.supabase.co/functions/v1/api-gateway
+        run: npm --prefix apps/store-mobile run build:web
 
   station-managed-db-validation:
     name: Station Managed local database migration validation
