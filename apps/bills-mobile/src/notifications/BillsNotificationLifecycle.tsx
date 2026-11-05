@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
-import { router } from "expo-router";
 import { useEffect } from "react";
+import { navigateBillsRoute } from "../navigation/billsNavigation";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -11,35 +11,16 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const FIXED_ROUTES = new Set([
-  "/(customer)", "/(customer)/activity", "/(customer)/wallet", "/(customer)/top-up",
-  "/(customer)/withdraw", "/(customer)/beneficiaries", "/(customer)/notifications",
-  "/(customer)/store", "/(customer)/account",
-]);
-
-function safeRoute(value: unknown): string | null {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) return null;
-  if (FIXED_ROUTES.has(value)) return value;
-  const receiptPrefix = "/(customer)/receipt/";
-  if (value.startsWith(receiptPrefix)) {
-    const id = value.slice(receiptPrefix.length);
-    const groups = id.split("-");
-    const expectedLengths = [8, 4, 4, 4, 12];
-    const validUuid = groups.length === 5 && groups.every((group, index) =>
-      group.length === expectedLengths[index] &&
-      [...group].every((character) => "0123456789abcdef".includes(character.toLowerCase()))
-    );
-    if (validUuid) return value;
-  }
-  return null;
+function openNotificationRoute(response: Notifications.NotificationResponse | null) {
+  if (!response) return;
+  const route = response.notification.request.content.data?.path;
+  navigateBillsRoute(route);
 }
 
 export function BillsNotificationLifecycle() {
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener((event) => {
-      const route = safeRoute(event.notification.request.content.data?.path);
-      if (route) router.push(route as never);
-    });
+    const subscription = Notifications.addNotificationResponseReceivedListener(openNotificationRoute);
+    void Notifications.getLastNotificationResponseAsync().then(openNotificationRoute).catch(() => undefined);
     return () => subscription.remove();
   }, []);
   return null;
