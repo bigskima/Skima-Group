@@ -96,6 +96,8 @@ Deno.test("Store reuses the two existing production schema migrations", async ()
     read("supabase/migrations/20261102112220_skima_store_foundation.sql"),
     read("supabase/migrations/20261103131401_skima_store_checkout_delivery.sql"),
   ]);
-  requireText(foundation, "catalog_items", "Store foundation migration");
-  requireText(delivery, "storefront_settings", "Store checkout and delivery migration");
+  requireText(foundation, "workflow.skima-store.order-processing", "Store order workflow foundation");
+  requireText(foundation, "storefront_settings", "Store storefront configuration");
+  requireText(delivery, "delivery_base_fee_amount", "Store delivery fee configuration");
+  requireText(delivery, "minimum_order_amount", "Store minimum-order configuration");
 });
