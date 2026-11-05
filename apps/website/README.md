@@ -8,8 +8,8 @@ Create a Vercel project connected to bigskima/Skima-Group with the project root 
 
 ## Public assets
 
-- `assets/skima-home-hero.svg` — original AI-generated photoreal campaign artwork embedded as a self-contained WebP image. It is illustrative, not a documentary photograph of SKIMA staff, vehicles or customers.
-- Existing SKIMA symbol: `apps/lpg-mobile/assets/skima-splash-logo.png` (referenced directly; no new logo was drawn).
+- `assets/skima-home-hero.svg` — original AI-generated campaign photograph embedded as a self-contained WebP image. It is illustrative campaign artwork, not a documentary photograph of SKIMA staff, vehicles or customers.
+- `assets/skima-mark.svg` — the existing SKIMA app symbol bundled from `apps/lpg-mobile/assets/skima-splash-logo.png`.
 
 The service cards use native vector icons and CSS treatments. They do not use fabricated stock photographs.
 
