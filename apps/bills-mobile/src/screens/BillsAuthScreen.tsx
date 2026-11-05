@@ -34,7 +34,8 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
         if(ok) router.replace("/");
         else setNotice(session.error || "Check your email and password and try again.");
       } else if(mode==="register") {
-        const result=await session.signUp({displayName:name,email,password});
+        const signUpRedirect = Platform.OS === "web" ? Linking.createURL("/") : "skima-bills://";
+        const result=await session.signUp({displayName:name,email,password,redirectTo:signUpRedirect});
         setSuccess(true);
         setConfirmationEmail(result.confirmationRequired ? email.trim().toLowerCase() : "");
         setNotice(result.confirmationRequired ? "Your account has been created. Check your email to confirm it, then sign in." : "Your SKIMA account is ready.");
