@@ -104,12 +104,13 @@ export function BillsTopUpScreen({onBack}:{onBack:()=>void}){
 export function BillsWithdrawScreen({onBack}:{onBack:()=>void}){
  const {session}=useSession();const {palette}=useAppTheme();
  const wallets=useBillsQuery(["wallets"],"/runtime/wallets",BillArraySchema,true,30000);
+ const balances=useBillsQuery(["wallet-balances"],"/runtime/wallet-balances",BillArraySchema,true,20000);
  const banks=useBillsFinanceQuery({key:["banks"],path:"/banks",schema:bankSchema});
  const beneficiaries=useBillsFinanceQuery({key:["beneficiaries"],path:"/beneficiaries",schema:BillArraySchema});
  const [amount,setAmount]=useState("");const [beneficiaryId,setBeneficiaryId]=useState("");const [previewData,setPreviewData]=useState<Row|null>(null);const [notice,setNotice]=useState("");
  const [bankCode,setBankCode]=useState("");const [accountNumber,setAccountNumber]=useState("");const [showAdd,setShowAdd]=useState(false);const [pending,setPending]=useState(false);
  const wallet=(wallets.data??[]).find(w=>asString(w,"wallet_type","walletType")==="customer"&&asString(w,"owner_entity_type","ownerEntityType")==="user"&&asString(w,"owner_entity_id","ownerEntityId")===session?.user.id&&![ "closed","disabled" ].includes((asString(w,"status")??"").toLowerCase()))??null;
- const walletId=asString(wallet,"id","wallet_id","walletId");const currency=asString(wallet,"currency_code","currencyCode")??"NGN";const balance=asNumber(wallet,"available_balance","availableBalance","balance")??0;
+ const walletId=asString(wallet,"id","wallet_id","walletId");const currency=asString(wallet,"currency_code","currencyCode")??"NGN";const balanceRow=(balances.data??[]).find(row=>asString(row,"wallet_id","walletId","id")===walletId);const balance=asNumber(balanceRow,"available_balance","availableBalance","balance")??asNumber(wallet,"available_balance","availableBalance","balance")??0;
  const beneficiaryMutation=useBillsFinanceMutation("/beneficiaries",actionSchema);const preview=useBillsFinanceMutation("/withdrawals/preview",actionSchema);const withdraw=useBillsFinanceMutation("/withdrawals",actionSchema);
  const bankOptions=(banks.data as Row|undefined)?.banks as Row[]|undefined;
  const selectedBanks=Array.isArray(bankOptions)?bankOptions:[];
