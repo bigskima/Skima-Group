@@ -67,7 +67,7 @@ export function StoreAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
   };
 
   const title = mode==="login"?"Welcome to SKIMA Store":mode==="register"?"Create your SKIMA account":mode==="forgot"?"Recover your account":"Set a new password";
-  const subtitle = mode==="login"?"Your everyday payments, in one secure place.":mode==="register"?"One SKIMA account across your services.":mode==="forgot"?"Enter the email connected to your account.":"Choose a strong password for your account.";
+  const subtitle = mode==="login"?"Shop everyday essentials, in one secure place.":mode==="register"?"One SKIMA account across your services.":mode==="forgot"?"Enter the email connected to your account.":"Choose a strong password for your account.";
   const canSubmit = mode==="register"?Boolean(name.trim()&&email.trim()&&password.length>=8):mode==="forgot"?Boolean(email.trim()):mode==="reset"?Boolean(password.length>=8&&confirm):Boolean(email.trim()&&password);
 
   return (
@@ -78,7 +78,7 @@ export function StoreAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
           <View style={styles.shell}>
             <View style={styles.brandRow}>
               <StoreBrandMark size={48} />
-              <View><Text style={[styles.brand,{color:palette.ink}]}>SKIMA</Text><Text style={[styles.brandSub,{color:palette.muted}]}>BILLS</Text></View>
+              <View><Text style={[styles.brand,{color:palette.ink}]}>SKIMA</Text><Text style={[styles.brandSub,{color:palette.muted}]}>STORE</Text></View>
             </View>
             <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
               <View style={[styles.accent,{backgroundColor:palette.brand}]}/>
