@@ -413,6 +413,7 @@ export function LogisticsWorkspace(props: {
           </div>
           {!canManage ? <div className="logistics-admin__notice logistics-admin__notice--warning">Read-only access. Provider decisions require Logistics marketplace manage permission.</div> : null}
           <label className="logistics-admin__field"><span>Review / status reason</span><textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Record the documents checked, reason for approval or pause, and any follow-up required." /></label>
+            <small className="logistics-admin__muted">Enter at least 5 characters to enable Verify or Reject. This note is saved with the company review decision.</small>
           {providerRows.length === 0 ? <Empty title="No provider companies found" detail="Provider applications will appear when a logistics company completes onboarding." /> : providerRows.map((provider) => {
             const organizationId = read(provider, "organization_id", "");
             const organization = nested(provider, "organization");
