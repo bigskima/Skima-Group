@@ -74,7 +74,18 @@ Deno.serve(async (request: Request) => {
       });
       const payload = await response.json().catch(() => null) as { data?: ExpoTicket[]; errors?: unknown[] } | null;
       if (!response.ok || !payload || !Array.isArray(payload.data)) {
-        throw new Error(`Expo push send failed with HTTP ${response.status}.`);
+        const message = `Expo push send failed with HTTP ${response.status}.`;
+        const retryAt = new Date(Date.now() + 30_000).toISOString();
+        const updates = await Promise.all(batch.map((row) => supabase.from("push_notification_outbox").update({
+          status: row.attempts >= MAX_ATTEMPTS ? "failed" : "queued",
+          next_attempt_at: retryAt,
+          last_error: message,
+          updated_at: new Date().toISOString(),
+        }).eq("id", row.id)));
+        const updateError = updates.find((result) => result.error)?.error;
+        if (updateError) throw updateError;
+        totals.failed += batch.length;
+        continue;
       }
 
       for (let index = 0; index < batch.length; index += 1) {
