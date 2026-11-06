@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Eye, EyeOff, LockKeyhole, Mail, UserRound, ArrowLeft } from "lucide-react-native";
+import { Eye, EyeOff, LockKeyhole, Mail, UserRound, ArrowLeft, Gift } from "lucide-react-native";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -19,6 +19,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
   const [email,setEmail] = useState("");
   const [password,setPassword] = useState("");
   const [confirm,setConfirm] = useState("");
+  const [referralCode,setReferralCode] = useState("");
   const [visible,setVisible] = useState(false);
   const [pending,setPending] = useState(false);
   const [notice,setNotice] = useState("");
@@ -36,7 +37,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
         else setNotice(session.error || "Check your email and password and try again.");
       } else if(mode==="register") {
         const signUpRedirect = Platform.OS === "web" ? Linking.createURL("/") : "skima-bills://";
-        const result=await session.signUp({displayName:name,email,password,redirectTo:signUpRedirect});
+        const result=await session.signUp({displayName:name,email,password,redirectTo:signUpRedirect,referralCode});
         setSuccess(true);
         setConfirmationEmail(result.confirmationRequired ? email.trim().toLowerCase() : "");
         setNotice(result.confirmationRequired ? "Your account has been created. Check your email to confirm it, then sign in." : "Your SKIMA account is ready.");
@@ -66,8 +67,8 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
     } finally { setPending(false); }
   };
 
-  const title = mode==="login"?"Welcome to SKIMA Bills":mode==="register"?"Create your SKIMA account":mode==="forgot"?"Recover your account":"Set a new password";
-  const subtitle = mode==="login"?"Pay supported electricity, airtime, data and TV bills.":mode==="register"?"Create your SKIMA account to pay bills.":mode==="forgot"?"Enter the email connected to your account.":"Choose a strong password for your account.";
+  const title = mode==="login"?"Sign in":mode==="register"?"Create account":mode==="forgot"?"Reset password":"Set a new password";
+  const subtitle = mode==="login"?"Pay bills with SKIMA.":mode==="register"?"Get started in a minute.":mode==="forgot"?"We’ll send a secure reset link.":"Use at least 8 characters.";
   const canSubmit = mode==="register"?Boolean(name.trim()&&email.trim()&&password.length>=8):mode==="forgot"?Boolean(email.trim()):mode==="reset"?Boolean(password.length>=8&&confirm):Boolean(email.trim()&&password);
 
   return (
@@ -88,6 +89,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
               <Text style={[styles.subtitle,{color:palette.muted}]}>{subtitle}</Text>
               <View style={styles.fields}>
                 {mode==="register"?<Field label="Full name" value={name} onChangeText={setName} placeholder="Your name" icon={<UserRound size={17} color={palette.muted}/>}/>:null}
+                 {mode==="register"?<Field label="Referral code (optional)" value={referralCode} onChangeText={setReferralCode} placeholder="Enter code, if you have one" autoCapitalize="characters" icon={<Gift size={17} color={palette.muted}/>}/>:null}
                 {mode!=="reset"?<Field label="Email address" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" icon={<Mail size={17} color={palette.muted}/>}/>:null}
                 {mode!=="forgot"?<Field label={mode==="reset"?"New password":"Password"} value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry={!visible} icon={<LockKeyhole size={17} color={palette.muted}/>} right={<Pressable onPress={()=>setVisible(!visible)}>{visible?<EyeOff size={18} color={palette.muted}/>:<Eye size={18} color={palette.muted}/>}</Pressable>}/>:null}
                 {mode==="reset"?<Field label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Enter password again" secureTextEntry={!visible} icon={<LockKeyhole size={17} color={palette.muted}/>}/>:null}
@@ -116,19 +118,19 @@ function Field(props: {label:string;value:string;onChangeText:(value:string)=>vo
     <Text style={{color:palette.mutedStrong,fontSize:11,fontWeight:"900"}}>{props.label}</Text>
     <View style={[styles.input,{backgroundColor:palette.input,borderColor:focused?palette.brand:palette.border}]}>
       {props.icon}
-      <TextInput value={props.value} onChangeText={props.onChangeText} placeholder={props.placeholder} placeholderTextColor={palette.muted} onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} secureTextEntry={props.secureTextEntry} keyboardType={props.keyboardType??"default"} autoCapitalize={props.autoCapitalize??"sentences"} autoCorrect={false} style={{flex:1,color:palette.ink,fontSize:14,minHeight:48}}/>
+      <TextInput value={props.value} onChangeText={props.onChangeText} placeholder={props.placeholder} placeholderTextColor={palette.muted} onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} secureTextEntry={props.secureTextEntry} keyboardType={props.keyboardType??"default"} autoCapitalize={props.autoCapitalize??"sentences"} autoCorrect={false} style={{flex:1,color:palette.ink,fontSize:13,minHeight:42}}/>
       {props.right}
     </View>
   </View>;
 }
 
 const styles=StyleSheet.create({
- root:{flex:1},fill:{flex:1},outer:{flexGrow:1,alignItems:"center",justifyContent:"center",padding:20,paddingVertical:32},
- shell:{width:"100%",maxWidth:460,gap:20},brandRow:{flexDirection:"row",alignItems:"center",gap:10},
+ root:{flex:1},fill:{flex:1},outer:{flexGrow:1,alignItems:"center",justifyContent:"center",padding:18,paddingVertical:24},
+ shell:{width:"100%",maxWidth:460,gap:15},brandRow:{flexDirection:"row",alignItems:"center",gap:10},
  brand:{fontSize:15,fontWeight:"900",letterSpacing:1},brandSub:{fontSize:9,fontWeight:"900",letterSpacing:1.5},
- card:{borderWidth:1,borderRadius:30,padding:24,gap:15,overflow:"hidden"},accent:{height:3,width:44,borderRadius:4,marginBottom:5},
- eyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1.1},title:{fontSize:29,fontWeight:"900",letterSpacing:-.8},subtitle:{fontSize:13,lineHeight:19},
- fields:{gap:13},input:{minHeight:56,borderRadius:15,borderWidth:1,paddingHorizontal:13,flexDirection:"row",alignItems:"center",gap:10},
+ card:{borderWidth:1,borderRadius:24,padding:18,gap:12,overflow:"hidden"},accent:{height:3,width:44,borderRadius:4,marginBottom:5},
+ eyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1.1},title:{fontSize:23,fontWeight:"900",letterSpacing:-.6},subtitle:{fontSize:11,lineHeight:16},
+ fields:{gap:10},input:{minHeight:48,borderRadius:13,borderWidth:1,paddingHorizontal:13,flexDirection:"row",alignItems:"center",gap:10},
  forgot:{alignSelf:"flex-end",paddingVertical:2},notice:{padding:12,borderRadius:13,borderWidth:1},
  submit:{minHeight:54,borderRadius:16,alignItems:"center",justifyContent:"center"},submitText:{color:"#fff",fontSize:14,fontWeight:"900"},
  footer:{textAlign:"center",fontSize:11,fontWeight:"700"},privacy:{textAlign:"center",fontSize:10,fontWeight:"600"},
