@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, BookOpen, History, ShoppingBag, UserRound, WalletCards, ArrowLeft } from "lucide-react-native";
+import { Bell, BookOpen, History, ShoppingBag, UserRound, WalletCards, ArrowLeft, Gift } from "lucide-react-native";
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { BillsBrandMark } from "../ui/BrandMark";
@@ -12,9 +12,10 @@ import { BillsAccountScreen } from "./BillsAccountScreen";
 import { BillsNotificationsScreen } from "./BillsNotificationsScreen";
 import { BillsBeneficiariesScreen } from "./BillsBeneficiariesScreen";
 import { BillsReceiptScreen } from "./BillsReceiptScreen";
+import { BillsReferralsScreen } from "./BillsReferralsScreen";
 import { useBillsGuide } from "../onboarding/BillsGuideProvider";
 
-type Page = "bills" | "activity" | "wallet" | "store" | "account" | "top-up" | "withdraw" | "notifications" | "saved" | "receipt";
+type Page = "bills" | "activity" | "wallet" | "store" | "account" | "top-up" | "withdraw" | "notifications" | "saved" | "receipt" | "referrals";
 const tabs = [
   { key: "bills", label: "Bills", icon: BookOpen },
   { key: "activity", label: "Activity", icon: History },
@@ -54,7 +55,7 @@ export function BillsApp() {
     : page === "top-up" ? "Add funds"
     : page === "withdraw" ? "Withdraw funds"
     : page === "notifications" ? "Notifications"
-    : page === "saved" ? "Saved billers" : "Receipt";
+    : page === "saved" ? "Saved billers" : page === "referrals" ? "Referrals & rewards" : "Receipt";
 
   const navigationItem = (tab: typeof tabs[number], variant: "side" | "bottom") => {
     const Icon = tab.icon;
@@ -141,6 +142,7 @@ export function BillsApp() {
             {page === "notifications" ? <BillsNotificationsScreen /> : null}
             {page === "saved" ? <BillsBeneficiariesScreen onOpenPage={open} /> : null}
             {page === "receipt" && receiptId ? <BillsReceiptScreen id={receiptId} /> : null}
+            {page === "referrals" ? <BillsReferralsScreen /> : null}
           </View>
 
           {!desktop && isTab ? (
