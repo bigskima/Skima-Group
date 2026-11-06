@@ -61,20 +61,21 @@ Deno.test("Logistics companies can use automatic identity approval or upload evi
   requireText(migration, "not public.is_platform_super_admin() and not public.has_permission('logistics.marketplace.manage', null)", "database Super Admin approval permission");
 });
 
-Deno.test("Store delivery setup supplies valid origin coordinates and a positive radius", async () => {
+Deno.test("Store delivery setup follows nationwide flat-fee policy with optional geocoded origin coordinates", async () => {
   const [workspace, migration] = await Promise.all([
     read("apps/admin/src/features/store/StoreWorkspace.tsx"),
-    read("supabase/migrations/20261103131401_skima_store_checkout_delivery.sql"),
+    read("supabase/migrations/20261104120000_storefront_nationwide_catalog_admin.sql"),
   ]);
-  requireText(workspace, 'api.post("/lpg/maps/geocode"', "Store dispatch origin can be geocoded through the shared maps gateway");
+  requireText(workspace, 'api.post("/lpg/maps/geocode"', "Store dispatch origin can use the shared geocoding gateway");
   requireText(workspace, "setDeliveryOriginLatitude(String(result.location.latitude))", "geocoded latitude is retained");
   requireText(workspace, "setDeliveryOriginLongitude(String(result.location.longitude))", "geocoded longitude is retained");
-  requireText(workspace, 'label="Delivery radius (km)"', "delivery radius is configurable");
-  requireText(workspace, "deliveryOriginLatitude: parsedOriginLatitude", "Store saves the actual origin latitude");
-  requireText(workspace, "deliveryOriginLongitude: parsedOriginLongitude", "Store saves the actual origin longitude");
-  requireText(workspace, "deliveryRadiusKm: parsedDeliveryRadius", "Store saves the configured radius");
-  requireText(workspace, "parsedDeliveryRadius <= 0", "Store rejects a non-positive radius");
-  requireText(migration, "target_delivery_radius_km is null or target_delivery_radius_km <= 0", "database remains authoritative for required delivery radius");
+  requireText(workspace, "parsedOriginLatitude === null) !== (parsedOriginLongitude === null", "coordinate inputs must be supplied together when used");
+  requireText(workspace, "deliveryOriginLatitude: parsedOriginLatitude", "Store saves optional origin latitude");
+  requireText(workspace, "deliveryOriginLongitude: parsedOriginLongitude", "Store saves optional origin longitude");
+  requireText(workspace, "deliveryRadiusKm: null", "nationwide checkout is not radius-gated");
+  requireText(workspace, "Delivery radius does not restrict checkout", "admin copy explains nationwide delivery");
+  requireText(migration, "delivery_radius_km = null", "database ignores legacy radius for Store nationwide delivery");
+  requireText(migration, "Optional Store coordinates must be supplied together", "database validates optional coordinate pairs");
 });
 
 Deno.test("Store delivery setup supplies geocoded origin coordinates and a positive radius", async () => {
