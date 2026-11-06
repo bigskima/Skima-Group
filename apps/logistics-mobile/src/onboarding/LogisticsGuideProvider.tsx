@@ -15,10 +15,10 @@ const GuideContext=createContext<GuideContextValue|null>(null);
 
 const STEPS:Record<Workspace,Step[]>={
  customer:[
-  {route:"/",targetKey:"customer-home-request",title:"Create a delivery request",body:"Start a move or delivery request. Your route, cargo and timing help SKIMA match qualified providers."},
-  {route:"/",targetKey:"customer-home-services",title:"Choose a service",body:"Browse only the services enabled for your area. You can compare provider offers after publishing a request."},
-  {route:"/",targetKey:"customer-home-wallet",title:"Your shared SKIMA wallet",body:"Your customer wallet is shared across eligible SKIMA services. It is separate from logistics company wallets."},
-  {route:"/",targetKey:"customer-home-store",title:"SKIMA Store",body:"The Store is an additional product area for catalogued goods. It does not replace Logistics."},
+  {route:"/",targetKey:"customer-home-request",title:"Create a delivery request",body:"Start a move or delivery request. Add your route, cargo and timing so providers can send relevant offers."},
+  {route:"/",targetKey:"customer-home-services",title:"Choose a service",body:"Choose from the services available near you. Compare offers after you submit a request."},
+  {route:"/",targetKey:"customer-home-wallet",title:"Your SKIMA Wallet",body:"Check your balance and add funds when a booking requires payment."},
+  {route:"/",targetKey:"customer-home-store",title:"SKIMA Store",body:"Shop for everyday essentials in SKIMA Store."},
  ],
  company:[
   {route:"/",targetKey:"company-home-overview",title:"Company operations",body:"Your company overview shows matched opportunities and active jobs. Open an opportunity to review and respond."},
