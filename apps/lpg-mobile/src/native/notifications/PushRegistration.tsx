@@ -1,0 +1,64 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import { useEffect } from "react";
+import { Platform } from "react-native";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { useSession } from "../session/SessionProvider";
+
+const INSTALLATION_KEY = "skima.push.installation.refill.v1";
+
+export async function registerRefillPushDevice(session: Session | null, supabase: SupabaseClient) {
+  if (!session?.user.id || !Device.isDevice || (Platform.OS !== "ios" && Platform.OS !== "android")) return false;
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) return false;
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("refill", {
+      name: "Refill and LPG order updates",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#E21D2E",
+    });
+  }
+  const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
+  if (!projectId) return false;
+  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+  let installationId = await AsyncStorage.getItem(INSTALLATION_KEY);
+  if (!installationId) {
+    installationId = "skima-refill-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 14);
+    await AsyncStorage.setItem(INSTALLATION_KEY, installationId);
+  }
+  const { error } = await supabase.rpc("register_skima_push_device", {
+    target_app_key: "refill",
+    target_platform: Platform.OS,
+    target_expo_push_token: token,
+    target_expo_project_id: projectId,
+    target_installation_id: installationId,
+    target_permission_status: "granted",
+    target_app_version: Constants.expoConfig?.version ?? null,
+    target_device_name: Device.modelName ?? null,
+  });
+  if (error) throw error;
+  return true;
+}
+
+export function RefillPushRegistration() {
+  const session = useSession();
+  useEffect(() => {
+    if (session.status === "authenticated") {
+      void registerRefillPushDevice(session.session, session.supabase).catch((cause) => {
+        if (__DEV__) console.info("SKIMA Refill push registration unavailable", cause);
+      });
+    }
+  }, [session.status, session.session?.user.id, session.supabase]);
+  useEffect(() => {
+    const subscription = Notifications.addPushTokenListener(() => {
+      if (session.status === "authenticated") {
+        void registerRefillPushDevice(session.session, session.supabase).catch(() => undefined);
+      }
+    });
+    return () => subscription.remove();
+  }, [session.status, session.session?.user.id, session.supabase]);
+  return null;
+}
