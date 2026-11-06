@@ -20,6 +20,7 @@ import { GlobalQueryFailure } from "./GlobalQueryFailure";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { StartupBrandingGate } from "./StartupBrandingGate";
 import { InAppGuideProvider } from "../onboarding/InAppGuideProvider";
+import { RefillPushRegistration } from "../notifications/PushRegistration";
 
 export function AppProviders({ children }: PropsWithChildren) {
   useNotificationLifecycle();
@@ -65,6 +66,7 @@ export function AppProviders({ children }: PropsWithChildren) {
             <GlobalQueryFailure />
             <ConnectivityNotice />
             <SessionProvider>
+              <RefillPushRegistration />
               <InAppGuideProvider>
                 <BackendNotificationBridge />
                 <AppErrorBoundary><StartupBrandingGate>{children}</StartupBrandingGate></AppErrorBoundary>
