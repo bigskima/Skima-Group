@@ -38,8 +38,8 @@ const STEPS: TourStep[] = [
   {
     page: "bills",
     targetKey: "bills.home.services",
-    title: "Choose and validate a biller",
-    body: "Select a service, enter the required customer or meter details, validate the account when the provider supports it, then review the amount before paying.",
+    title: "Check your account details",
+    body: "Choose a service, enter your customer or meter details, check the account details when available, and review the amount before paying.",
   },
   {
     page: "activity",
