@@ -154,7 +154,7 @@ Deno.test("Logistics request review actions fit the mobile viewport", () => {
 Deno.test("Logistics address matching chooses the most specific geography and blocks country-only requests", () => {
   requireText(geography, "resolveMostSpecificGeography", "hierarchy-aware location resolution");
   requireText(geography, "hierarchyParts", "canonical parent/child location hierarchy");
-  requireText(geography, "parent_id", "ambiguous city aliases resolve to their common parent");
+  requireText(geography, "deepest.length === 1 ? deepest[0] : null", "ambiguous city aliases require a specific LGA choice");
   requireText(geography, "geography_hierarchy_path", "selected address retains its resolved hierarchy");
   requireNotText(geography, 'normalized(asString(item, "canonical_name")) === "nigeria"', "no silent country-root fallback for an unresolved street");
   requireText(request, "hasServiceGeography(pickup)", "pickup cannot publish at country-only scope");
