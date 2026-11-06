@@ -26,7 +26,7 @@ begin
     raise exception using errcode='42501',message='LPG setup read permission is required';
   end if;
 
-  with verified_mapping_counts as (
+  with verified_legacy_mapping_counts as (
     select
       mapping.legacy_id,
       count(distinct mapping.geography_id)::integer as mapping_count,
@@ -36,6 +36,16 @@ begin
       and mapping.migration_status='verified'
       and mapping.geography_id is not null
     group by mapping.legacy_id
+  ),
+  verified_geography_mapping_counts as (
+    select
+      mapping.geography_id,
+      count(distinct mapping.legacy_id)::integer as mapping_count
+    from public.geography_migration_mappings mapping
+    where mapping.legacy_source='service_areas'
+      and mapping.migration_status='verified'
+      and mapping.geography_id is not null
+    group by mapping.geography_id
   ),
   legacy_areas as (
     select
@@ -49,7 +59,7 @@ begin
       geography.id as geography_id,
       (geography.boundary_geometry is not null) as has_boundary
     from public.service_areas area
-    join verified_mapping_counts mapping
+    join verified_legacy_mapping_counts mapping
       on mapping.legacy_id=area.id and mapping.mapping_count=1
     join public.geographies geography
       on geography.id=mapping.geography_id and geography.status='active'
@@ -73,12 +83,20 @@ begin
       on level.id=geography.geography_level_id
       and level.status='active'
       and level.is_service_selectable=true
+    left join verified_geography_mapping_counts mapping
+      on mapping.geography_id=geography.id
     where geography.status='active'
-      and not exists (
-        select 1
-        from verified_mapping_counts mapping
-        where mapping.geography_id=geography.id
-          and mapping.mapping_count=1
+      and (
+        coalesce(mapping.mapping_count,0)<>1
+        or not exists (
+          select 1
+          from public.geography_migration_mappings legacy_mapping
+          join public.service_areas legacy_area on legacy_area.id=legacy_mapping.legacy_id
+          where legacy_mapping.legacy_source='service_areas'
+            and legacy_mapping.migration_status='verified'
+            and legacy_mapping.geography_id=geography.id
+            and legacy_area.status='active'
+        )
       )
   ),
   areas as (
@@ -434,11 +452,8 @@ begin
       and area.status='active'
     order by mapping.verified_at desc,area.key
     limit 1;
-  elsif mapping_count=0 then
-    geography_key:='geography:'||matched_geography_id::text;
   else
-    raise exception using errcode='55000',
-      message='More than one legacy service area is mapped to this place. Review the service-area mapping before pricing.';
+    geography_key:='geography:'||matched_geography_id::text;
   end if;
 
   result:=public.resolve_financial_policy(
