@@ -16,7 +16,7 @@ declare
   v_category_id uuid;
   pickup_geo_id uuid;
   destination_geo_id uuid;
-  job_id uuid;
+  v_job_id uuid;
   existing_job public.logistics_job_requests%rowtype;
   request_title text;
   request_service_key text;
@@ -122,20 +122,20 @@ begin
     coalesce(target_payload->'metadata', '{}'::jsonb),
     target_idempotency_key
   )
-  returning id into job_id;
+  returning id into v_job_id;
 
   insert into public.logistics_job_opportunities (
     job_id, organization_id, provider_service_id, status, match_reasons,
     job_snapshot, customer_contact_snapshot
   )
   select
-    job_id,
+    v_job_id,
     service.organization_id,
     service.id,
     'matched',
     jsonb_build_array('service_capability', 'pickup_coverage', 'destination_coverage', 'provider_verified'),
     jsonb_build_object(
-      'job_id', job_id,
+      'job_id', v_job_id,
       'title', request_title,
       'description', nullif(btrim(target_payload->>'description'), ''),
       'service_key', request_service_key,
@@ -219,10 +219,10 @@ begin
 
   update public.logistics_job_requests
   set status = event_status, updated_at = timezone('utc', now())
-  where id = job_id;
+  where id = v_job_id;
 
   perform public.record_logistics_job_event(
-    job_id,
+    v_job_id,
     case when match_count > 0 then 'logistics.job.distributed' else 'logistics.job.no_provider_match' end,
     target_idempotency_key || ':published',
     'draft',
@@ -230,7 +230,7 @@ begin
     jsonb_build_object('matched_provider_count', match_count)
   );
 
-  return job_id;
+  return v_job_id;
 end;
 $$;
 
