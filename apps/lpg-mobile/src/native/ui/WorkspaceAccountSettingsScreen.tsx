@@ -197,7 +197,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
               <View style={styles.copy}>
                 <Text style={[styles.label, { color: theme.palette.ink }]}>SKIMA Station Affiliate</Text>
                 <Text style={[styles.detail, { color: theme.palette.muted }]}>
-                  Refer eligible LPG stations. When approved stations activate and generate eligible SKIMA revenue, you can earn a configured commission for the policy's limited earning period.
+                  Refer LPG stations and earn commission when approved stations become active and generate eligible business. The programme runs for a limited time; review the terms before applying.
                 </Text>
               </View>
             </View>
@@ -284,7 +284,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
             ) : (
               <View style={[styles.affiliateStatus, { backgroundColor: theme.palette.surfaceSubtle }]}>
                 <Text style={[styles.affiliateStatusTitle, { color: theme.palette.ink }]}>
-                  Affiliate account {affiliate.status}
+                  Affiliate account: {affiliate.status.replaceAll("_", " ")}
                 </Text>
                 <Text style={[styles.affiliateBody, { color: theme.palette.muted }]}>
                   {affiliate.reviewReason || "Your affiliate account is not currently active. Contact SKIMA support if you need a review."}
@@ -342,7 +342,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
           <SettingsRow
             icon={ShieldCheck}
             label="Account protection"
-            detail="Your account and role access are protected by SKIMA permissions"
+            detail="Only authorised people can access your account and its features."
             last
           />
         </View>
