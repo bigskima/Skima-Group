@@ -139,8 +139,12 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
   });
 
   const assignedKeys = new Set((assignedAreas.data ?? []).map((area) => area.serviceAreaKey));
-  const dispatchableAreas = (serviceAreas.data ?? []).filter((area) => area.hasBoundary === true);
-  const availableAreas = dispatchableAreas.filter((area) => !assignedKeys.has(area.key));
+  // Show every enabled/selectable geography. A verified boundary is a separate
+  // dispatch-safety requirement, not a reason to hide an otherwise enabled location.
+  const selectableAreas = serviceAreas.data ?? [];
+  const availableAreas = selectableAreas.filter((area) => !assignedKeys.has(area.key));
+  const selectedArea = availableAreas.find((area) => area.key === areaKey) ?? null;
+  const selectedAreaCanBeAssigned = selectedArea?.hasBoundary === true;
 
   useEffect(() => {
     if (areaKey && availableAreas.some((area) => area.key === areaKey)) return;
@@ -265,8 +269,8 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
               value={areaKey}
               onChange={(event) => setAreaKey(event.currentTarget.value)}
               options={[
-                { label: availableAreas.length ? "Choose an area" : dispatchableAreas.length ? "All map-ready areas are already assigned" : "Add a map boundary to assign a Driver", value: "" },
-                ...availableAreas.map((area) => ({ label: areaLabel(area), value: area.key })),
+                { label: availableAreas.length ? "Choose an enabled location" : selectableAreas.length ? "All enabled locations are already assigned" : "No enabled locations available", value: "" },
+                ...availableAreas.map((area) => ({ label: area.hasBoundary ? areaLabel(area) : `${areaLabel(area)} · Map boundary required`, value: area.key })),
               ]}
             />
             <SelectInput
@@ -279,13 +283,14 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
               ]}
             />
           </div>
-          {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">A new location can be enabled for customer orders and pricing without a map. A verified map boundary is needed only when assigning a physical Managed Driver, so dispatch stays inside the approved area.</p> : null}
+          {selectedArea && !selectedAreaCanBeAssigned ? <div className="sk-panel"><StatusBadge tone="warning">Map boundary required</StatusBadge><p className="skima-muted">This location is enabled in SKIMA’s geography catalogue, but it does not yet have a verified boundary. A physical Managed Driver cannot be assigned there until the boundary is verified, because live dispatch uses the customer’s GPS point to enforce the coverage area.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate("/operations/coverage")}>Open geography & coverage setup</Button></div> : null}
+          {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">All enabled locations are now visible here. Only locations with verified boundaries can be assigned to a physical Managed Driver; locations without boundaries remain available for non-driver service coverage where configured.</p> : null}
           <TextAreaInput label="Admin note (optional)" value={reason} onChange={(event) => setReason(event.currentTarget.value)} placeholder="Example: Awka launch coverage" />
           <Button
-            disabled={!canManageCoverage || updateArea.isPending || !areaKey}
+            disabled={!canManageCoverage || updateArea.isPending || !areaKey || !selectedAreaCanBeAssigned}
             onClick={() => {
               const area = availableAreas.find((item) => item.key === areaKey);
-              if (area) updateArea.mutate({ area, active: true, makePrimary: primary === "yes" });
+              if (area?.hasBoundary) updateArea.mutate({ area, active: true, makePrimary: primary === "yes" });
             }}
           >
             {updateArea.isPending ? "Saving…" : "Add service area"}
