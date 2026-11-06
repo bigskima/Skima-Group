@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { SessionProvider } from "../session/SessionProvider";
 import { LogisticsGuideProvider } from "../onboarding/LogisticsGuideProvider";
+import { LogisticsNotificationLifecycle } from "../notifications/LogisticsNotificationLifecycle";
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(() => new QueryClient({
@@ -28,7 +29,7 @@ export function AppProviders({ children }: PropsWithChildren) {
       <SafeAreaProvider>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SessionProvider><LogisticsGuideProvider>{children}</LogisticsGuideProvider></SessionProvider>
+            <SessionProvider><LogisticsGuideProvider><LogisticsNotificationLifecycle />{children}</LogisticsGuideProvider></SessionProvider>
           </QueryClientProvider>
         </ThemeProvider>
       </SafeAreaProvider>
