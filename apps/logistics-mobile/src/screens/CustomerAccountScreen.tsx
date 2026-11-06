@@ -173,6 +173,9 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Preferences</Text>
+        <PressableRow icon={<Gift color={palette.brand} size={19} />}
+          title="Referrals & rewards" subtitle="Your code, campaigns and leaderboard" action="Open"
+          onPress={() => router.push((workspace === "customer" ? "/(customer)/referrals" : "/(provider)/referrals") as never)} />
         <PressableRow icon={scheme === "dark" ? <Moon color={palette.brand} size={19} /> : <Sun color={palette.brand} size={19} />}
           title="Appearance" subtitle={scheme === "dark" ? "Dark mode" : "Light mode"} action={scheme === "dark" ? "Switch to light" : "Switch to dark"} onPress={() => void toggle()} />
         
