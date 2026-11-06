@@ -146,8 +146,8 @@ Deno.test("Managed Driver coverage shows all enabled geographies but blocks unsa
 });
 
 Deno.test("Logistics request review actions fit the mobile viewport", () => {
-  requireText(request, "actionButton: { flex: 1, minWidth: 0 }", "review actions share constrained available width");
-  requireText(request, "alignItems: \"stretch\"", "buttons align within the action row");
+  requireText(request, 'backAction: { flexBasis: "30%", flexGrow: 0', "back action has bounded mobile width");
+  requireText(request, "primaryActionWithBack: { flex: 1, maxWidth: 230", "publish action is capped beside Back");
   requireText(request, 'disabled={!canSubmit}', "publish action respects complete request validation");
 });
 
