@@ -15,6 +15,7 @@ import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { LogisticsBookingChat } from "../ui/LogisticsBookingChat";
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
@@ -208,6 +209,23 @@ export function ProviderBookingDetailScreen() {
             <Text style={[styles.contactName, { color: palette.ink }]}>{asString(contact, "name") ?? "Customer"}</Text>
             {asString(contact, "phone") ? <Pressable style={styles.contactLine} onPress={() => void Linking.openURL(`tel:${asString(contact, "phone")}`)}><Phone color={palette.brand} size={14} /><Text style={[styles.phone, { color: palette.brand }]}>{asString(contact, "phone")}</Text></Pressable> : <Text style={[styles.meta, { color: palette.muted }]}>No phone number was provided.</Text>}
           </Card>
+
+          {asString(snapshot, "description", "instructions") || asString(job, "description", "instructions") ? (
+            <Card padding="lg">
+              <View style={styles.contactHeading}>
+                <UserRound color={palette.brand} size={18} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Customer request notes</Text>
+              </View>
+              {asString(snapshot, "description") || asString(job, "description") ? (
+                <Text style={[styles.meta, { color: palette.ink }]}>{asString(snapshot, "description") ?? asString(job, "description")}</Text>
+              ) : null}
+              {asString(snapshot, "instructions") || asString(job, "instructions") ? (
+                <View style={[styles.assignmentSummary, { backgroundColor: palette.warningSoft }]}>
+                  <Text style={[styles.meta, { color: palette.ink }]}>{asString(snapshot, "instructions") ?? asString(job, "instructions")}</Text>
+                </View>
+              ) : null}
+            </Card>
+          ) : null}
 
           {incidentRows.length > 0 || disputeRows.length > 0 ? (
             <Card variant="warning" padding="lg">
@@ -555,6 +573,7 @@ export function ProviderBookingDetailScreen() {
               <Text style={[styles.meta, { color: palette.muted }]}>{status === "settled" ? "Customer-confirmed delivery triggered the shared escrow split and provider settlement." : "Customer-confirmed offline delivery is complete. Offline fees were already recorded; no online commission was charged."}</Text>
             </Card>
           ) : null}
+          {bookingId ? <LogisticsBookingChat bookingId={bookingId} viewerRole="company" /> : null}
           {resolveIncident.error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><Text style={[styles.errorText, { color: palette.danger }]}>{resolveIncident.error instanceof Error ? resolveIncident.error.message : "Incident response failed."}</Text></View> : null}
           {error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text></View> : null}
         </View>
