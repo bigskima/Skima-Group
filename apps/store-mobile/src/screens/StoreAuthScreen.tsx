@@ -83,7 +83,7 @@ export function StoreAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
             <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
               <View style={[styles.accent,{backgroundColor:palette.brand}]}/>
               {mode!=="login"&&mode!=="register"?<Pressable onPress={()=>setMode("login")} style={styles.back}><ArrowLeft color={palette.brand} size={18}/><Text style={{color:palette.brand,fontWeight:"800",fontSize:12}}>Back to sign in</Text></Pressable>:null}
-              <Text style={[styles.eyebrow,{color:palette.brand}]}>SECURE CUSTOMER ACCOUNT</Text>
+              <Text style={[styles.eyebrow,{color:palette.brand}]}>EVERYDAY SHOPPING</Text>
               <Text style={[styles.title,{color:palette.ink}]}>{title}</Text>
               <Text style={[styles.subtitle,{color:palette.muted}]}>{subtitle}</Text>
               <View style={styles.fields}>
