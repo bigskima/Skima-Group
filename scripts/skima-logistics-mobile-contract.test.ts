@@ -1,6 +1,11 @@
 const appConfig = await Deno.readTextFile("apps/logistics-mobile/app.config.ts");
 const easConfigText = await Deno.readTextFile("apps/logistics-mobile/eas.json");
 const vercelConfigText = await Deno.readTextFile("apps/logistics-mobile/vercel.json");
+const providerWorksRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/works.tsx");
+const storeVercelConfig = await Deno.readTextFile("apps/store-mobile/vercel.json");
+const billsVercelConfig = await Deno.readTextFile("apps/bills-mobile/vercel.json");
+const lpgVercelConfig = await Deno.readTextFile("apps/lpg-mobile/vercel.json");
+const managedDriverCoverage = await Deno.readTextFile("apps/admin/src/admin-managed-driver-coverage-workspace.tsx");
 const appPackage = await Deno.readTextFile("apps/logistics-mobile/package.json");
 const rootPackage = await Deno.readTextFile("package.json");
 const theme = await Deno.readTextFile("apps/logistics-mobile/src/theme/tokens.ts");
@@ -113,6 +118,37 @@ Deno.test("Logistics Vercel app root builds the Expo web export", () => {
   if (config.buildCommand !== "npm run build:web") throw new Error("Logistics Vercel build command mismatch");
   if (config.outputDirectory !== "dist") throw new Error("Logistics Vercel output directory must be dist");
   requireText(vercelConfigText, "vercel-ignore.mjs logistics", "Logistics Vercel ignore gate");
+});
+
+Deno.test("Customer and provider deep links survive browser refresh across the four Expo customer apps", () => {
+  for (const [name, configText] of [
+    ["Logistics", vercelConfigText],
+    ["LPG", lpgVercelConfig],
+    ["Store", storeVercelConfig],
+    ["Bills", billsVercelConfig],
+  ] as const) {
+    const config = JSON.parse(configText) as { rewrites?: Array<{ source?: string; destination?: string }> };
+    if (!config.rewrites?.some((rule) => rule.source === "/(.*)" && rule.destination === "/index.html")) {
+      throw new Error(name + " must route direct deep links and refreshes to the Expo Router entry document");
+    }
+  }
+  requireText(providerWorksRoute, "ProviderOpportunitiesScreen", "legacy /works route resolves to the provider opportunity inbox");
+  requireText(providerWorksRoute, "Backwards-compatible route", "legacy provider deep link compatibility");
+});
+
+Deno.test("Managed Driver coverage shows all enabled geographies but blocks unsafe boundaryless dispatch assignments", () => {
+  requireText(managedDriverCoverage, "const selectableAreas = serviceAreas.data ?? []", "all enabled selectable geographies remain visible");
+  requireText(managedDriverCoverage, "const availableAreas = selectableAreas.filter", "all unassigned enabled areas are listed");
+  requireText(managedDriverCoverage, "Map boundary required", "boundary requirement is visible to administrators");
+  requireText(managedDriverCoverage, "selectedAreaCanBeAssigned", "physical driver assignment remains boundary-gated");
+  requireText(managedDriverCoverage, "geography & coverage setup", "admin can navigate to boundary setup");
+  requireText(managedDriverCoverage, "dispatch uses the customer’s GPS point", "explain why a verified boundary is required");
+});
+
+Deno.test("Logistics request review actions fit the mobile viewport", () => {
+  requireText(request, "actionButton: { flex: 1, minWidth: 0 }", "review actions share constrained available width");
+  requireText(request, "alignItems: \"stretch\"", "buttons align within the action row");
+  requireText(request, 'disabled={!canSubmit}', "publish action respects complete request validation");
 });
 
 Deno.test("The app preserves the LPG visual standard with red brand, premium surfaces and dark/light themes", () => {
