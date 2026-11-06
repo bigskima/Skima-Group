@@ -190,7 +190,7 @@ export function CustomerOrdersScreen() {
     <Screen
       eyebrow="Your activity"
       title="Orders"
-      subtitle="Refills, fuel deliveries, bill payments and marketplace purchases together in one place."
+      subtitle="Review your refills, fuel deliveries, bill payments and Store orders."
       action={<AppButton label="New refill" size="sm" onPress={() => router.push("/(customer)/orders/new")} />}
       refreshControl={
         <RefreshControl
@@ -211,21 +211,21 @@ export function CustomerOrdersScreen() {
       {isPending && allItems.length === 0 ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Gathering your SKIMA activity…</Text>
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading your orders…</Text>
         </View>
       ) : sourceErrors.length > 0 ? (
         <Text style={[styles.sourceNotice, { color: palette.muted }]}>
-          Some activity sources could not refresh. The records below are from the sources currently available.
+          Some of your latest activity couldn’t be refreshed. The information shown may be out of date.
         </Text>
       ) : null}
 
       {!(isPending && allItems.length === 0) && filteredItems.length === 0 ? (
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={27} />}
-          title={filter === "all" ? "Your SKIMA activity will appear here" : `No ${filter === "refills" ? "refill" : filter === "marketplace" ? "marketplace" : filter} activity yet`}
+          title={filter === "all" ? "Your orders and payments will appear here" : `No ${filter === "refills" ? "refill" : filter === "marketplace" ? "marketplace" : filter} activity yet`}
           description={filter === "all"
-            ? "Your refills, fuel deliveries, bill payments and Store purchases will be collected in this list."
-            : "Choose All to see activity from every SKIMA service."}
+            ? "Your refills, fuel deliveries, bill payments and Store orders will appear here."
+            : "No items in this category yet. Choose All to view everything."}
           action={filter === "all"
             ? <AppButton label="Start a refill" onPress={() => router.push("/(customer)/orders/new")} />
             : <AppButton label="Show all activity" variant="secondary" onPress={() => selectFilter("all")} />}
@@ -359,7 +359,7 @@ export function CustomerOrderDetailScreen() {
   const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
   const internalFulfillment = isSkimaInternalFulfillmentChannel(fulfillmentChannel);
   const fulfillmentLabel = internalFulfillment
-    ? "SKIMA-managed fulfillment"
+    ? "SKIMA delivery"
     : station
       ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned partner station")
       : "Finding an available partner station";
@@ -369,7 +369,7 @@ export function CustomerOrderDetailScreen() {
     <Screen
       eyebrow="Order details"
       title={order ? (displayReference(order) ?? "Refill order") : "Refill order"}
-      subtitle="One trusted view of your cylinder, fulfillment route, payment and current delivery stage."
+      subtitle="View your cylinder, delivery details, payment and order progress."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
       refreshControl={
         <RefreshControl
@@ -422,7 +422,7 @@ export function CustomerOrderDetailScreen() {
             </View>
             <View style={styles.infoGrid}>
               <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
-              <InfoField label="Fulfillment" value={fulfillmentLabel} />
+              <InfoField label="Delivery option" value={fulfillmentLabel} />
               <InfoField label="Pickup" value={pickupAddress} />
               <InfoField label="Return" value={returnAddress} />
             </View>
@@ -599,7 +599,7 @@ function friendlyOrderStatus(value: string, fulfillmentChannel?: string | null) 
   const normalized = normalizeStatus(value);
   if (isSkimaInternalFulfillmentChannel(fulfillmentChannel)) {
     const internalLabels: Record<string, string> = {
-      matching_station: "Preparing SKIMA fulfillment",
+      matching_station: "Finding a delivery option",
       station_en_route: "Heading to refill supplier",
       station_verified: "Cylinder received for refill",
       station_settled: "Refill complete · preparing return",
