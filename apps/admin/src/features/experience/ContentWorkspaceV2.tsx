@@ -117,7 +117,7 @@ const EMPTY_PUBLICATION: PublicationForm = {
   publicationKey: "",
   placementKey: "",
   organizationId: "",
-  moduleKey: "",
+  moduleKey: "all",
   audienceKeys: "public",
   countryCodes: "",
   regions: "",
@@ -135,6 +135,44 @@ const EMPTY_PUBLICATION: PublicationForm = {
   startsAt: "",
   endsAt: "",
 };
+
+const appRouteOptions: Record<string, Array<{ label: string; value: string }>> = {
+  lpg: [
+    { label: "Customer home", value: "/(customer)" },
+    { label: "My orders", value: "/(customer)/orders" },
+    { label: "Wallet", value: "/(customer)/wallet" },
+    { label: "Account", value: "/(customer)/account" },
+    { label: "Notifications", value: "/(customer)/notifications" },
+  ],
+  store: [
+    { label: "Shop", value: "/shop" },
+    { label: "My orders", value: "/orders" },
+    { label: "Wallet", value: "/wallet" },
+    { label: "Account", value: "/account" },
+    { label: "Notifications", value: "/notifications" },
+    { label: "Referrals & rewards", value: "/referrals" },
+  ],
+  bills: [
+    { label: "Pay bills", value: "/bills" },
+    { label: "Payment activity", value: "/activity" },
+    { label: "Wallet", value: "/wallet" },
+    { label: "Account", value: "/account" },
+    { label: "Notifications", value: "/notifications" },
+  ],
+  logistics: [
+    { label: "Customer home", value: "/(customer)" },
+    { label: "Request a service", value: "/(customer)/request" },
+    { label: "My jobs", value: "/(customer)/jobs" },
+    { label: "Bookings", value: "/(customer)/bookings" },
+    { label: "Wallet", value: "/(customer)/wallet" },
+    { label: "Account", value: "/(customer)/account" },
+    { label: "Notifications", value: "/(customer)/notifications" },
+    { label: "Referrals & rewards", value: "/(customer)/referrals" },
+  ],
+};
+function routeOptionsForApp(appKey: string) {
+  return [{ label: "Choose destination", value: "" }, ...(appRouteOptions[appKey] ?? [])];
+}
 
 const publicationSteps: readonly AdminTaskFlowStep[] = [
   { key: "surface", label: "Surface", description: "Choose where it appears" },
@@ -164,7 +202,6 @@ const ctaOptions = [
   { label: "No tap action", value: "" },
   { label: "Open an app screen", value: "route" },
   { label: "Open a web link", value: "url" },
-  { label: "Open an application flow", value: "application" },
 ] as const;
 
 export function ContentWorkspaceV2(props: { readonly onNavigate: (href: string) => void }) {
@@ -443,7 +480,7 @@ function PublicationDialog(props: {
         mediaPublicUrl: nullableText(form.mediaPublicUrl),
         mediaAssetId: nullableText(form.mediaAssetId),
         metadata: nullableText(form.mediaPublicUrl) ? { media_public_url: nullableText(form.mediaPublicUrl) } : {},
-        moduleKey: nullableText(form.moduleKey),
+        moduleKey: form.moduleKey === "all" ? null : form.moduleKey,
         organizationId: nullableText(form.organizationId),
         placementKey: form.placementKey,
         priority: Number.parseInt(form.priority, 10) || 0,
@@ -470,6 +507,16 @@ function PublicationDialog(props: {
     event.preventDefault();
     if (!form.placementKey) { setError("Choose where this content should appear."); setStep("surface"); return; }
     if (uploadMedia.isPending) { setError("Wait for the image upload to finish."); setStep("creative"); return; }
+    if (form.ctaType === "route" && (form.moduleKey === "all" || !routeOptionsForApp(form.moduleKey).some((option) => option.value === form.ctaTarget))) {
+      setError("Choose an app and a recognised screen for this in-app action.");
+      setStep("action");
+      return;
+    }
+    if (form.ctaType === "url" && form.ctaTarget && !/^https:\/\//i.test(form.ctaTarget.trim())) {
+      setError("External CTA links must use HTTPS.");
+      setStep("action");
+      return;
+    }
     if (!form.title.trim() && !form.body.trim() && !form.mediaPublicUrl && !form.mediaAssetId) {
       setError("Add an image, title or supporting copy before saving.");
       setStep("creative");
@@ -539,7 +586,18 @@ function PublicationDialog(props: {
                 <summary>Advanced targeting</summary>
                 <div className="skima-form-grid">
                   <TextInput label="Audience keys" helperText="Comma separated only when a custom audience is required." value={form.audienceKeys} onChange={(event) => setForm({ ...form, audienceKeys: event.currentTarget.value })} />
-                  <TextInput label="Module" value={form.moduleKey} onChange={(event) => setForm({ ...form, moduleKey: event.currentTarget.value })} />
+                  <SelectInput
+                    label="Show in which app?"
+                    value={form.moduleKey || "all"}
+                    options={[
+                      { label: "All four SKIMA apps", value: "all" },
+                      { label: "SKIMA Refill", value: "lpg" },
+                      { label: "SKIMA Store", value: "store" },
+                      { label: "SKIMA Logistics", value: "logistics" },
+                      { label: "SKIMA Bills", value: "bills" },
+                    ]}
+                    onChange={(event) => setForm({ ...form, moduleKey: event.currentTarget.value, ctaTarget: "" })}
+                  />
                   <TextInput label="Countries" helperText="Comma separated ISO codes." value={form.countryCodes} onChange={(event) => setForm({ ...form, countryCodes: event.currentTarget.value })} />
                   <TextInput label="Regions" value={form.regions} onChange={(event) => setForm({ ...form, regions: event.currentTarget.value })} />
                   <TextInput label="Cities" value={form.cities} onChange={(event) => setForm({ ...form, cities: event.currentTarget.value })} />
@@ -554,7 +612,14 @@ function PublicationDialog(props: {
               {form.ctaType ? (
                 <div className="skima-form-grid">
                   <TextInput label="Button label" value={form.ctaLabel} onChange={(event) => setForm({ ...form, ctaLabel: event.currentTarget.value })} />
-                  <TextInput label={form.ctaType === "url" ? "Web address" : "Destination"} value={form.ctaTarget} onChange={(event) => setForm({ ...form, ctaTarget: event.currentTarget.value })} />
+                  {form.ctaType === "url" ? (
+                    <TextInput label="External web address" type="url" placeholder="https://…" value={form.ctaTarget} onChange={(event) => setForm({ ...form, ctaTarget: event.currentTarget.value })} />
+                  ) : form.ctaType === "route" ? (
+                    <SelectInput label="Where should the app open?" value={form.ctaTarget} options={routeOptionsForApp(form.moduleKey)} onChange={(event) => setForm({ ...form, ctaTarget: event.currentTarget.value })} />
+                  ) : null}
+                  {form.ctaType === "route" && form.moduleKey === "all" ? (
+                    <p className="skima-muted">Choose one app in Audience → Show in which app before selecting an in-app destination. Use “No tap action” for a banner shared across all four apps.</p>
+                  ) : null}
                 </div>
               ) : <p className="skima-muted">This content will display without a tap action.</p>}
             </AdminFormSection>
@@ -620,7 +685,7 @@ function publicationToForm(publication: Publication): PublicationForm {
     publicationKey: publication.publication_key,
     placementKey: publication.placement_key,
     organizationId: publication.organization_id ?? "",
-    moduleKey: publication.module_key ?? "",
+    moduleKey: publication.module_key ?? "all",
     audienceKeys: publication.audience_keys.join(", ") || "public",
     countryCodes: publication.country_codes.join(", "),
     regions: publication.regions.join(", "),
