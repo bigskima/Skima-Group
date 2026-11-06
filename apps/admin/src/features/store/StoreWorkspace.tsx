@@ -57,7 +57,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   const [deliveryOriginAddress, setDeliveryOriginAddress] = useState("");
   const [deliveryOriginLatitude, setDeliveryOriginLatitude] = useState("");
   const [deliveryOriginLongitude, setDeliveryOriginLongitude] = useState("");
-  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState("25");
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState("");
   const [deliveryBaseFeeAmount, setDeliveryBaseFeeAmount] = useState("0");
   const [freeDeliveryMinimumAmount, setFreeDeliveryMinimumAmount] = useState("");
   const [minimumOrderAmount, setMinimumOrderAmount] = useState("0");
@@ -465,7 +465,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           setDeliveryOriginAddress(catalogText(savedSettings, "delivery_origin_formatted_address"));
           setDeliveryOriginLatitude(catalogText(savedSettings, "delivery_origin_latitude"));
           setDeliveryOriginLongitude(catalogText(savedSettings, "delivery_origin_longitude"));
-          setDeliveryRadiusKm(catalogText(savedSettings, "delivery_radius_km") || "25");
+          setDeliveryRadiusKm(catalogText(savedSettings, "delivery_radius_km"));
           setDeliveryBaseFeeAmount(catalogText(savedSettings, "delivery_base_fee_amount") || "0");
           setFreeDeliveryMinimumAmount(catalogText(savedSettings, "free_delivery_minimum_amount"));
           setMinimumOrderAmount(catalogText(savedSettings, "minimum_order_amount") || "0");
