@@ -26,8 +26,10 @@ Deno.test("Coverage administration can add named service areas without map coord
   requireText(managedMigration, "'geography:'||geography.id::text", "stable service-area key for new geographies");
   requireText(managedMigration, "target_service_area_key", "Managed Driver area assignment");
   requireText(managedMigration, "'geography:'||matched_geography_id::text", "Managed price policy resolves new geography key");
-  requireText(managedAdmin, "area.hasBoundary === true", "physical Driver assignment requires mapped boundary");
-  requireText(managedAdmin, "A new location can be enabled for customer orders and pricing without a map", "clear boundary distinction for administrators");
+  requireText(managedAdmin, "const selectableAreas = serviceAreas.data ?? []", "all active named locations are selectable");
+  requireText(managedAdmin, "const availableAreas = selectableAreas.filter", "already assigned locations are excluded without hiding other areas");
+  requireText(managedAdmin, "selectedAreaCanBeAssigned = selectedArea?.hasBoundary === true", "physical Driver assignment still requires a verified map boundary");
+  requireText(managedAdmin, "All enabled locations are now visible here", "administrator sees the reason an area cannot yet be dispatched");
 });
 
 Deno.test("Managed availability and routing use the same named geography policy", async () => {
