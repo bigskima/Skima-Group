@@ -826,8 +826,8 @@ function PolicyFlowDialog(props: {
                   options={[
                     { label: "Choose what this rule controls", value: "" },
                     { label: "Customers can place refill orders", value: "customer_ordering" },
-                    { label: "Drivers can register and operate", value: "driver_onboarding" },
-                    { label: "Stations can register and operate", value: "station_onboarding" },
+                    { label: "Partner Network drivers can register and operate", value: "driver_onboarding" },
+                    { label: "Partner Network stations can register and operate", value: "station_onboarding" },
                     { label: "SKIMA Managed delivery can serve this area", value: "skima_managed_fulfillment" },
                   ]}
                   required
@@ -951,8 +951,8 @@ function friendlyServiceName(key: string) {
 function friendlyCapabilityName(key: string) {
   const labels: Record<string, string> = {
     customer_ordering: "Customers can place refill orders",
-    driver_onboarding: "Drivers can register and operate",
-    station_onboarding: "Stations can register and operate",
+    driver_onboarding: "Partner Network drivers can register and operate",
+    station_onboarding: "Partner Network stations can register and operate",
     skima_managed_fulfillment: "SKIMA Managed delivery",
   };
   return labels[key] ?? friendlyCode(key);
