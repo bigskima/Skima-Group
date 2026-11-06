@@ -3,7 +3,7 @@ import { BadgeDollarSign, CheckCircle2, Clock3, RefreshCcw, ShieldCheck } from "
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { z } from "zod";
 
-import { createClientIdempotencyKey } from "@skima/frontend-core";
+import { createClientIdempotencyKey, normalizeStatusLabel } from "@skima/frontend-core";
 import { Button, ErrorState, LoadingState, PageHeader, StatusBadge, TextAreaInput, TextInput } from "@skima/ui";
 import { useSessionState } from "./session";
 import "./admin-logistics-fee-workspace.css";
@@ -289,7 +289,7 @@ function LogisticsFeePolicyCard(props: {
           <div className="admin-section-eyebrow">NGN · LOGISTICS BOOKING</div>
           <h2>{props.policy.title}</h2>
         </div>
-        <StatusBadge status={active ? "active" : "not_configured"} />
+        <StatusBadge tone={active ? "success" : "warning"}>{active ? "Active" : "Not configured"}</StatusBadge>
       </div>
       <p>{props.policy.description}</p>
       <div className="admin-logistics-fee-card__timing"><Clock3 size={15} /> {props.policy.applyWhen}</div>
@@ -326,7 +326,7 @@ function LogisticsFeePolicyCard(props: {
             <div className="admin-logistics-fee-card__proposal" key={version.id}>
               <div className="admin-logistics-fee-card__proposal-head">
                 <div><strong>Version {version.version}</strong><small>{formatNgn(version.configuration.fixed_amount)} + {(version.configuration.percentage_basis_points / 100).toFixed(2)}%</small></div>
-                <StatusBadge status={version.lifecycle_status} />
+                <StatusBadge tone={version.lifecycle_status === "approved" ? "success" : version.lifecycle_status === "rejected" ? "danger" : version.lifecycle_status === "scheduled" ? "info" : "warning"}>{normalizeStatusLabel(version.lifecycle_status)}</StatusBadge>
               </div>
               <p>{version.change_reason ?? "No change reason supplied."}</p>
               {version.lifecycle_status === "submitted" && props.canApprove ? (
