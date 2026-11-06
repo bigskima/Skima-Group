@@ -195,7 +195,7 @@ export function LogisticsStoreScreen() {
       const order=record(result);const orderId=asString(order,"orderId")??(typeof result==="string"?result:"received");
       setCart([]);setNote("");setCheckoutKey(idempotency());
       await Promise.all([wallets.refetch(),balances.refetch(),queryClient.invalidateQueries({queryKey:["skima-logistics","store"]})]);
-      Alert.alert("Payment reserved",`Your SKIMA Store order ${orderId==="received"?"has been received":`(${orderId.slice(0,8).toUpperCase()}) is confirmed`}. ${money(total??cartTotal,currency)} has been reserved in SKIMA checkout escrow.`);
+      Alert.alert("Payment received",`Your SKIMA Store order ${orderId==="received"?"has been received":`(${orderId.slice(0,8).toUpperCase()}) is confirmed`}. ${money(total??cartTotal,currency)} is held securely until your order is completed.`);
     },
     onError:(error)=>{
       const message=error instanceof Error?error.message:"Please review your basket and try again.";
@@ -219,7 +219,7 @@ export function LogisticsStoreScreen() {
     <Screen title="SKIMA Store" denseHeader>
       <Pressable onPress={()=>router.back()} style={styles.back}><ArrowLeft color={palette.ink} size={17}/><Text style={[styles.backText,{color:palette.ink}]}>Back to Logistics</Text></Pressable>
       {store.modules.isPending||store.settings.isPending? <ScreenSkeleton cards={2}/> : !store.storeModule||!settings? (
-        <StatePanel title="Store is not available" description="SKIMA Store will appear here when the platform enables it." icon={<Store color={palette.brand} size={23}/>}/>
+        <StatePanel title="Store is not available" description="Store isn’t available right now. Please try again later." icon={<Store color={palette.brand} size={23}/>}/>
       ) : (
         <>
           <View style={[styles.hero,{backgroundColor:palette.surface,borderColor:palette.border}]}>
@@ -242,7 +242,7 @@ export function LogisticsStoreScreen() {
             {activeCategories.map((item)=>{const id=asString(item,"id")??asString(item,"key")??"";return <Filter key={id} label={asString(item,"display_name","name")??"Category"} active={category===id} onPress={()=>setCategory(id)}/>;})}
           </ScrollView>
           {store.items.isPending||store.prices.isPending||store.availability.isPending? <ScreenSkeleton cards={3}/> :
-           store.items.error||store.prices.error||store.availability.error? <StatePanel title="Products could not load" description="Refresh the catalogue and try again." retry={()=>void Promise.all([store.items.refetch(),store.prices.refetch(),store.availability.refetch()])}/> :
+           store.items.error||store.prices.error||store.availability.error? <StatePanel title="Products could not load" description="Refresh products and try again." retry={()=>void Promise.all([store.items.refetch(),store.prices.refetch(),store.availability.refetch()])}/> :
            <>
            <View style={styles.sectionHead}>
              <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>{category==="all"?"Shop all products":asString(activeCategories.find(item=>(asString(item,"id")??asString(item,"key"))===category),"display_name","name")??"Products"}</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>{filtered.length} product{filtered.length===1?"":"s"} available</Text></View>
@@ -334,8 +334,8 @@ export function LogisticsStoreScreen() {
               <TextInput value={note} onChangeText={setNote} placeholder="Order note (optional)" placeholderTextColor={palette.muted} style={[styles.note,{color:palette.ink,borderColor:palette.border}]}/>
               {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Flat delivery fee: {money(deliveryFee,currency)}</Text>:null}
               {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Estimated delivery: {deliveryEtaMin===deliveryEtaMax?`${deliveryEtaMin} business days`:`${deliveryEtaMin}–${deliveryEtaMax} business days`} after SKIMA accepts your order and confirms it can serve your address.</Text>:null}
-              <Pressable onPress={()=>router.push("/(customer)/wallet" as never)}><Text style={[styles.productDescription,{color:palette.brand,fontWeight:"800"}]}>View shared SKIMA Wallet · Add funds</Text></Pressable>
-              {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your shared SKIMA customer wallet is unavailable.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} customer wallet cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
+              <Pressable onPress={()=>router.push("/(customer)/wallet" as never)}><Text style={[styles.productDescription,{color:palette.brand,fontWeight:"800"}]}>View SKIMA Wallet · Add funds</Text></Pressable>
+              {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your SKIMA Wallet is unavailable right now.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} SKIMA Wallet balance cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
               {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Orders are accepted nationwide in Nigeria. SKIMA Store reviews serviceability after checkout; locations we cannot serve will be cancelled and refunded.</Text>:null}
               <Pressable disabled={checkout.isPending||!cartReady||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!cartReady||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
             </>:<Text style={[styles.productDescription,{color:palette.muted}]}>Add a product to your basket to continue.</Text>}
