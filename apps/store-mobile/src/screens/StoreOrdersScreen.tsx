@@ -49,7 +49,7 @@ export function StoreOrdersScreen() {
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={{ fontSize: 11, color: palette.ink, fontWeight: "900" }}>{rows.length} Store {rows.length === 1 ? "order" : "orders"}</Text>
-              <Text style={{ fontSize: 10, color: palette.muted }}>Orders use your existing SKIMA customer account and wallet.</Text>
+              <Text style={{ fontSize: 10, color: palette.muted }}>View your order updates and confirm receipt when your items arrive.</Text>
             </View>
           </Card>
           {rows.map((order, index) => {
@@ -73,7 +73,7 @@ export function StoreOrdersScreen() {
                 </View>
                 <View style={{ height: 1, backgroundColor: palette.border }} />
                 <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-                  <Text style={{ color: palette.muted, fontSize: 10 }}>Fulfilment</Text>
+                  <Text style={{ color: palette.muted, fontSize: 10 }}>Delivery method</Text>
                   <Text style={{ color: palette.ink, fontSize: 10, fontWeight: "800" }}>{statusLabel(asString(order, "fulfillment_method") ?? "delivery")}</Text>
                 </View>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
@@ -82,7 +82,7 @@ export function StoreOrdersScreen() {
                 </View>
                 {canConfirm ? <ActionButton label="Confirm receipt" loading={confirmReceipt.isPending} disabled={confirmReceipt.isPending} onPress={() => confirmReceipt.mutate(id)} /> :
                   completed ? <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><CheckCircle2 color={palette.success} size={14} /><Text style={{ color: palette.success, fontSize: 10, fontWeight: "800" }}>Receipt confirmed · settlement completed</Text></View> :
-                  <Text style={{ color: palette.muted, fontSize: 10 }}>We’ll update this order as it moves through preparation and fulfilment.</Text>}
+                  <Text style={{ color: palette.muted, fontSize: 10 }}>We’ll update you as your order is prepared and delivered.</Text>}
               </Card>
             );
           })}
