@@ -34,6 +34,9 @@ const migrationExceptions = await Deno.readTextFile(
 const migrationCargoRecovery = await Deno.readTextFile(
   "supabase/migrations/20261103144006_logistics_cargo_recovery_dispatch.sql",
 );
+const migrationCategoryAmbiguityFix = await Deno.readTextFile(
+  "supabase/migrations/20261106130000_fix_logistics_job_category_id_ambiguity.sql",
+);
 const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions + "\n" + migrationCargoRecovery;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const providerDriver = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
@@ -124,7 +127,14 @@ Deno.test("Matching is capability, cargo, coverage, verification and capacity co
 });
 
 Deno.test("Customer category requests match all eligible provider services in that category", () => {
-  requireText(migration, "where service.category_id = category_id", "customer category match");
+    const createJob = migrationCategoryAmbiguityFix.slice(
+    migrationCategoryAmbiguityFix.indexOf("create or replace function public.create_logistics_job"),
+    migrationCategoryAmbiguityFix.indexOf("\n\ncommit;"),
+  );
+  requireText(createJob, "where service.category_id = v_category_id", "customer category match uses an unambiguous local variable");
+  requireNotText(createJob, "service.category_id = category_id", "no PL/pgSQL variable/column ambiguity in customer category matching");
+  requireText(createJob, "v_job_id uuid;", "request id uses a collision-free PL/pgSQL variable");
+  requireNotText(createJob, "  job_id uuid;", "no PL/pgSQL job_id variable can collide with the opportunity column");
   requireText(migration, "where service.category_id = job.category_id", "rematch category scope");
   requireNotText(
     migration.slice(
