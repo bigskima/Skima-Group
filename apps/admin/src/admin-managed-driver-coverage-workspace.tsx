@@ -40,6 +40,7 @@ const AreaSchema = z.object({
   lgaName: z.string().nullable(),
   cityName: z.string().nullable(),
   townName: z.string().nullable(),
+  hasBoundary: z.boolean().optional(),
 });
 const AreaListSchema = z.array(AreaSchema.passthrough());
 type Area = z.infer<typeof AreaSchema>;
@@ -138,7 +139,8 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
   });
 
   const assignedKeys = new Set((assignedAreas.data ?? []).map((area) => area.serviceAreaKey));
-  const availableAreas = (serviceAreas.data ?? []).filter((area) => !assignedKeys.has(area.key));
+  const dispatchableAreas = (serviceAreas.data ?? []).filter((area) => area.hasBoundary === true);
+  const availableAreas = dispatchableAreas.filter((area) => !assignedKeys.has(area.key));
 
   useEffect(() => {
     if (areaKey && availableAreas.some((area) => area.key === areaKey)) return;
@@ -263,7 +265,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
               value={areaKey}
               onChange={(event) => setAreaKey(event.currentTarget.value)}
               options={[
-                { label: availableAreas.length ? "Choose an area" : "All available areas are already assigned", value: "" },
+                { label: availableAreas.length ? "Choose an area" : dispatchableAreas.length ? "All map-ready areas are already assigned" : "Add a map boundary to assign a Driver", value: "" },
                 ...availableAreas.map((area) => ({ label: areaLabel(area), value: area.key })),
               ]}
             />
@@ -277,6 +279,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
               ]}
             />
           </div>
+          {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">A new location can be enabled for customer orders and pricing without a map. A verified map boundary is needed only when assigning a physical Managed Driver, so dispatch stays inside the approved area.</p> : null}
           <TextAreaInput label="Admin note (optional)" value={reason} onChange={(event) => setReason(event.currentTarget.value)} placeholder="Example: Awka launch coverage" />
           <Button
             disabled={!canManageCoverage || updateArea.isPending || !areaKey}
