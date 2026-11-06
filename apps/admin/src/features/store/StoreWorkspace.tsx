@@ -32,6 +32,14 @@ const RecordArraySchema = z.array(z.record(z.unknown()));
 const StoreSettingsSchema = z.unknown();
 const StoreProductSchema = z.record(z.unknown());
 const UploadSessionSchema = z.object({ token: z.string(), signedUrl: z.string().url(), storageBucket: z.string(), storagePath: z.string() });
+const StoreOriginGeocodeSchema = z.object({
+  location: z.object({
+    latitude: z.coerce.number().min(-90).max(90),
+    longitude: z.coerce.number().min(-180).max(180),
+  }),
+  formattedAddress: z.string().nullable().optional(),
+  provider: z.string().optional(),
+}).passthrough();
 const MediaAssetSchema = z.union([z.string(), z.record(z.unknown())]);
 
 export function StoreWorkspace(props: { readonly onNavigate: (href: string) => void }) {
@@ -47,6 +55,9 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
   const [deliveryOriginLabel, setDeliveryOriginLabel] = useState("SKIMA Store");
   const [deliveryOriginAddress, setDeliveryOriginAddress] = useState("");
+  const [deliveryOriginLatitude, setDeliveryOriginLatitude] = useState("");
+  const [deliveryOriginLongitude, setDeliveryOriginLongitude] = useState("");
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState("25");
   const [deliveryBaseFeeAmount, setDeliveryBaseFeeAmount] = useState("0");
   const [freeDeliveryMinimumAmount, setFreeDeliveryMinimumAmount] = useState("");
   const [minimumOrderAmount, setMinimumOrderAmount] = useState("0");
@@ -149,6 +160,22 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
     await client.invalidateQueries({ queryKey: ["store-admin"] });
   };
 
+  const geocodeDeliveryOrigin = useMutation({
+    mutationFn: async () => {
+      const address = deliveryOriginAddress.trim();
+      if (address.length < 3) throw new Error("Enter a complete Store dispatch address first.");
+      return api.post("/lpg/maps/geocode", {
+        address,
+        idempotencyKey: createClientIdempotencyKey("admin.storefront.delivery-origin.geocode"),
+      }, StoreOriginGeocodeSchema);
+    },
+    onSuccess: (result) => {
+      setDeliveryOriginLatitude(String(result.location.latitude));
+      setDeliveryOriginLongitude(String(result.location.longitude));
+      if (result.formattedAddress?.trim()) setDeliveryOriginAddress(result.formattedAddress.trim());
+    },
+  });
+
   const saveSettings = useMutation({
     mutationFn: () => {
       const parsedBaseFee = Number(deliveryBaseFeeAmount);
@@ -156,8 +183,18 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       const parsedEtaMinimum = Number(deliveryEtaMinBusinessDays);
       const parsedEtaMaximum = Number(deliveryEtaMaxBusinessDays);
       const parsedFreeThreshold = freeDeliveryMinimumAmount.trim() ? Number(freeDeliveryMinimumAmount) : null;
+      const parsedOriginLatitude = Number(deliveryOriginLatitude);
+      const parsedOriginLongitude = Number(deliveryOriginLongitude);
+      const parsedDeliveryRadius = Number(deliveryRadiusKm);
       if (!deliveryOriginLabel.trim() || !deliveryOriginAddress.trim()) {
         throw new Error("Enter the Store dispatch origin and its formatted address.");
+      }
+      if (!Number.isFinite(parsedOriginLatitude) || parsedOriginLatitude < -90 || parsedOriginLatitude > 90 ||
+        !Number.isFinite(parsedOriginLongitude) || parsedOriginLongitude < -180 || parsedOriginLongitude > 180) {
+        throw new Error("Locate the Store dispatch address or enter valid latitude and longitude coordinates.");
+      }
+      if (!Number.isFinite(parsedDeliveryRadius) || parsedDeliveryRadius <= 0 || parsedDeliveryRadius > 500) {
+        throw new Error("Set a positive delivery radius no greater than 500 km.");
       }
       if (![parsedBaseFee, parsedMinimumOrder].every((value) => Number.isFinite(value) && value >= 0) ||
         (parsedFreeThreshold !== null && (!Number.isFinite(parsedFreeThreshold) || parsedFreeThreshold < 0))) {
@@ -175,11 +212,11 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         fulfillmentMethods: ["delivery", "pickup"],
         deliveryOriginLabel: deliveryOriginLabel.trim(),
         deliveryOriginFormattedAddress: deliveryOriginAddress.trim(),
-        deliveryOriginLatitude: null,
-        deliveryOriginLongitude: null,
+        deliveryOriginLatitude: parsedOriginLatitude,
+        deliveryOriginLongitude: parsedOriginLongitude,
         deliveryBaseFeeAmount: parsedBaseFee,
         deliveryPerKmFeeAmount: 0,
-        deliveryRadiusKm: null,
+        deliveryRadiusKm: parsedDeliveryRadius,
         freeDeliveryMinimumAmount: parsedFreeThreshold,
         minimumOrderAmount: parsedMinimumOrder,
         deliveryEtaMinBusinessDays: parsedEtaMinimum,
@@ -426,6 +463,9 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           setFulfillmentMethod(catalogText(savedSettings, "fulfillment_method") || "delivery");
           setDeliveryOriginLabel(catalogText(savedSettings, "delivery_origin_label") || "SKIMA Store");
           setDeliveryOriginAddress(catalogText(savedSettings, "delivery_origin_formatted_address"));
+          setDeliveryOriginLatitude(catalogText(savedSettings, "delivery_origin_latitude"));
+          setDeliveryOriginLongitude(catalogText(savedSettings, "delivery_origin_longitude"));
+          setDeliveryRadiusKm(catalogText(savedSettings, "delivery_radius_km") || "25");
           setDeliveryBaseFeeAmount(catalogText(savedSettings, "delivery_base_fee_amount") || "0");
           setFreeDeliveryMinimumAmount(catalogText(savedSettings, "free_delivery_minimum_amount"));
           setMinimumOrderAmount(catalogText(savedSettings, "minimum_order_amount") || "0");
@@ -463,7 +503,25 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           <SelectInput label="Default fulfillment" value={fulfillmentMethod} onChange={(event) => setFulfillmentMethod(event.currentTarget.value)} options={[{ label: "Delivery", value: "delivery" }, { label: "Customer pickup", value: "pickup" }]} />
           <div className="admin-notice"><strong>Nationwide delivery</strong><p>Customers may place Store orders from any address in Nigeria. SKIMA charges one flat delivery fee here, then Store operations reviews whether the destination can be served. Unserviceable orders can be cancelled and refunded from the Store orders list.</p></div>
           <TextInput label="Dispatch / warehouse name" value={deliveryOriginLabel} onChange={(event) => setDeliveryOriginLabel(event.currentTarget.value)} placeholder="SKIMA Store" />
-          <TextInput label="Dispatch address or service area" value={deliveryOriginAddress} onChange={(event) => setDeliveryOriginAddress(event.currentTarget.value)} placeholder="Formatted address, town/city and state" />
+          <TextInput label="Dispatch address or service area" value={deliveryOriginAddress} onChange={(event) => { setDeliveryOriginAddress(event.currentTarget.value); setDeliveryOriginLatitude(""); setDeliveryOriginLongitude(""); }} placeholder="Formatted address, town/city and state" />
+          <div className="store-workspace__origin-tools">
+            <Button
+              size="sm"
+              variant="outline"
+              isLoading={geocodeDeliveryOrigin.isPending}
+              disabled={deliveryOriginAddress.trim().length < 3 || geocodeDeliveryOrigin.isPending}
+              onClick={() => geocodeDeliveryOrigin.mutate()}
+            >Locate dispatch address</Button>
+            {deliveryOriginLatitude && deliveryOriginLongitude
+              ? <StatusBadge tone="success">Coordinates located</StatusBadge>
+              : <StatusBadge tone="warning">Coordinates required</StatusBadge>}
+          </div>
+          <div className="store-workspace__price-grid">
+            <TextInput label="Origin latitude" type="number" value={deliveryOriginLatitude} onChange={(event) => setDeliveryOriginLatitude(event.currentTarget.value)} placeholder="e.g. 6.2100" />
+            <TextInput label="Origin longitude" type="number" value={deliveryOriginLongitude} onChange={(event) => setDeliveryOriginLongitude(event.currentTarget.value)} placeholder="e.g. 7.0700" />
+          </div>
+          <TextInput label="Delivery radius (km)" type="number" min="1" max="500" step="0.5" value={deliveryRadiusKm} onChange={(event) => setDeliveryRadiusKm(event.currentTarget.value)} helperText="Maximum distance from the Store dispatch origin for delivery orders." />
+          {geocodeDeliveryOrigin.error ? <StatusBadge tone="danger">{catalogError(geocodeDeliveryOrigin.error)}</StatusBadge> : null}
           <div className="skima-form-grid">
             <TextInput label={`Flat delivery fee (${currencyCode})`} type="number" value={deliveryBaseFeeAmount} onChange={(event) => setDeliveryBaseFeeAmount(event.currentTarget.value)} />
             <TextInput label={`Free delivery from (${currencyCode}, optional)`} type="number" value={freeDeliveryMinimumAmount} onChange={(event) => setFreeDeliveryMinimumAmount(event.currentTarget.value)} />
