@@ -66,7 +66,7 @@ function resolveMostSpecificGeography(matches: readonly Place[]): Place | null {
     if (parentId && parentName) {
       return {
         id: parentId,
-        parent_id: path.length > 2 ? asString(first, "parent_id") : null,
+        parent_id: null,
         canonical_name: parentName,
         display_name: parentName,
         geography_name: parentName,
@@ -213,16 +213,6 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
       { signal },
     ),
     staleTime: 60_000,
-  });
-  const countryRoot = useQuery<Place[]>({
-    queryKey: ["skima-logistics", "geography-search", "NG", "country-root"],
-    enabled: status === "authenticated" && mode === "address" && !selected && debouncedSearch.length >= 2,
-    queryFn: ({ signal }) => api.get(
-      "/runtime/logistics/geographies?countryCode=NG&search=Nigeria&limit=5",
-      RecordArraySchema,
-      { signal },
-    ),
-    staleTime: 10 * 60_000,
   });
   const lookupText = useMemo(() => {
     const context = searchContext?.trim();
