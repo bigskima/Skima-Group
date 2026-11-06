@@ -84,3 +84,6 @@ verify_jwt = false
 
 [functions.logistics-runtime]
 verify_jwt = true
+
+[functions.skima-push-dispatch]
+verify_jwt = true
