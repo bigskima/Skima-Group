@@ -233,7 +233,7 @@ export function CustomerDashboard() {
               <View style={styles.storefrontFeatureCopy}>
                 <Text style={styles.storefrontFeatureEyebrow}>SKIMA STORE</Text>
                 <Text numberOfLines={2} style={styles.storefrontFeatureTitle}>Shop cylinders and essentials.</Text>
-                <Text numberOfLines={1} style={styles.storefrontFeatureBody}>Everyday products in one place.</Text>
+                <Text numberOfLines={1} style={styles.storefrontFeatureBody}>Shop for everyday essentials.</Text>
                 <View style={styles.storefrontFeatureButton}>
                   <Text style={styles.storefrontFeatureButtonText}>Explore Store</Text>
                   <ChevronRight color={colors.brandDark} size={14} />
@@ -1098,7 +1098,7 @@ function CustomerCylinderRow({ cylinder, index }: { cylinder: PlatformRecord; in
           ) : null}
         </View>
         <Text numberOfLines={1} style={[styles.recordMeta, { color: palette.muted }]}>
-          {firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg · {friendlyCylinderStatus(status)}
+          {firstNumber(cylinder, ["size_kg", "sizeKg"]) !== null ? `${firstNumber(cylinder, ["size_kg", "sizeKg"])} kg` : "Size not recorded"} · {friendlyCylinderStatus(status)}
         </Text>
       </View>
       <ChevronRight color={palette.muted} size={18} />
