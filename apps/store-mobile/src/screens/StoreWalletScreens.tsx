@@ -37,14 +37,14 @@ export function StoreWalletScreen({onOpenPage}:{onOpenPage:(page:any)=>void}){
  const recentWithdrawals=(withdrawals.data??[]).slice(0,3);
  return <Page guidePage="wallet" refreshControl={<RefreshControl refreshing={wallets.isRefetching||balances.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
   <GuideTarget page="wallet" targetKey="store.wallet.balance">  <Card style={{gap:12}}>
-   <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between"}}><View style={{flexDirection:"row",alignItems:"center",gap:7}}><ShieldCheck color={palette.brand} size={16}/><Text style={{fontSize:10,fontWeight:"900",color:palette.muted}}>YOUR SKIMA CUSTOMER WALLET</Text></View><Text style={{fontSize:10,color:palette.success,fontWeight:"900"}}>Shared account</Text></View>
+   <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between"}}><View style={{flexDirection:"row",alignItems:"center",gap:7}}><ShieldCheck color={palette.brand} size={16}/><Text style={{fontSize:10,fontWeight:"900",color:palette.muted}}>YOUR SKIMA CUSTOMER WALLET</Text></View></View>
    <Text style={{fontSize:29,fontWeight:"900",color:palette.ink}}>{money(available,currency)}</Text>
    <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between"}}><Text style={{fontSize:11,color:palette.muted}}>Available balance</Text><Text style={{fontSize:11,color:palette.muted}}>Reserved · {money(pending,currency)}</Text></View>
    <View style={{flexDirection:"row",gap:9}}>
     <View style={{flex:1}}><ActionButton label="Add funds" onPress={()=>onOpenPage("top-up")}/></View>
     <View style={{flex:1}}><ActionButton label="Withdraw" variant="secondary" onPress={()=>onOpenPage("withdraw")}/></View>
    </View>
-   {!walletId&&!wallets.isPending?<Notice tone="warning" text="Your shared customer wallet is not active yet. Contact SKIMA support if it does not appear after refreshing."/>:null}
+   {!walletId&&!wallets.isPending?<Notice tone="warning" text="Your SKIMA Wallet isn’t available yet. Refresh and try again. Contact support if it still doesn’t appear."/>:null}
   </Card></GuideTarget>
   <View style={{gap:9}}><SectionTitle title="Quick actions"/><View style={{flexDirection:"row",gap:8}}><View style={{flex:1}}><ActionButton label="Shop now" variant="secondary" small onPress={()=>onOpenPage("shop")}/></View><View style={{flex:1}}><ActionButton label="Refresh balance" variant="quiet" small onPress={refresh}/></View></View></View>
   <View style={{gap:9}}><SectionTitle title="Funding activity"/>{deposits.isPending?<ActivityIndicator color={palette.brand}/>:deposits.error?<State title="Funding history unavailable" body="Please try again." retry={()=>void deposits.refetch()}/>:recentDeposits.length?recentDeposits.map((row,i)=><FinanceRow key={asString(row,"id")??String(i)} icon={<ArrowDownLeft color={palette.success} size={17}/>} title="Wallet funding" subtitle={(asString(row,"public_reference")??"Deposit")+" · "+statusName(asString(row,"status")??"pending")} amount={money(asNumber(row,"amount")??0,asString(row,"currency_code")??currency)}/>):<State title="No funding activity yet" body="Your wallet deposits will appear here after you add funds."/>}</View>
@@ -90,13 +90,13 @@ export function StoreTopUpScreen({onBack}:{onBack:()=>void}){
   finally{setPending(false);}
  };
  return <Page>
-  <SectionTitle title="Add funds" caption="Top up the same SKIMA customer wallet used across all SKIMA apps."/>
-  <Card><View style={{flexDirection:"row",alignItems:"center",gap:8}}><WalletCards color={palette.brand} size={18}/><Text style={{fontSize:12,fontWeight:"900",color:palette.ink}}>Shared customer wallet · NGN</Text></View>
+  <SectionTitle title="Add funds" caption="Add money to your SKIMA Wallet."/>
+  <Card><View style={{flexDirection:"row",alignItems:"center",gap:8}}><WalletCards color={palette.brand} size={18}/><Text style={{fontSize:12,fontWeight:"900",color:palette.ink}}>SKIMA Wallet · NGN</Text></View>
    <AppField label="Amount to add" value={amount} onChangeText={v=>{setAmount(v);setPreviewData(null);setDepositKey(makeIdempotencyKey("store-deposit"));}} keyboardType="decimal-pad" placeholder="e.g. 5000"/>
    {previewData?<View style={{gap:8,backgroundColor:palette.surfaceSubtle,padding:12,borderRadius:14}}><FinanceSummary label="Wallet credit" value={money(value,"NGN")}/><FinanceSummary label="Funding fee" value={money(fee,"NGN")}/><FinanceSummary label="Total payment" value={money(charge,"NGN")} strong/></View>:null}
    {notice?<Notice tone="error" text={notice}/>:null}
    <AppButton label={previewData?"Continue to secure payment":"Review funding fee"} fullWidth disabled={!valid} loading={pending||preview.isPending||initialize.isPending} onPress={()=>void(previewData?confirm():prepare())}/>
-   <Text style={{fontSize:10,color:palette.muted,lineHeight:15}}>Payment processing and wallet credit are handled by SKIMA's finance runtime. This app does not create a separate balance.</Text>
+   <Text style={{fontSize:10,color:palette.muted,lineHeight:15}}></Text>
   </Card>
   <ActionButton label="Back to wallet" variant="quiet" onPress={onBack}/>
  </Page>;
@@ -142,8 +142,8 @@ export function StoreWithdrawScreen({onBack}:{onBack:()=>void}){
   finally{setPending(false);}
  };
  return <Page>
-  <SectionTitle title="Withdraw funds" caption="Send money from your shared SKIMA customer wallet to a verified bank account."/>
-  {currency!=="NGN"?<Notice tone="warning" text="Bank withdrawals are currently available for NGN customer wallets. Your other SKIMA wallet balances remain shared and unchanged."/>:null}
+  <SectionTitle title="Withdraw funds" caption="Send money from your SKIMA Wallet to a verified bank account."/>
+  {currency!=="NGN"?<Notice tone="warning" text="Bank withdrawals are only available for NGN balances right now."/>:null}
   <Card style={{gap:12}}>
    <FinanceSummary label="Available balance" value={money(balance,currency)} strong/>
    <Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>Bank account</Text>

@@ -28,7 +28,7 @@ export function CustomerWalletScreen() {
   return <Screen title="SKIMA Wallet" denseHeader>
     <Pressable onPress={() => router.back()} style={styles.back}><ArrowLeft color={palette.ink} size={17} /><Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Back</Text></Pressable>
     {wallets.isPending || balances.isPending ? <ScreenSkeleton cards={2} /> :
-      wallets.error || balances.error ? <StatePanel title="Wallet unavailable" description="Refresh your shared SKIMA customer wallet." retry={() => void Promise.all([wallets.refetch(), balances.refetch()])} /> :
+      wallets.error || balances.error ? <StatePanel title="Wallet unavailable" description="Refresh your SKIMA Wallet." retry={() => void Promise.all([wallets.refetch(), balances.refetch()])} /> :
       mine.length ? mine.map(wallet => {
         const id = asString(wallet, "id", "wallet_id", "walletId") ?? "";
         const code = asString(wallet, "currency_code", "currencyCode") ?? "NGN";
@@ -37,10 +37,10 @@ export function CustomerWalletScreen() {
         return <View key={id} style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={styles.head}>
             <View style={[styles.icon, { backgroundColor: palette.brandSoft }]}><WalletCards color={palette.brand} size={21} /></View>
-            <View style={styles.headingCopy}><Text style={[styles.currency, { color: palette.ink }]}>{code} customer wallet</Text><Text style={[styles.hint, { color: palette.muted }]}>Shared SKIMA account</Text></View>
+            <View style={styles.headingCopy}><Text style={[styles.currency, { color: palette.ink }]}>{code} customer wallet</Text><Text style={[styles.hint, { color: palette.muted }]}>SKIMA Wallet</Text></View>
           </View>
           <Text style={[styles.amount, { color: palette.ink }]}>{money(balance, code)}</Text>
-          <Text style={[styles.hint, { color: palette.muted }]}>This is your existing customer wallet, shared across LPG, Logistics and SKIMA Store. Funding or withdrawing here does not create a separate Logistics wallet.</Text>
+          <Text style={[styles.hint, { color: palette.muted }]}>Use your SKIMA Wallet to pay for eligible bookings and services.</Text>
           <View style={styles.actions}>
             <Pressable onPress={() => router.push({ pathname: "/(customer)/wallet/top-up", params: { walletId: id } } as never)} style={[styles.action, { backgroundColor: palette.brand }]}>
               <ArrowDownLeft color="#fff" size={17} /><Text style={styles.actionText}>Fund wallet</Text>
@@ -51,7 +51,7 @@ export function CustomerWalletScreen() {
           </View>
         </View>;
       }) : <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <StatePanel title="Your shared customer wallet is not ready" description="Fund the existing customer account. SKIMA will resolve or create the customer wallet associated with your signed-in account." />
+        <StatePanel title="Your SKIMA Wallet is not ready" description="We couldn’t open your wallet. Refresh and try again, or contact support if the problem continues." />
         <Pressable onPress={() => router.push("/(customer)/wallet/top-up" as never)} style={[styles.action, { backgroundColor: palette.brand }]}><ArrowDownLeft color="#fff" size={17} /><Text style={styles.actionText}>Fund customer wallet</Text></Pressable>
       </View>}
   </Screen>;

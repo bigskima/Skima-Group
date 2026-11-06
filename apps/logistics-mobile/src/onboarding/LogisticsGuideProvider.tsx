@@ -15,15 +15,15 @@ const GuideContext=createContext<GuideContextValue|null>(null);
 
 const STEPS:Record<Workspace,Step[]>={
  customer:[
-  {route:"/",targetKey:"customer-home-request",title:"Create a delivery request",body:"Start a move or delivery request. Your route, cargo and timing help SKIMA match qualified providers."},
-  {route:"/",targetKey:"customer-home-services",title:"Choose a service",body:"Browse only the services enabled for your area. You can compare provider offers after publishing a request."},
-  {route:"/",targetKey:"customer-home-wallet",title:"Your shared SKIMA wallet",body:"Your customer wallet is shared across eligible SKIMA services. It is separate from logistics company wallets."},
-  {route:"/",targetKey:"customer-home-store",title:"SKIMA Store",body:"The Store is an additional product area for catalogued goods. It does not replace Logistics."},
+  {route:"/",targetKey:"customer-home-request",title:"Create a delivery request",body:"Start a move or delivery request. Add your route, cargo and timing so providers can send relevant offers."},
+  {route:"/",targetKey:"customer-home-services",title:"Choose a service",body:"Choose from the services available near you. Compare offers after you submit a request."},
+  {route:"/",targetKey:"customer-home-wallet",title:"Your SKIMA Wallet",body:"Check your balance and add funds when a booking requires payment."},
+  {route:"/",targetKey:"customer-home-store",title:"SKIMA Store",body:"Shop for everyday essentials in SKIMA Store."},
  ],
  company:[
-  {route:"/",targetKey:"company-home-overview",title:"Company operations",body:"Your company overview shows matched opportunities and active jobs. Open an opportunity to review and respond."},
-  {route:"/workspace",targetKey:"company-workspace-finance",title:"Company wallet and payouts",body:"Only authorized company owners can manage earnings and payment settings. Operating-fee funds remain separate from withdrawable Logistics earnings."},
-  {route:"/workspace",targetKey:"company-workspace-services",title:"Services and team",body:"Configure what the company can fulfil and grant staff only the workspace access they need."},
+  {route:"/",targetKey:"company-home-overview",title:"Company operations",body:"See new requests and active jobs here. Open a request to review the details and send an offer."},
+  {route:"/workspace",targetKey:"company-workspace-finance",title:"Company wallet and payouts",body:"Company owners can manage payments and withdrawals here. Money set aside for company expenses is separate from earnings available to withdraw."},
+  {route:"/workspace",targetKey:"company-workspace-services",title:"Services and team",body:"Choose the services your company offers and invite team members to help manage the work."},
  ],
 };
 

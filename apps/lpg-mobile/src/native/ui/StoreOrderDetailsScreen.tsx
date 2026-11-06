@@ -104,11 +104,11 @@ export function StoreOrderDetailsScreen() {
               <ShieldCheck color={palette.success} size={19} />
               <View style={styles.paymentCopy}>
                 <Text style={[styles.paymentTitle, { color: palette.ink }]}>
-                  {escrowHoldId ? "Payment reserved in SKIMA escrow" : "Payment status"}
+                  {escrowHoldId ? "Payment held securely" : "Payment status"}
                 </Text>
                 <Text style={[styles.muted, { color: palette.mutedStrong }]}>
                   {escrowHoldId
-                    ? "Your funds are protected while the Store team reviews and fulfils the order."
+                    ? "Your payment is held securely while the Store team prepares your order."
                     : "The current payment reservation is being confirmed."}
                 </Text>
               </View>
@@ -140,7 +140,7 @@ export function StoreOrderDetailsScreen() {
           </Card>
 
           <Card padding="lg">
-            <Text style={[styles.sectionTitle, { color: palette.ink }]}>Fulfilment</Text>
+            <Text style={[styles.sectionTitle, { color: palette.ink }]}>Delivery or pickup</Text>
             {fulfilment === "delivery" && etaMinimum !== null && etaMaximum !== null ? (
               <View style={[styles.etaNotice, { backgroundColor: palette.surfaceSubtle }]}>
                 <Text style={[styles.lineTitle, { color: palette.ink }]}>Estimated delivery</Text>
@@ -211,7 +211,7 @@ export function StoreOrderDetailsScreen() {
             <SummaryRow label="Items subtotal" value={money(subtotal, currency)} />
             <SummaryRow label="Delivery fee" value={deliveryFee === 0 ? "Free" : money(deliveryFee, currency)} />
             <View style={[styles.totalRow, { borderTopColor: palette.border }]}>
-              <Text style={[styles.totalLabel, { color: palette.ink }]}>Total reserved</Text>
+              <Text style={[styles.totalLabel, { color: palette.ink }]}>Total held</Text>
               <Text style={[styles.totalValue, { color: palette.ink }]}>{money(total, currency)}</Text>
             </View>
             <Text style={[styles.muted, { color: palette.muted }]}>

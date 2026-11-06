@@ -151,7 +151,7 @@ export function LogisticsRequestScreen() {
       </View>
 
       {categoriesQuery.isPending ? <ScreenSkeleton cards={2} /> : categoriesQuery.error ? (
-        <StatePanel title="Services could not load" description="The live Logistics service list is temporarily unavailable." retry={() => void categoriesQuery.refetch()} />
+        <StatePanel title="Services could not load" description="We can’t load services right now. Please try again shortly." retry={() => void categoriesQuery.refetch()} />
       ) : (
         <View style={styles.content}>
           {step === 1 ? (
@@ -253,7 +253,7 @@ export function LogisticsRequestScreen() {
               </Card>
               <View style={[styles.safetyNote, { backgroundColor: palette.successSoft }]}>
                 <ShieldCheck color={palette.success} size={17} />
-                <Text style={[styles.safetyText, { color: palette.ink }]}>Your request is shared with providers qualified for the service, route and stated cargo requirements. Viewing opportunities is free.</Text>
+                <Text style={[styles.safetyText, { color: palette.ink }]}>Your request will be shown to providers who can handle the service, route and cargo you describe. You can compare their offers for free.</Text>
               </View>
             </>
           )}

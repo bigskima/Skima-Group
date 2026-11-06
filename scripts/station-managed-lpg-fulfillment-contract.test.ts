@@ -64,8 +64,9 @@ Deno.test("Station Managed remains a fulfillment mode distinct from the channel"
   requireText(migration, "check (fulfillment_mode in ('station_managed','independent_driver','skima_fleet','partner_managed'))", "mode constraint");
   requireText(migration, "fulfillment_channel = 'skima_internal' then 'skima_fleet'", "legacy SKIMA Fleet mapping");
   requireText(migration, "fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed'", "assignment guard");
-  requireText(customer, "Independent Managed", "existing independent-driver option remains available under the new product label");
-  requireText(customer, "SKIMA driver + SKIMA fleet vehicle", "existing SKIMA Fleet option remains available");
+  requireText(customer, "fulfillmentMode === \"independent_driver\"", "independent-driver option remains available");
+  requireText(customer, "Independent delivery partner", "customer-friendly independent delivery label");
+  requireText(customer, "SKIMA delivery team and vehicle", "SKIMA delivery option remains available");
 });
 
 Deno.test("Station delivery pricing is snapshotted and totals are recalculated", () => {
@@ -326,10 +327,10 @@ Deno.test("Station Managed dispatch requires a compliant station-owned LPG vehic
 Deno.test("Customer refill only exposes the separate Station Managed fallback outside coverage", () => {
   requireText(stationEligibilityApi, "useEligibleStationManagedStations", "separate station-managed eligibility hook");
   requireText(customer, "outsideCoverageLikely", "outside-coverage state detection");
-  requireText(customer, "Choose Independent Managed delivery or let this station deliver through its own Station Managed driver.", "customer sees the current delivery-method choices");
-  requireText(customer, "SKIMA Managed / SKIMA Fleet may also be offered when its own fleet and driver network is eligible.", "SKIMA Fleet remains separately eligibility-gated");
+  requireText(customer, "Choose an independent delivery partner or let the selected station deliver your cylinder.", "customer sees the current delivery-method choices");
+  requireText(customer, "SKIMA delivery may also be available for some locations.", "SKIMA delivery remains separately availability-gated");
   requireText(customer, "Boolean(selectedStationManagedCandidate)", "Station Managed choice requires a matching eligible station candidate");
-  requireText(customer, "Station Managed delivery available", "customer sees explicitly identified Station Managed fallback");
+  requireText(customer, "Partner station delivery available", "customer sees the partner-station delivery option");
   requireText(customer, 'selectedStation?.isStationManagedOnly && fulfillmentMode === "station_managed"', "quote is allowed only with the selected Station Managed fallback");
 });
 

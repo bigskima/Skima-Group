@@ -197,7 +197,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
               <View style={styles.copy}>
                 <Text style={[styles.label, { color: theme.palette.ink }]}>SKIMA Station Affiliate</Text>
                 <Text style={[styles.detail, { color: theme.palette.muted }]}>
-                  Refer eligible LPG stations. When approved stations activate and generate eligible SKIMA revenue, you can earn a configured commission for the policy's limited earning period.
+                  Refer LPG stations to SKIMA. When a referred station starts serving customers, you can earn commission for a limited time. Read the programme terms before applying.
                 </Text>
               </View>
             </View>
@@ -224,7 +224,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
               <View style={[styles.affiliateStatus, { backgroundColor: theme.palette.surfaceSubtle }]}>
                 <Text style={[styles.affiliateStatusTitle, { color: theme.palette.ink }]}>Application pending review</Text>
                 <Text style={[styles.affiliateBody, { color: theme.palette.muted }]}>
-                  Your referral code is reserved but cannot be used until SKIMA activates your affiliate account.
+                  Your referral code will be ready after SKIMA reviews and approves your application.
                 </Text>
               </View>
             ) : affiliate.status === "active" ? (
@@ -243,7 +243,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                   </View>
                   <View style={styles.affiliateMetric}>
                     <Text style={[styles.metricValue, { color: theme.palette.ink }]}>{affiliate.activeReferrals ?? 0}</Text>
-                    <Text style={[styles.detail, { color: theme.palette.muted }]}>Activated stations</Text>
+                    <Text style={[styles.detail, { color: theme.palette.muted }]}>Active stations</Text>
                   </View>
                 </View>
                 <View style={[styles.affiliateBalance, { backgroundColor: theme.palette.surfaceSubtle }]}>
@@ -284,10 +284,10 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
             ) : (
               <View style={[styles.affiliateStatus, { backgroundColor: theme.palette.surfaceSubtle }]}>
                 <Text style={[styles.affiliateStatusTitle, { color: theme.palette.ink }]}>
-                  Affiliate account {affiliate.status}
+                  Affiliate account: {affiliate.status.replaceAll("_", " ")}
                 </Text>
                 <Text style={[styles.affiliateBody, { color: theme.palette.muted }]}>
-                  {affiliate.reviewReason || "Your affiliate account is not currently active. Contact SKIMA support if you need a review."}
+                  {affiliate.reviewReason || "This affiliate account isn’t active right now. Contact SKIMA support for help."}
                 </Text>
               </View>
             )}
@@ -342,7 +342,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
           <SettingsRow
             icon={ShieldCheck}
             label="Account protection"
-            detail="Your account and role access are protected by SKIMA permissions"
+            detail="Only authorised people can access your account and its features."
             last
           />
         </View>

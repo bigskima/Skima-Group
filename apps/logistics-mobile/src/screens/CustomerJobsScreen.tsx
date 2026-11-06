@@ -30,7 +30,7 @@ export function CustomerJobsScreen() {
     return filter === "all" ? true : filter === "completed" ? COMPLETED.has(status) : !COMPLETED.has(status);
   }), [filter, jobs.data]);
   return (
-    <Screen eyebrow="YOUR ACTIVITY" title="Requests & bookings" subtitle="Every request, provider response and confirmed journey in one place."
+    <Screen eyebrow="YOUR ACTIVITY" title="Requests & bookings" subtitle="Track your requests and bookings from the first response to completion."
       action={<AppButton label="New request" size="sm" onPress={() => router.push("/(customer)/request" as never)} />}
       refreshControl={<RefreshControl refreshing={jobs.isRefetching} onRefresh={() => void jobs.refetch()} tintColor={palette.brand} />}>
       <View style={styles.filters}>
@@ -49,7 +49,7 @@ export function CustomerJobsScreen() {
           <View style={styles.empty}>
             <View style={[styles.emptyIcon, { backgroundColor: palette.brandSoft }]}><Package color={palette.brand} size={24} /></View>
             <Text style={[styles.emptyTitle, { color: palette.ink }]}>{filter === "completed" ? "No past requests yet" : "No active requests"}</Text>
-            <Text style={[styles.emptyBody, { color: palette.muted }]}>{filter === "completed" ? "Completed logistics jobs will stay available here." : "Create your first logistics request and get matched with eligible providers."}</Text>
+            <Text style={[styles.emptyBody, { color: palette.muted }]}>{filter === "completed" ? "Your completed trips will appear here." : "Create a request and find providers for your route."}</Text>
             {filter !== "completed" ? <AppButton label="Create a request" fullWidth onPress={() => router.push("/(customer)/request" as never)} /> : null}
           </View>
         </Card>

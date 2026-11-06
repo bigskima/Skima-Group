@@ -59,7 +59,7 @@ export function StationsScreen() {
       ) : stations.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Finding stations that serve this location…</Text>
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Finding nearby stations…</Text>
         </View>
       ) : stations.error ? (
         <EmptyState
@@ -70,7 +70,7 @@ export function StationsScreen() {
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={27} />}
           title="No stations nearby yet"
-          description="Verified stations will appear here as SKIMA service becomes available around you."
+          description="No stations are available near this address yet. Try another address or check back later."
         />
       ) : (
         <>
@@ -175,7 +175,7 @@ function friendlyStationStatus(value: string) {
   const labels: Record<string, string> = {
     available: "Available now",
     active: "Available now",
-    configured: "Ready for SKIMA orders",
+    configured: "Accepting orders",
     busy: "High activity",
     temporarily_unavailable: "Temporarily unavailable",
     unavailable: "Unavailable",

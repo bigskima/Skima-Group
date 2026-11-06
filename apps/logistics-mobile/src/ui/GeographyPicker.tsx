@@ -301,7 +301,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
       ) : (
         <View style={[styles.resultsState, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
           <Text style={[styles.hint, { color: palette.muted }]}>
-            {searchFailed ? "The location catalogue or address service is unavailable." : "No exact result in SKIMA's catalogue. You can still enter the full address manually."}
+            {searchFailed ? "We couldn’t search for that address right now." : "We couldn’t find an exact match. You can still enter the full address."}
           </Text>
           {mode === "address" && manualBase && search.length >= 3 ? (
             <Pressable accessibilityRole="button" onPress={useManualAddress} style={[styles.manualButton, { borderColor: palette.borderStrong }]}>

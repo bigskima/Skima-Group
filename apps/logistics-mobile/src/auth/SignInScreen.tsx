@@ -35,7 +35,7 @@ export function SignInScreen() {
           <View style={styles.hero}>
             <View style={[styles.heroIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={26} /></View>
             <Text style={[styles.eyebrow, { color: palette.brand }]}>MOVE WITH CONFIDENCE</Text>
-            <Text style={[styles.title, { color: palette.ink }]}>Your city.{"\n"}Connected.</Text>
+            <Text style={[styles.title, { color: palette.ink }]}>Move what matters.</Text>
             <Text style={[styles.subtitle, { color: palette.muted }]}>Find trusted logistics companies for deliveries, moving, freight and more.</Text>
           </View>
           <View style={[styles.form, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -47,7 +47,7 @@ export function SignInScreen() {
             <AppField label="Password" value={password} onChangeText={setPassword} placeholder="Enter your password" secureTextEntry autoCapitalize="none" leading={<LockKeyhole color={palette.muted} size={17} />} />
             {error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text></View> : null}
             <AppButton label="Sign in securely" fullWidth loading={busy} onPress={() => void submit()} trailingIcon={<ShieldCheck color="#FFFFFF" size={17} />} />
-            <Text style={[styles.footnote, { color: palette.muted }]}>Your account is protected by SKIMA’s secure sign-in.</Text>
+            
           </View>
         </View>
       </ScrollView>

@@ -94,7 +94,7 @@ export function CustomerHomeScreen() {
         <View style={[styles.requestIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={21} /></View>
         <View style={styles.requestCopy}>
           <Text style={[styles.requestTitle, { color: palette.ink }]}>Create a delivery request</Text>
-          <Text style={[styles.requestMeta, { color: palette.muted }]}>Compare qualified providers for your route</Text>
+          <Text style={[styles.requestMeta, { color: palette.muted }]}>Compare offers for your route</Text>
         </View>
         <ChevronRight color={palette.brand} size={20} />
       </Pressable>
@@ -107,7 +107,7 @@ export function CustomerHomeScreen() {
       <View style={styles.statsRow}>
         <Stat value={String(activeJobs.length)} label="Requests" />
         <Stat value={String(activeBookings.length)} label="Bookings" />
-        <Stat value="Free" label="Provider matching" accent />
+        <Stat value="Free" label="Compare offers" accent />
       </View>
 
       <GuideTarget targetKey="customer-home-wallet">
@@ -206,7 +206,7 @@ export function CustomerHomeScreen() {
         <View style={[styles.storeIcon, { backgroundColor: palette.brandSoft }]}><ShoppingBag color={palette.brand} size={19} /></View>
         <View style={styles.requestCopy}>
           <Text style={[styles.requestTitle, { color: palette.ink }]}>SKIMA Store</Text>
-          <Text style={[styles.requestMeta, { color: palette.muted }]}>Cylinders, essentials and more</Text>
+          <Text style={[styles.requestMeta, { color: palette.muted }]}>Shop for everyday essentials</Text>
         </View>
         <ChevronRight color={palette.muted} size={18} />
       </Pressable>

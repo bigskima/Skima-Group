@@ -95,7 +95,7 @@ export function StoreAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
       </Card>
       <View style={{ gap: 8 }}>
         <SectionTitle title="Manage your account" />
-        <AccountLink icon={<WalletCards color={palette.brand} size={18} />} title="Shared wallet" subtitle="Funding, balances and withdrawals" onPress={() => onOpenPage("wallet")} />
+        <AccountLink icon={<WalletCards color={palette.brand} size={18} />} title="Wallet" subtitle="Funding, balances and withdrawals" onPress={() => onOpenPage("wallet")} />
         <AccountLink icon={<Bell color={palette.brand} size={18} />} title="Notifications" subtitle="Store order and account updates" onPress={() => onOpenPage("notifications")} />
         <AccountLink icon={<ShoppingBag color={palette.brand} size={18} />} title="Purchase history" subtitle="Track your Store orders and deliveries" onPress={() => onOpenPage("orders")} />
         <AccountLink icon={<LockKeyhole color={palette.brand} size={18} />} title="Password and security" subtitle="Request a secure password reset" onPress={() => void changePassword()} />

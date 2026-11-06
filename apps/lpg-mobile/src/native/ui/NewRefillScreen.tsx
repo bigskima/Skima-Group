@@ -317,7 +317,7 @@ export function NewRefillScreen() {
       return;
     }
     if (serviceabilityError || serviceabilityPending) {
-      setError("SKIMA couldn't confirm service availability for this trip yet. Check again and continue when the locations are verified.");
+      setError("We couldn’t confirm delivery options for these addresses. Please check again.");
       return;
     }
     const stationManagedCoverageOverride = Boolean(
@@ -327,7 +327,7 @@ export function NewRefillScreen() {
       isSkimaInternalFulfillmentId(stationId) && skimaManagedTripEnabled,
     );
     if (!tripServiceable && !stationManagedCoverageOverride && !skimaManagedCoverageOverride) {
-      setError("SKIMA Managed / SKIMA Fleet and Independent Managed delivery are not available for this trip. Select an eligible Station Managed option if one is offered, or choose another location.");
+      setError("We can’t arrange direct delivery for this trip. Choose a nearby partner station if one is available, or try another address.");
       return;
     }
     if (!Number.isFinite(kilograms) || kilograms <= 0) {
@@ -341,15 +341,15 @@ export function NewRefillScreen() {
       return;
     }
     if (activeStationQuery.isPending) {
-      setError("SKIMA is still checking which fulfilment options can serve this trip. Please wait a moment.");
+      setError("We’re checking which delivery options can serve these addresses. Please wait a moment.");
       return;
     }
     if (activeStationQuery.isError) {
-      setError("SKIMA couldn't verify fulfilment availability right now. Try the availability check again.");
+      setError("We couldn’t check delivery options right now. Please try again.");
       return;
     }
     if (!stationId || !displayedStations.some((station) => station.station_branch_id === stationId)) {
-      setError("No available SKIMA fulfillment option is selected for this refill. Check the options and try again.");
+      setError("Choose one of the available delivery options to continue.");
       return;
     }
 
@@ -501,9 +501,9 @@ export function NewRefillScreen() {
     : locationNeedsMapPosition
       ? "Update location map position"
       : serviceabilityPending
-        ? "Checking service availability…"
+        ? "Checking delivery options…"
         : serviceabilityError
-          ? "Check availability to continue"
+          ? "Check delivery options to continue"
           : serviceUnavailable && !skimaManagedTripEnabled
             ? "Service not available for this trip"
             : !validPurchase
@@ -528,7 +528,7 @@ export function NewRefillScreen() {
     try {
       await expansionInterest.mutateAsync({ locationIds });
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't save your launch notification request. Please try again."));
+      setError(friendlyError(cause, "We couldn’t save your request. Please try again."));
     }
   };
 
@@ -539,7 +539,7 @@ export function NewRefillScreen() {
       subtitle={
         quoteId
           ? "Check the full price before confirming the order."
-          : "Choose the cylinder, locations, refill amount and fulfillment route for this trip."
+          : "Choose your cylinder, collection and return addresses, and the amount of gas you need."
       }
       action={<AppButton
         label={quoteId ? "Edit" : "Cancel"}
@@ -571,7 +571,7 @@ export function NewRefillScreen() {
               </View>
               <View style={styles.quoteHeroIcon}><WalletCards color="#FFFFFF" size={25} /></View>
             </View>
-            <Text style={styles.quoteHeroBody}>This quote is based on your cylinder, selected fulfillment route, refill amount, pickup and return locations.</Text>
+            <Text style={styles.quoteHeroBody}>Your price is based on your cylinder, refill amount, delivery option and selected addresses.</Text>
           </View>
 
           <View style={[styles.quoteCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -596,14 +596,14 @@ export function NewRefillScreen() {
               }
               value={money(firstNumber(quoteRecord, ["deliveryAmount", "delivery_amount", "delivery_fee_amount", "deliveryFeeAmount"]), currency)}
             />
-            <QuoteLine label="SKIMA service fee" value={money(firstNumber(quoteRecord, ["platformFeeAmount", "platform_fee_amount", "platformAmount", "platform_amount"]), currency)} />
+            <QuoteLine label="Service fee" value={money(firstNumber(quoteRecord, ["platformFeeAmount", "platform_fee_amount", "platformAmount", "platform_amount"]), currency)} />
             <View style={[styles.quoteDivider, { backgroundColor: palette.border }]} />
             <QuoteLine label="Total" value={money(total, currency)} strong />
           </View>
 
           <View style={[styles.validity, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.validityText, { color: palette.muted }]}>Quote valid until {formatDate(firstString(quoteRecord, ["expiresAt", "expires_at"]))}. Payment is reserved through your SKIMA wallet only after you confirm.</Text>
+            <Text style={[styles.validityText, { color: palette.muted }]}>This price is valid until {formatDate(firstString(quoteRecord, ["expiresAt", "expires_at"]))}. Your SKIMA Wallet is only charged after you confirm.</Text>
           </View>
 
           <AppButton
@@ -668,7 +668,7 @@ export function NewRefillScreen() {
                   <AlertTriangle color={palette.warning} size={22} />
                   <View style={styles.requirementCopy}>
                     <Text style={[styles.requirementTitle, { color: palette.ink }]}>Update the saved location</Text>
-                    <Text style={[styles.requirementBody, { color: palette.muted }]}>One of these locations does not have a usable map position, so SKIMA cannot verify service availability yet.</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>One of your saved addresses needs a more precise map location. Update it to continue.</Text>
                   </View>
                 </View>
                 <AppButton label="Update locations" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
@@ -678,8 +678,8 @@ export function NewRefillScreen() {
                 <View style={styles.availabilityLead}>
                   <MapPin color={palette.brand} size={22} />
                   <View style={styles.requirementCopy}>
-                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Checking service availability</Text>
-                    <Text style={[styles.requirementBody, { color: palette.muted }]}>We are checking both the pickup and return locations before showing stations and pricing.</Text>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Checking delivery options</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>We’re checking whether a delivery option can serve both addresses before showing your price.</Text>
                   </View>
                 </View>
               </View>
@@ -699,19 +699,19 @@ export function NewRefillScreen() {
                 <View style={styles.availabilityLead}>
                   <MapPin color={palette.brand} size={22} />
                   <View style={styles.requirementCopy}>
-                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA's general delivery coverage is not active here yet</Text>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>We don’t currently deliver to both of these addresses</Text>
                     <Text style={[styles.requirementBody, { color: palette.muted }]}>
                       {pickupUnavailable && deliveryUnavailable
-                        ? "The selected pickup and return locations are outside SKIMA Managed / SKIMA Fleet and Independent Managed delivery coverage."
+                        ? "Our direct delivery service does not cover these two addresses."
                         : pickupUnavailable
-                          ? "The selected pickup location is outside SKIMA Managed and Independent delivery coverage."
-                          : "The selected return location is outside SKIMA Managed and Independent delivery coverage."} You can still continue: SKIMA will separately check whether an approved Station Managed station can serve both locations within its own delivery radius. No refill is confirmed unless a valid station option and quote are available.
+                          ? "Our direct delivery service does not cover the collection address."
+                          : "Our direct delivery service does not cover the return address."} We can still check whether a nearby partner station can serve both addresses. Your refill will only be confirmed after a suitable option and price are shown.
                     </Text>
                   </View>
                 </View>
                 <View style={styles.availabilityActions}>
                   <AppButton label="Choose another location" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
-                  <AppButton label={expansionInterest.isSuccess ? "Launch notification saved" : "Notify me when SKIMA launches here"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
+                  <AppButton label={expansionInterest.isSuccess ? "We’ll let you know when delivery is available" : "Let me know when delivery is available"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
                   {driverOnboardingAvailable ? <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} /> : null}
                   {stationOnboardingAvailable ? <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} /> : null}
                 </View>
@@ -721,8 +721,8 @@ export function NewRefillScreen() {
                 <View style={styles.availabilityLead}>
                   <ShieldCheck color={palette.success} size={22} />
                   <View style={styles.requirementCopy}>
-                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA Managed / SKIMA Fleet is enabled for both locations</Text>
-                    <Text style={[styles.requirementBody, { color: palette.muted }]}>SKIMA is checking its own live driver, vehicle, pricing and dispatch readiness. General marketplace coverage is not required for this option.</Text>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA delivery is available for both addresses</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>We’re checking the driver and vehicle before showing your price.</Text>
                   </View>
                 </View>
               </View>
@@ -731,8 +731,8 @@ export function NewRefillScreen() {
                 <View style={styles.availabilityLead}>
                   <ShieldCheck color={palette.success} size={22} />
                   <View style={styles.requirementCopy}>
-                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Location enabled — checking live fulfilment</Text>
-                    <Text style={[styles.requirementBody, { color: palette.muted }]}>This location can be checked by SKIMA. A refill quote and order are available only when an active station and qualified driver/vehicle can serve both locations.</Text>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Checking delivery options</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>We can show a price once a station and delivery partner are available for both addresses.</Text>
                   </View>
                 </View>
               </View>
@@ -740,7 +740,7 @@ export function NewRefillScreen() {
           ) : null}
 
           {refillStep === 3 ? <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <SectionLead eyebrow="REFILL AMOUNT" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected refill option's current price." />
+            <SectionLead eyebrow="REFILL AMOUNT" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. Your chosen refill option’s current price determines how many kilograms you receive." />
 
             <View style={styles.modeSwitch}>
               <AppButton label="Buy by kg" size="sm" variant={purchaseMode === "kg" ? "primary" : "secondary"} onPress={() => changePurchaseMode("kg")} />
@@ -895,9 +895,9 @@ export function NewRefillScreen() {
               <View style={styles.availabilityLead}>
                 <MapPin color={palette.brand} size={22} />
                 <View style={styles.requirementCopy}>
-                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>No active refill team in this location yet</Text>
+                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>Refills aren’t available at this address yet</Text>
                   <Text style={[styles.requirementBody, { color: palette.muted }]}>
-                    SKIMA can accept location checks across Nigeria, but we can only quote and accept a refill when an approved station has stock and an eligible driver and vehicle can serve this route. No order or wallet reservation is created just because the location is enabled.
+                    We can check addresses across Nigeria, but we can only confirm a refill when a nearby station has gas and a delivery partner can serve both addresses. Checking this address does not place an order or charge your wallet.
                   </Text>
                 </View>
               </View>
@@ -926,11 +926,11 @@ export function NewRefillScreen() {
               <View style={styles.availabilityLead}>
                 <ShieldCheck color={palette.success} size={22} />
                 <View style={styles.requirementCopy}>
-                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>Station Managed delivery available</Text>
+                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>Partner station delivery available</Text>
                   <Text style={[styles.requirementBody, { color: palette.muted }]}>
                     {tripServiceable
-                      ? "No standard eligible station option was found for this refill. This approved station can serve both locations within its configured delivery radius using its own Station Managed workflow."
-                      : "The selected location is outside SKIMA's general customer-ordering launch coverage. This approved station can serve both locations within its configured delivery radius using its own Station Managed workflow."}
+                      ? "This partner station can serve both addresses using its own driver and delivery area."
+                      : "Your address is outside our usual delivery area, but this partner station can serve both locations with its own driver."}
                   </Text>
                 </View>
               </View>
@@ -943,7 +943,7 @@ export function NewRefillScreen() {
                 eyebrow="DELIVERY METHOD"
                 icon={<Store color={palette.brand} size={20} />}
                 title="Who delivers your cylinder?"
-                description="Choose Independent Managed delivery or let this station deliver through its own Station Managed driver. SKIMA Managed / SKIMA Fleet may also be offered when its own fleet and driver network is eligible."
+                description="Choose an independent delivery partner or let the selected station deliver your cylinder. SKIMA delivery may also be available for some locations."
               />
               <View style={styles.choices}>
                 <Pressable
@@ -953,8 +953,8 @@ export function NewRefillScreen() {
                   style={[styles.recordChoice, { backgroundColor: fulfillmentMode === "independent_driver" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMode === "independent_driver" ? palette.brand : palette.border }]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.recordChoiceText, { color: palette.ink }]}>Independent Managed</Text>
-                    <Text style={[styles.capacityBody, { color: palette.muted }]}>An approved Independent Managed provider uses their own approved vehicle for delivery.</Text>
+                    <Text style={[styles.recordChoiceText, { color: palette.ink }]}>Independent delivery partner</Text>
+                    <Text style={[styles.capacityBody, { color: palette.muted }]}>An independent delivery partner will collect and return your cylinder using their own vehicle.</Text>
                   </View>
                   {fulfillmentMode === "independent_driver" ? <CheckCircle2 color={palette.brand} size={20} /> : null}
                 </Pressable>
@@ -1179,10 +1179,10 @@ function StationSelectionSection({
   return (
     <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <SectionLead
-        eyebrow="FULFILLMENT"
+        eyebrow="DELIVERY OPTIONS"
         icon={<Store color={palette.brand} size={20} />}
         title="Choose a refill option"
-        description="SKIMA shows the fulfillment routes currently available for this refill. Partner stations and SKIMA-managed fulfillment can appear here."
+        description="Choose a delivery option for your refill. You may be served by SKIMA or a nearby partner station."
       />
 
       {!ready ? (
@@ -1191,13 +1191,13 @@ function StationSelectionSection({
         <Text style={[styles.emptyText, { color: palette.muted }]}>Finding stations for this refill…</Text>
       ) : failed ? (
         <View style={styles.stationQueryState}>
-          <Text style={[styles.emptyText, { color: palette.muted }]}>We couldn't refresh station availability right now.</Text>
+          <Text style={[styles.emptyText, { color: palette.muted }]}>We couldn’t load nearby stations. Please try again.</Text>
           <AppButton label="Check stations again" variant="secondary" size="sm" onPress={onRetry} />
         </View>
       ) : stations.length === 0 ? (
         <View style={styles.stationQueryState}>
           <Text style={[styles.stationEmptyTitle, { color: palette.ink }]}>No refill option is available right now</Text>
-          <Text style={[styles.emptyText, { color: palette.muted }]}>A partner station may be unavailable, or SKIMA-managed fulfillment may not have a ready driver and vehicle for this trip. Try another location or check again later.</Text>
+          <Text style={[styles.emptyText, { color: palette.muted }]}>No delivery option is available for these addresses right now. Try another location or check again later.</Text>
         </View>
       ) : (
         <View style={styles.stationOptions}>
@@ -1228,7 +1228,7 @@ function StationSelectionSection({
                     <View style={styles.stationNameRow}>
                       <Text style={[styles.stationName, { color: palette.ink }]}>{station.display_name}</Text>
                       {internal ? (
-                        <Text style={[styles.recommendedTag, { color: palette.brand }]}>SKIMA MANAGED</Text>
+                        <Text style={[styles.recommendedTag, { color: palette.brand }]}>SKIMA DELIVERY</Text>
                       ) : marketplaceIndex === 0 ? (
                         <Text style={[styles.recommendedTag, { color: palette.brand }]}>CLOSEST PARTNER</Text>
                       ) : null}
@@ -1239,10 +1239,10 @@ function StationSelectionSection({
                 </View>
                 <View style={styles.stationFacts}>
                   <Text style={[styles.stationFact, { color: palette.ink }]}>
-                    {internal ? "Reference " : ""}{money(station.price_per_kg, station.currency_code)}/kg
+                    {money(station.price_per_kg, station.currency_code)}/kg
                   </Text>
                   {internal ? (
-                    <Text style={[styles.stationFactMuted, { color: palette.muted }]}>SKIMA driver + SKIMA fleet vehicle</Text>
+                    <Text style={[styles.stationFactMuted, { color: palette.muted }]}>SKIMA delivery team and vehicle</Text>
                   ) : (
                     <>
                       <Text style={[styles.stationFactMuted, { color: palette.muted }]}>~{formatDistance(station.route_proxy_distance_meters)} trip</Text>
@@ -1261,7 +1261,7 @@ function StationSelectionSection({
           label={
             showAllStations
               ? "Show closest stations only"
-              : `View all ${stations.length} eligible stations`
+              : `View all ${stations.length} available stations`
           }
           variant="secondary"
           size="sm"

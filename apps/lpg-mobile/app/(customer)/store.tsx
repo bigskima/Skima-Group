@@ -328,7 +328,7 @@ export default function StoreScreen() {
   const checkout = useMutation({
     mutationFn: async () => {
       if (!settings || !cart.length || !customerWalletId || !canCheckout) {
-        throw new Error("Choose an available fulfillment option, delivery address and funded SKIMA Wallet before continuing.");
+        throw new Error("Choose delivery or pickup, add an address if needed, and make sure your SKIMA Wallet covers the total.");
       }
       const lineItems = cart.map((line) => ({
         itemId: line.itemId,
@@ -361,8 +361,8 @@ export default function StoreScreen() {
       setCustomerNote("");
       await Promise.all([wallets.refetch(), locations.refetch()]);
       Alert.alert(
-        "Payment reserved",
-        `Your SKIMA Store order ${orderId === "received" ? "has been received" : `(${orderId.slice(0, 8).toUpperCase()}) is confirmed`}. ${formatMoney(paidTotal, currencyCode)} has been reserved safely in SKIMA escrow. ${deliveryFee > 0 ? `Delivery fee: ${formatMoney(deliveryFee, currencyCode)}. ` : ""}The Store team can now review and prepare your order.`,
+        "Payment received",
+        `Your SKIMA Store order ${orderId === "received" ? "has been received" : `(${orderId.slice(0, 8).toUpperCase()}) is confirmed`}. ${formatMoney(paidTotal, currencyCode)} is held securely while your order is prepared. ${deliveryFee > 0 ? `Delivery fee: ${formatMoney(deliveryFee, currencyCode)}. ` : ""}Confirm receipt after delivery to complete the purchase.`,
       );
     },
     onError: (error) => {
@@ -466,7 +466,7 @@ export default function StoreScreen() {
         <View style={styles.centerState}>
           <PackageCheck color={palette.muted} size={34} />
           <Text style={[styles.emptyTitle, { color: palette.ink }]}>Store is unavailable</Text>
-          <Text style={[styles.emptyBody, { color: palette.muted }]}>{error instanceof Error ? error.message : "The Store catalogue could not be loaded."}</Text>
+          <Text style={[styles.emptyBody, { color: palette.muted }]}>{error instanceof Error ? error.message : "We couldn’t load products. Please try again."}</Text>
           <Pressable onPress={() => void Promise.all([data.items.refetch(), data.settings.refetch(), data.prices.refetch()])} style={[styles.primaryButton, { backgroundColor: palette.brand }]}>
             <Text style={styles.primaryButtonText}>Try again</Text>
           </Pressable>
@@ -475,7 +475,7 @@ export default function StoreScreen() {
         <View style={styles.centerState}>
           <ShoppingBag color={palette.muted} size={38} />
           <Text style={[styles.emptyTitle, { color: palette.ink }]}>SKIMA Store is getting ready</Text>
-          <Text style={[styles.emptyBody, { color: palette.muted }]}>The Store team has not activated its operating catalogue yet. Your LPG and fuel services remain available from Home.</Text>
+          <Text style={[styles.emptyBody, { color: palette.muted }]}>Store isn’t available right now. You can still order LPG and fuel from Home.</Text>
         </View>
       ) : (
         <>
@@ -704,7 +704,7 @@ export default function StoreScreen() {
             </ScrollView>
             {cart.length ? (
               <View style={[styles.checkoutFooter, { borderTopColor: palette.border }]}>
-                <Text style={[styles.checkoutLabel, { color: palette.muted }]}>FULFILLMENT</Text>
+                <Text style={[styles.checkoutLabel, { color: palette.muted }]}>DELIVERY OR PICKUP</Text>
                 <View style={styles.fulfillmentChoices}>
                   {enabledFulfillmentMethods.includes("delivery") ? (
                     <Pressable onPress={() => setFulfillmentMethod("delivery")} style={[styles.fulfillmentChoice, { backgroundColor: fulfillmentMethod === "delivery" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMethod === "delivery" ? palette.brand : palette.border }]}>
@@ -751,7 +751,7 @@ export default function StoreScreen() {
                 ) : (
                   <View style={[styles.pickupNotice, { backgroundColor: palette.surfaceSubtle }]}>
                     <Text style={[styles.fulfillmentChoiceTitle, { color: palette.ink }]}>{firstString(settings, ["pickup_location_label"]) ?? "SKIMA Store pickup"}</Text>
-                    <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>{firstString(settings, ["pickup_formatted_address"]) ?? "Pickup address is not configured yet."}</Text>
+                    <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>{firstString(settings, ["pickup_formatted_address"]) ?? "Pickup details are not available right now."}</Text>
                     {firstString(settings, ["pickup_instructions"]) ? <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>{firstString(settings, ["pickup_instructions"])}</Text> : null}
                   </View>
                 )}
@@ -791,13 +791,13 @@ export default function StoreScreen() {
                 {cartTotal < minimumOrderAmount ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Minimum Store order is {formatMoney(minimumOrderAmount, currencyCode)}.</Text> : null}
                 {walletCurrency !== currencyCode ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet currency must match Store currency ({currencyCode}).</Text> : null}
                 {estimatedCheckoutTotal !== null && !walletSufficient ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet balance does not cover this order total.</Text> : null}
-                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Orders are accepted from addresses across Nigeria. SKIMA Store will review delivery availability after checkout; if we cannot serve the location, the order will be cancelled and the wallet payment refunded.</Text>
+                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Delivery availability is confirmed after checkout. If we cannot deliver to your address, your order will be cancelled and your payment refunded.</Text>
                 {fulfillmentMethod === "delivery" ? (
                   <Text style={[styles.checkoutNote, { color: palette.muted }]}>
                     Estimated delivery: {deliveryEtaMinBusinessDays === deliveryEtaMaxBusinessDays ? `${deliveryEtaMinBusinessDays} business days` : `${deliveryEtaMinBusinessDays}–${deliveryEtaMaxBusinessDays} business days`} after SKIMA accepts your order and confirms the address is serviceable.
                   </Text>
                 ) : null}
-                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Payment is reserved in SKIMA escrow. The Store team can only prepare your order after the wallet reservation succeeds. After delivery, confirm receipt in your order details to complete settlement.</Text>
+                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Your payment is held securely while your order is prepared. After delivery, confirm receipt in your order details to complete the purchase.</Text>
                 <Pressable disabled={checkout.isPending || !cartReady || !canCheckout} onPress={() => checkout.mutate()} style={[styles.primaryButton, styles.checkoutButton, { backgroundColor: palette.brand, opacity: checkout.isPending || !canCheckout ? 0.5 : 1 }]}>
                   {checkout.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Pay and place order</Text>}
                 </Pressable>

@@ -45,7 +45,7 @@ Deno.test("Store checkout uses the existing customer wallet and escrow flow", as
   requireText(shop, "/runtime/storefront/checkout", "Store checkout");
   requireText(shop, "customerWalletId", "Store checkout wallet linkage");
   requireText(shop, "idempotencyKey:checkoutKey", "Store checkout idempotency");
-  requireText(shop, "SKIMA checkout escrow", "Store checkout reservation confirmation");
+  requireText(shop, "Payment is held securely until the order is completed.", "Store customer payment explanation");
   requireText(shop, "/runtime/wallets", "Store shared customer wallet");
   requireText(shop, "/runtime/wallet-balances", "Store wallet balance");
 });
