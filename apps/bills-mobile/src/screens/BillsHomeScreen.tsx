@@ -11,6 +11,7 @@ import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI
 import { AppField } from "../ui/AppField";
 import { AppModal } from "../ui/AppModal";
 import { AppButton } from "../ui/AppButton";
+import { BillsPromotionBanner } from "../ui/BillsPromotionBanner";
 type Row=Record<string,unknown>;
 type Group={key:string;name:string;icon:string;products:Row[]};
 const ValidationSchema=z.record(z.string(),z.unknown());
@@ -86,6 +87,7 @@ export function BillsHomeScreen({onOpenPage,onReceipt}:{onOpenPage:(page:any)=>v
    <Card style={{flex:1,gap:4}}><View style={{flexDirection:"row",alignItems:"center",gap:7}}><WalletCards size={16} color={palette.brand}/><Text style={{fontSize:10,fontWeight:"900",color:palette.muted}}>SKIMA WALLET</Text></View><Text style={{fontSize:22,fontWeight:"900",color:palette.ink}}>{money(balance,currency)}</Text></Card>
    <ActionButton label="Add funds" small onPress={()=>onOpenPage("top-up")}/>
   </View>
+  <BillsPromotionBanner />
   {offers.data?.length?<View style={{gap:9}}><SectionTitle title="Offers and savings" caption="Special offers for your bill payments"/><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:9}}>{offers.data.slice(0,6).map((offer,i)=><Card key={asString(offer,"offer_key")??String(i)} style={{width:205,flexDirection:"row",alignItems:"center",gap:9}}><View style={[styles.offerIcon,{backgroundColor:palette.brandSoft}]}><Gift color={palette.brand} size={18}/></View><View style={{flex:1,gap:2}}><Text style={{color:palette.brand,fontSize:11,fontWeight:"900"}}>{asString(offer,"value_label")??"Offer"}</Text><Text numberOfLines={2} style={{color:palette.ink,fontSize:11,fontWeight:"800"}}>{asString(offer,"offer_name")??"Bill offer"}</Text></View></Card>)}</ScrollView></View>:null}
   <GuideTarget page="bills" targetKey="bills.home.services">  <View style={{gap:10}}>
    <SectionTitle title="Choose a service" caption={catalog.isPending?"Loading bill services…":available+" payment options available"}/>
