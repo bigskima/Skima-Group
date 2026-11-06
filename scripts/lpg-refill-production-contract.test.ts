@@ -134,7 +134,7 @@ Deno.test("refill UI preserves amount-mode drafts and limits long station lists"
   assertIncludes(screen, "stations.slice(0, STATION_PREVIEW_LIMIT)");
   assertIncludes(screen, ": !validPurchase");
   assertIncludes(screen, 'eyebrow="REFILL AMOUNT"');
-  assertIncludes(screen, 'eyebrow="FULFILLMENT"');
+  assertIncludes(screen, 'eyebrow="DELIVERY OPTIONS"');
 });
 
 Deno.test("layered fulfillment stays aligned with SKIMA-owned fleet requirements", async () => {
@@ -149,10 +149,10 @@ Deno.test("layered fulfillment stays aligned with SKIMA-owned fleet requirements
   assertIncludes(helper, "SKIMA_INTERNAL_FULFILLMENT_ID");
   assertIncludes(gateway, "SKIMA_INTERNAL_FULFILLMENT_ID");
   assertIncludes(screen, "isSkimaInternalFulfillmentId");
-  assertIncludes(screen, "SKIMA MANAGED");
+  assertIncludes(screen, "SKIMA DELIVERY");
   assertNotIncludes(screen, "Finding eligible stations…");
   assertIncludes(orders, "isSkimaInternalFulfillmentChannel");
-  assertIncludes(orders, "SKIMA-managed fulfillment");
+  assertIncludes(orders, "SKIMA delivery");
   assertIncludes(alignment, "vehicle.platform_owned");
   assertIncludes(alignment, "relationship_type='fleet_owned'");
   assertIncludes(alignment, "read_lpg_internal_launch_readiness");
@@ -591,9 +591,9 @@ Deno.test("Nigeria location enablement stays separate from physical LPG fulfilme
   assertIncludes(admin, "Physical refill availability is checked separately");
   assertIncludes(partnerCoverage, "area.has_boundary === true");
 
-  assertIncludes(refillScreen, "Location enabled — checking live fulfilment");
-  assertIncludes(refillScreen, "No active refill team in this location yet");
-  assertIncludes(refillScreen, "No order or wallet reservation is created just because the location is enabled.");
+  assertIncludes(refillScreen, "Checking delivery options");
+  assertIncludes(refillScreen, "Refills aren’t available at this address yet");
+  assertIncludes(refillScreen, "Checking this address does not place an order or charge your wallet.");
   assertIncludes(serviceability, "skimaManagedEnabled: z.boolean().optional()");
 });
 
