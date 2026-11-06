@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { requestBillsNotificationPermission } from "../notifications/BillsNotificationLifecycle";
+import { requestBillsNotificationPermission, registerBillsPushDevice } from "../notifications/BillsNotificationLifecycle";
 import { navigateBillsRoute } from "../navigation/billsNavigation";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
 
@@ -19,7 +19,7 @@ export function BillsNotificationsScreen(){
  const mark=useMutation({mutationFn:async(id:string)=>{const r=await session.supabase.rpc("mark_notification_read",{target_message_id:id,target_read:true});if(r.error)throw r.error;return r.data;},onSuccess:()=>client.invalidateQueries({queryKey:["skima-bills","inbox"]})});
  const markAll=useMutation({mutationFn:async()=>{const r=await session.supabase.rpc("mark_all_notifications_read");if(r.error)throw r.error;return r.data;},onSuccess:()=>client.invalidateQueries({queryKey:["skima-bills","inbox"]})});
  const [feedback,setFeedback]=useState("");
- const enable=async()=>{try{await requestBillsNotificationPermission();setFeedback("Device notification permission is enabled. Remote push still requires provider credentials and device registration.");}catch(e){setFeedback(e instanceof Error?e.message:"Notification permission was not granted.");}};
+ const enable=async()=>{try{await requestBillsNotificationPermission();await registerBillsPushDevice(session.session,session.supabase);setFeedback("Device permission is enabled and this installation is registered for remote SKIMA bills notifications.");}catch(e){setFeedback(e instanceof Error?e.message:"Notification permission was not granted.");}};
 
  const rows=useMemo(()=>query.data?.items??[],[query.data]);
  return <Page refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={()=>void query.refetch()} tintColor={palette.brand}/>}>
