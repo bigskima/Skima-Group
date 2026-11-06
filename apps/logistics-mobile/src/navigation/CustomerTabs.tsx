@@ -39,6 +39,7 @@ export function CustomerTabs() {
       <Tabs.Screen name="jobs" options={{ title: "Activity", tabBarIcon: ({ color, size }) => <ClipboardList color={String(color)} size={size} /> }} />
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <UserRound color={String(color)} size={size} /> }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="referrals" options={{ href: null }} />
       <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="wallet/top-up" options={{ href: null }} />
       <Tabs.Screen name="wallet/withdraw" options={{ href: null }} />
