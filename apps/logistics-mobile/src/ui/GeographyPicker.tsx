@@ -92,10 +92,10 @@ function nearestGeography(prediction: Place, geographies: readonly Place[]) {
     asString(address, "region"),
   ].filter((value): value is string => Boolean(value));
 
-  const specific = resolveByAddressComponents(geographies, localityCandidates);
-  if (specific) return specific;
-  const lga = resolveByAddressComponents(geographies, lgaCandidates);
-  if (lga) return lga;
+  const specificMatches = geographies.filter((item) => geographyMatches(item, localityCandidates));
+  if (specificMatches.length) return resolveMostSpecificGeography(specificMatches);
+  const lgaMatches = geographies.filter((item) => geographyMatches(item, lgaCandidates));
+  if (lgaMatches.length) return resolveMostSpecificGeography(lgaMatches);
   const state = resolveByAddressComponents(geographies, stateCandidates, false);
   if (state) return state;
 
