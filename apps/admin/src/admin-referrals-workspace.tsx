@@ -21,6 +21,7 @@ const CampaignSchema = z.object({
   referred_reward: z.record(z.unknown()),
   terms: z.string().nullable(),
   maximum_referrals_per_user: z.number().nullable(),
+  qualification_rules: z.record(z.unknown()).default({event:"first_payment_or_delivery",minimum_amount:0}),
   created_at: z.string(),
 }).passthrough();
 const CampaignArraySchema = z.array(CampaignSchema);
@@ -39,6 +40,8 @@ type FormValue = {
   referred_reward: string;
   terms: string;
   maximum_referrals_per_user: string;
+  qualification_event: "first_payment" | "first_payment_or_delivery";
+  minimum_amount: string;
 };
 
 const APPS: { key: AppKey; label: string }[] = [
@@ -60,6 +63,8 @@ const EMPTY_FORM: FormValue = {
   referred_reward: "{}",
   terms: "",
   maximum_referrals_per_user: "",
+  qualification_event: "first_payment_or_delivery",
+  minimum_amount: "0",
 };
 
 function asDateInput(value: string | null) {
@@ -79,6 +84,8 @@ function toForm(campaign: Campaign): FormValue {
     referred_reward: JSON.stringify(campaign.referred_reward,null,2),
     terms: campaign.terms ?? "",
     maximum_referrals_per_user: campaign.maximum_referrals_per_user === null ? "" : String(campaign.maximum_referrals_per_user),
+    qualification_event: campaign.qualification_rules.event === "first_payment" ? "first_payment" : "first_payment_or_delivery",
+    minimum_amount: String(campaign.qualification_rules.minimum_amount ?? 0),
   };
 }
 function toIso(value:string) {
@@ -116,6 +123,36 @@ export function AdminReferralsWorkspace() {
     },
   });
   const rows=campaigns.data??[];
+  const rewards=useQuery({
+    queryKey:["admin-referral-reward-review"],
+    enabled:status==="authenticated" && canManage,
+    retry:false,
+    queryFn:async()=>{
+      const {data,error}=await supabase.from("referral_reward_entries")
+        .select("id,referral_id,beneficiary_user_id,reward_side,reward_definition,status,created_at,metadata")
+        .in("status",["pending","approved"])
+        .order("created_at",{ascending:false}).limit(100);
+      if(error)throw error;
+      return Array.isArray(data)?data as Record<string,unknown>[]:[];
+    },
+  });
+  const reviewReward=useMutation({
+    mutationFn:async(input:{id:string;decision:"approved"|"rejected"})=>{
+      const {data,error}=await supabase.rpc("review_skima_referral_reward",{
+        target_reward_entry_id:input.id,
+        target_decision:input.decision,
+        target_reason:input.decision==="approved"?"Approved for manual reward fulfilment.":"Rejected during referral reward review.",
+      });
+      if(error)throw error;
+      return input.decision;
+    },
+    onSuccess:async(decision)=>{
+      setNotice(decision==="approved"?"Reward approved and ready for fulfilment. No wallet credit was posted.":"Reward rejected.");
+      setErrorMessage(null);
+      await client.invalidateQueries({queryKey:["admin-referral-reward-review"]});
+    },
+    onError:(cause)=>{setErrorMessage(cause instanceof Error?cause.message:"Reward review failed.");setNotice(null);},
+  });
 
   const save=useMutation({
     mutationFn:async()=>{
@@ -127,6 +164,8 @@ export function AdminReferralsWorkspace() {
       if(starts&&ends&&new Date(ends)<=new Date(starts)) throw new Error("The end date must be after the start date.");
       const max=form.maximum_referrals_per_user.trim()?Number(form.maximum_referrals_per_user):null;
       if(max!==null&&(!Number.isInteger(max)||max<1)) throw new Error("Maximum referrals must be a whole number greater than zero.");
+      const minimumAmount=Number(form.minimum_amount);
+      if(!Number.isFinite(minimumAmount)||minimumAmount<0) throw new Error("Minimum qualifying payment must be zero or greater.");
       const payload={
         campaign_key:form.campaign_key.trim(),
         display_name:form.display_name.trim(),
@@ -196,6 +235,10 @@ export function AdminReferralsWorkspace() {
               <TextInput label="Priority (lower is earlier)" type="number" value={form.priority} onChange={(event)=>setForm({...form,priority:event.currentTarget.value})}/>
               <TextInput label="Maximum referrals per referrer (optional)" type="number" value={form.maximum_referrals_per_user} onChange={(event)=>setForm({...form,maximum_referrals_per_user:event.currentTarget.value})}/>
             </div>
+            <div className="admin-referrals__fields">
+              <label className="admin-referrals__select"><span>How does a referral qualify?</span><select value={form.qualification_event} onChange={(event)=>setForm({...form,qualification_event:event.currentTarget.value as FormValue["qualification_event"]})}><option value="first_payment_or_delivery">First posted payment or completed delivery</option><option value="first_payment">First posted payment only</option></select></label>
+              <TextInput label="Minimum qualifying transaction (NGN)" type="number" min="0" value={form.minimum_amount} onChange={(event)=>setForm({...form,minimum_amount:event.currentTarget.value})}/>
+            </div>
             <div className="admin-referrals__reward-grid">
               <TextAreaInput label="Referrer reward definition (JSON)" rows={4} value={form.referrer_reward} onChange={(event)=>setForm({...form,referrer_reward:event.currentTarget.value})}/>
               <TextAreaInput label="New customer reward definition (JSON)" rows={4} value={form.referred_reward} onChange={(event)=>setForm({...form,referred_reward:event.currentTarget.value})}/>
@@ -218,6 +261,25 @@ export function AdminReferralsWorkspace() {
           </article>)}
         </section>
       </div>
+      <section className="admin-referrals__editor">
+        <div className="admin-referrals__heading"><Gift size={19}/><div><h2>Reward review & fulfilment</h2><p>Qualification creates a pending reward. Approval does not itself move money; the wallet/finance posting must be fulfilled separately.</p></div></div>
+        {rewards.isPending ? <LoadingState label="Loading pending referral rewards…"/> : rewards.error ? <ErrorState title="Reward queue unavailable" message={rewards.error instanceof Error?rewards.error.message:"Could not load reward entries."} onRetry={()=>void rewards.refetch()}/> : rewards.data?.length ? (
+          <div className="admin-referrals__reward-list">
+            {rewards.data.map((reward)=>{
+              const definition=reward.reward_definition && typeof reward.reward_definition==="object" ? reward.reward_definition as Record<string,unknown> : {};
+              const json=JSON.stringify(definition);
+              return <article key={String(reward.id)} className="admin-referrals__campaign">
+                <div className="admin-referrals__campaign-top"><div><strong>{String(reward.reward_side??"").toUpperCase()} reward</strong><small>{String(reward.beneficiary_user_id??"")}</small></div><StatusBadge tone={reward.status==="approved"?"success":"warning"}>{String(reward.status)}</StatusBadge></div>
+                <p>{json}</p>
+                {reward.status==="pending"?<div className="admin-referrals__buttons">
+                  <Button size="sm" disabled={reviewReward.isPending} onClick={()=>reviewReward.mutate({id:String(reward.id),decision:"approved"})}>Approve for fulfilment</Button>
+                  <Button size="sm" variant="outline" disabled={reviewReward.isPending} onClick={()=>reviewReward.mutate({id:String(reward.id),decision:"rejected"})}>Reject</Button>
+                </div>:<small>Approved; awaiting separate fulfilment and financial posting.</small>}
+              </article>;
+            })}
+          </div>
+        ) : <div className="admin-referrals__empty">No referral rewards are waiting for review.</div>}
+      </section>
     </div>
   );
 }
