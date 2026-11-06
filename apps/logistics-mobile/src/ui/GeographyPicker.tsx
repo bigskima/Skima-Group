@@ -28,15 +28,68 @@ function normalized(value: string | null | undefined) {
   return (value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 }
 
-function geographyMatches(place: Place, candidates: readonly string[]) {
+function geographyMatches(place: Place, candidates: readonly string[], allowPartial = true) {
   const name = normalized(asString(place, "canonical_name"));
   const aliases = Array.isArray(place.aliases)
     ? place.aliases.filter((alias): alias is string => typeof alias === "string").map(normalized)
     : [];
   return candidates.some((candidate) => {
     const target = normalized(candidate);
-    return target && (name === target || aliases.includes(target));
+    if (!target) return false;
+    if (name === target || aliases.includes(target)) return true;
+    if (!allowPartial) return name === `${target} state`;
+    return name.includes(target) || aliases.some((alias) => alias.includes(target));
   });
+}
+
+function hierarchyParts(place: Place): string[] {
+  const path = asString(place, "hierarchy_path");
+  if (path) return path.split(" · ").map((part) => part.trim()).filter(Boolean);
+  const name = asString(place, "canonical_name");
+  return name ? [name] : [];
+}
+
+function resolveMostSpecificGeography(matches: readonly Place[]): Place | null {
+  if (!matches.length) return null;
+  const maxDepth = Math.max(...matches.map((item) => hierarchyParts(item).length));
+  const deepest = matches.filter((item) => hierarchyParts(item).length === maxDepth);
+  if (deepest.length === 1) return deepest[0];
+
+  // Several selectable areas can represent one city. Resolve their common
+  // parent rather than arbitrarily choosing one LGA or the country root.
+  const parentIds = new Set(deepest.map((item) => asString(item, "parent_id")).filter(Boolean));
+  if (parentIds.size === 1) {
+    const parentId = [...parentIds][0];
+    const first = deepest[0];
+    const path = hierarchyParts(first);
+    const parentName = path.at(-2) ?? asString(first, "parent_name");
+    if (parentId && parentName) {
+      return {
+        id: parentId,
+        parent_id: path.length > 2 ? asString(first, "parent_id") : null,
+        canonical_name: parentName,
+        display_name: parentName,
+        geography_name: parentName,
+        hierarchy_path: path.slice(0, -1).join(" · "),
+        parent_name: path.at(-3) ?? "Nigeria",
+        country_code: asString(first, "country_code") ?? "NG",
+      };
+    }
+  }
+  const paths = deepest.map(hierarchyParts);
+  const common: string[] = [];
+  for (let index = 0; index < Math.min(...paths.map((path) => path.length)); index += 1) {
+    const part = paths[0][index];
+    if (!paths.every((path) => normalized(path[index]) === normalized(part))) break;
+    common.push(part);
+  }
+  const commonName = common.at(-1);
+  if (!commonName) return null;
+  return matches.find((item) => normalized(asString(item, "canonical_name")) === normalized(commonName)) ?? null;
+}
+
+function resolveByAddressComponents(geographies: readonly Place[], candidates: readonly string[], allowPartial = true) {
+  return resolveMostSpecificGeography(geographies.filter((item) => geographyMatches(item, candidates, allowPartial)));
 }
 
 function nearestGeography(prediction: Place, geographies: readonly Place[]) {
@@ -67,15 +120,27 @@ function nearestGeography(prediction: Place, geographies: readonly Place[]) {
     asString(address, "region"),
   ].filter((value): value is string => Boolean(value));
 
-  const specific = geographies.find((item) => geographyMatches(item, localityCandidates));
+  const specific = resolveByAddressComponents(geographies, localityCandidates);
   if (specific) return specific;
-  const lga = geographies.find((item) => geographyMatches(item, lgaCandidates));
+  const lga = resolveByAddressComponents(geographies, lgaCandidates);
   if (lga) return lga;
-  const state = geographies.find((item) => geographyMatches(item, stateCandidates));
+  const state = resolveByAddressComponents(geographies, stateCandidates, false);
   if (state) return state;
-  return geographies.find((item) => /state$/i.test(asString(item, "canonical_name") ?? "")) ??
-    geographies.find((item) => normalized(asString(item, "canonical_name")) === "nigeria") ??
-    null;
+
+  const description = asString(prediction, "description", "formattedAddress", "formatted_address");
+  if (description) {
+    const normalizedAddress = normalized(description);
+    const addressMatches = geographies.filter((item) => {
+      const name = normalized(asString(item, "canonical_name"));
+      const aliases = Array.isArray(item.aliases)
+        ? item.aliases.filter((alias): alias is string => typeof alias === "string").map(normalized)
+        : [];
+      return (name.length >= 4 && normalizedAddress.includes(name)) ||
+        aliases.some((alias) => alias.length >= 4 && normalizedAddress.includes(alias));
+    });
+    return resolveMostSpecificGeography(addressMatches);
+  }
+  return null;
 }
 
 function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place | null {
@@ -102,6 +167,8 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
     place_id: asString(prediction, "placeId", "place_id"),
     location_source: "locationiq",
     geography_source: "canonical_parent",
+    geography_name: asString(geography, "geography_name", "canonical_name"),
+    geography_hierarchy_path: asString(geography, "hierarchy_path"),
   };
 }
 
@@ -199,20 +266,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
       return (name.length >= 3 && queryText.includes(name)) ||
         aliases.some((alias) => alias.length >= 3 && queryText.includes(alias));
     });
-    const longestMatchLength = Math.max(
-      0,
-      ...specificMatches.map((item) => normalized(asString(item, "canonical_name")).length),
-    );
-    const mostSpecific = specificMatches.filter((item) =>
-      normalized(asString(item, "canonical_name")).length === longestMatchLength
-    );
-    // If the query names several equally specific areas (e.g. Onitsha North
-    // and Onitsha South), do not silently choose one. Keep the manual fallback
-    // at the country root until the customer chooses a precise result.
-    if (mostSpecific.length === 1) return mostSpecific[0];
-    return countryRoot.data?.find((item) =>
-      normalized(asString(item, "canonical_name")) === "nigeria"
-    ) ?? null;
+    return resolveMostSpecificGeography(specificMatches);
   }, [countryRoot.data, query.data, search]);
   const useManualAddress = () => {
     const id = asString(manualBase, "id");
@@ -226,6 +280,8 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
       country_code: "NG",
       location_source: "manual",
       geography_source: "canonical_parent",
+      geography_name: asString(manualBase, "geography_name", "canonical_name"),
+      geography_hierarchy_path: asString(manualBase, "hierarchy_path"),
     });
   };
 
@@ -301,7 +357,9 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
       ) : (
         <View style={[styles.resultsState, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
           <Text style={[styles.hint, { color: palette.muted }]}>
-            {searchFailed ? "We couldn’t search for that address right now." : "We couldn’t find an exact match. You can still enter the full address."}
+            {searchFailed
+              ? "We couldn’t search for that address right now."
+              : "We couldn’t tie this address to a service area yet. Choose a state, LGA or town from the results so providers receive the correct region."}
           </Text>
           {mode === "address" && manualBase && search.length >= 3 ? (
             <Pressable accessibilityRole="button" onPress={useManualAddress} style={[styles.manualButton, { borderColor: palette.borderStrong }]}>
