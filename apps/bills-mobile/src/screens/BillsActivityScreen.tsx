@@ -10,7 +10,7 @@ export function BillsActivityScreen({onReceipt}:{onReceipt:(id:string)=>void}){
  const query=useBillsQuery(["utility","requests"],"/runtime/utility-billing/requests",BillArraySchema,true,15000);
  const rows=query.data??[];
  return <Page guidePage="activity" refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={()=>void query.refetch()} tintColor={palette.brand}/>}>
-  <GuideTarget page="activity" targetKey="bills.activity.history"><SectionTitle title="Bill activity" caption="Every bill request, provider update and reversal in one place."/></GuideTarget>
+  <GuideTarget page="activity" targetKey="bills.activity.history"><SectionTitle title="Bill activity" caption="Review your bill payments and their latest status."/></GuideTarget>
   {query.isPending?<State title="Loading bill activity" body="Retrieving your SKIMA utility payment records."/>:query.error?<State title="Activity unavailable" body="Your payment records are safe. Try again." retry={()=>void query.refetch()}/>:!rows.length?<State title="No bill payments yet" body="Your successful and pending utility payments will appear here."/>:<>
    <Card><Text style={{fontSize:12,fontWeight:"900",color:palette.ink}}>{rows.length} bill requests</Text>{rows.map((row,i)=>{const id=asString(row,"id");const currency=asString(row,"currency_code")??"NGN";return <Pressable key={id??String(i)} disabled={!id} onPress={()=>id&&onReceipt(id)} style={{minHeight:66,flexDirection:"row",alignItems:"center",gap:10,borderTopWidth:i?0.5:0,borderTopColor:palette.border,paddingVertical:10}}>
     <View style={{width:39,height:39,borderRadius:13,backgroundColor:palette.brandSoft,alignItems:"center",justifyContent:"center"}}><Receipt color={palette.brand} size={18}/></View>
