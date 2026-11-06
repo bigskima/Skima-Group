@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
+import { registerLogisticsPushDevice, requestLogisticsNotificationPermission } from "../notifications/LogisticsNotificationLifecycle";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, typography } from "../theme/tokens";
 import { Screen } from "../ui/Screen";
@@ -88,6 +89,19 @@ export function LogisticsNotificationsScreen() {
   const { palette } = useAppTheme();
   const queryClient = useQueryClient();
   const [responseNotice, setResponseNotice] = useState<string | null>(null);
+  const [pushNotice, setPushNotice] = useState<string | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const enablePush = async () => {
+    if (pushBusy) return;
+    setPushBusy(true); setPushNotice(null);
+    try {
+      await requestLogisticsNotificationPermission();
+      const registered = await registerLogisticsPushDevice(session.session, session.supabase);
+      setPushNotice(registered ? "This device is registered for Logistics push notifications." : "Permission is enabled. Complete the Expo project and provider credentials to register remote push.");
+    } catch (cause) {
+      setPushNotice(cause instanceof Error ? cause.message : "Push notifications could not be enabled.");
+    } finally { setPushBusy(false); }
+  };
 
   const center = useQuery({
     queryKey: ["logistics-notifications", session.session?.user.id],
@@ -222,6 +236,17 @@ export function LogisticsNotificationsScreen() {
       <Text style={[styles.scopeNote, { color: palette.muted }]}>
         Store orders and Logistics activity only.
       </Text>
+      <View style={[styles.pushCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={[styles.messageIcon, { backgroundColor: palette.brandSoft }]}><Bell color={palette.brand} size={17} /></View>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={[styles.messageTitle, { color: palette.ink }]}>Delivery alerts on this device</Text>
+          <Text style={[styles.body, { color: palette.muted }]}>Get booking, chat and delivery updates when the app is closed.</Text>
+          {pushNotice ? <Text style={[styles.detailMuted, { color: palette.muted }]}>{pushNotice}</Text> : null}
+        </View>
+        <Pressable disabled={pushBusy} onPress={() => void enablePush()} style={[styles.pushEnable, { backgroundColor: palette.brand, opacity: pushBusy ? 0.55 : 1 }]}>
+          {pushBusy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.acceptText}>Enable</Text>}
+        </Pressable>
+      </View>
 
       {center.isPending ? (
         <View style={styles.loading}><ActivityIndicator color={palette.brand} /></View>
@@ -404,6 +429,8 @@ export function LogisticsNotificationsScreen() {
 
 const styles = StyleSheet.create({
   topActions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  pushCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderWidth: 1, borderRadius: 14 },
+  pushEnable: { minHeight: 34, minWidth: 58, paddingHorizontal: 12, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   unread: { fontSize: 10, fontWeight: "900" },
   back: { flexDirection: "row", alignItems: "center", gap: 7 },
   scopeNote: { fontSize: 10, lineHeight: 14 },
