@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Bell, ChevronRight, LockKeyhole, Moon, ShieldCheck, ShoppingBag, UserRound, WalletCards } from "lucide-react-native";
+import { Bell, ChevronRight, LockKeyhole, Moon, ShieldCheck, ShoppingBag, UserRound, WalletCards, Gift } from "lucide-react-native";
 import * as Linking from "expo-linking";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -98,6 +98,7 @@ export function StoreAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
         <AccountLink icon={<WalletCards color={palette.brand} size={18} />} title="Wallet" subtitle="Funding, balances and withdrawals" onPress={() => onOpenPage("wallet")} />
         <AccountLink icon={<Bell color={palette.brand} size={18} />} title="Notifications" subtitle="Store order and account updates" onPress={() => onOpenPage("notifications")} />
         <AccountLink icon={<ShoppingBag color={palette.brand} size={18} />} title="Purchase history" subtitle="Track your Store orders and deliveries" onPress={() => onOpenPage("orders")} />
+        <AccountLink icon={<Gift color={palette.brand} size={18} />} title="Referrals & rewards" subtitle="Your code, campaigns and leaderboard" onPress={() => onOpenPage("referrals")} />
         <AccountLink icon={<LockKeyhole color={palette.brand} size={18} />} title="Password and security" subtitle="Request a secure password reset" onPress={() => void changePassword()} />
         <Pressable onPress={() => void toggle()} style={{ minHeight: 57, flexDirection: "row", alignItems: "center", gap: 10, padding: 11, borderRadius: 15, backgroundColor: palette.surface, borderWidth: 0.5, borderColor: palette.border }}>
           <Moon color={palette.brand} size={18} />
