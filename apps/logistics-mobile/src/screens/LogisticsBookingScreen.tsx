@@ -18,6 +18,7 @@ import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
 import { LogisticsPublicEntityImage } from "../ui/LogisticsPublicEntityImage";
+import { ServiceDiscoveryModal } from "../ui/ServiceDiscoveryModal";
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
@@ -28,7 +29,7 @@ export function LogisticsBookingScreen() {
   const { id: routeId } = useLocalSearchParams<{ id: string }>();
   const bookingId = Array.isArray(routeId) ? routeId[0] : routeId;
   const { palette } = useAppTheme();
-  const { api, session } = useSession();
+  const { api, session, supabase } = useSession();
   const queryClient = useQueryClient();
   const bookings = useLogisticsQuery(["bookings"], "/runtime/logistics/bookings", Boolean(bookingId));
   const walletsQuery = useLogisticsQuery(["wallets"], "/runtime/wallets");
@@ -88,6 +89,7 @@ export function LogisticsBookingScreen() {
   const [disputeReason, setDisputeReason] = useState("non_delivery");
   const [disputeDetails, setDisputeDetails] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [thankYouVisible, setThankYouVisible] = useState(false);
   const cancelAttemptRef = useRef<string | null>(null);
 
   const walletBalances = balancesQuery.data ?? [];
@@ -158,10 +160,11 @@ export function LogisticsBookingScreen() {
     }, z.record(z.string(), z.unknown())),
     onSuccess: async () => {
       setError(null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "bookings"] }),
-        bookings.refetch(),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: ["skima-logistics", "bookings"] });
+      const refreshed = await bookings.refetch();
+      const latest = (refreshed.data ?? []).find((item) => asString(item, "id") === bookingId);
+      const finalStatus = (asString(latest, "status") ?? "").toLowerCase();
+      if (["settled", "completed_offline"].includes(finalStatus)) setThankYouVisible(true);
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Delivery confirmation could not be completed."),
   });
@@ -547,6 +550,7 @@ export function LogisticsBookingScreen() {
               <Text style={[styles.sectionDescription, { color: palette.muted }]}>Your customer booking fee has been recorded. The company’s receival fee was handled separately.</Text>
             </Card>
           ) : null}
+          <ServiceDiscoveryModal visible={thankYouVisible} currentServiceKey="logistics" title="Thanks for choosing SKIMA!" message="Your logistics delivery has been completed and confirmed. Thank you for choosing SKIMA." supabase={supabase} onClose={() => setThankYouVisible(false)} />
 
           {openDispute.error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><AlertCircle color={palette.danger} size={16} /><Text style={[styles.inlineError, { color: palette.danger }]}>{openDispute.error instanceof Error ? openDispute.error.message : "The delivery dispute could not be opened."}</Text></View> : null}
           {error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><AlertCircle color={palette.danger} size={16} /><Text style={[styles.inlineError, { color: palette.danger }]}>{error}</Text></View> : null}

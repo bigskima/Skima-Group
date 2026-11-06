@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Share, Text, View } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -6,12 +6,17 @@ import { CheckCircle2, Receipt, Share2, ShieldCheck } from "lucide-react-native"
 import { useBillsQuery, BillArraySchema, asNumber, asString, money } from "../api/bills";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
+import { useSession } from "../session/SessionProvider";
+import { ServiceDiscoveryModal } from "./ServiceDiscoveryModal";
 
 function escapeHtml(value:string){const map:Record<string,string>={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};return value.replace(/[&<>"']/g,character=>map[character]??character);}
 export function BillsReceiptScreen({id}:{id:string}){
- const {palette}=useAppTheme();const [busy,setBusy]=useState(false);const [notice,setNotice]=useState("");
+ const {palette}=useAppTheme();const {supabase}=useSession();const [busy,setBusy]=useState(false);const [notice,setNotice]=useState("");const [thankYouVisible,setThankYouVisible]=useState(false);
  const query=useBillsQuery(["utility","requests"],"/runtime/utility-billing/requests",BillArraySchema,true,15000);
  const bill=useMemo(()=>query.data?.find(row=>asString(row,"id")===id)??null,[query.data,id]);
+ const paymentStatus=(asString(bill,"status","payment_status","paymentStatus")??"").toLowerCase();
+ const paymentSuccessful=new Set(["success","successful","succeeded","complete","completed","fulfilled","paid","settled","provider_confirmed"]).has(paymentStatus);
+ useEffect(()=>{if(paymentSuccessful)setThankYouVisible(true);},[id,paymentSuccessful]);
  const currency=asString(bill,"currency_code")??"NGN";
  const rows=[
   ["Service",asString(bill,"product_name","biller_name")??"Utility payment"],
@@ -42,12 +47,13 @@ export function BillsReceiptScreen({id}:{id:string}){
     <Text style={{fontSize:10,color:palette.muted,fontWeight:"900",letterSpacing:1}}>SKIMA BILLS</Text>
     <Text style={{fontSize:26,color:palette.ink,fontWeight:"900"}}>{rows[5][1]}</Text>
     <Text style={{fontSize:10,color:palette.muted}}>{rows[7][1]}</Text>
-    <View style={{flexDirection:"row",alignItems:"center",gap:5,marginTop:4}}><CheckCircle2 color={/success|complete|fulfilled/i.test(asString(bill,"status")??"")?palette.success:palette.warning} size={15}/><Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>{(asString(bill,"status")??"pending").replaceAll("_"," ").toUpperCase()}</Text></View>
+    <View style={{flexDirection:"row",alignItems:"center",gap:5,marginTop:4}}><CheckCircle2 color={paymentSuccessful?palette.success:palette.warning} size={15}/><Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>{(asString(bill,"status","payment_status")??"pending").replaceAll("_"," ").toUpperCase()}</Text></View>
    </Card>
    <Card>{rows.map(([label,value],index)=><View key={label} style={{paddingVertical:10,borderTopWidth:index?0.5:0,borderTopColor:palette.border,gap:4}}><Text style={{fontSize:9,color:palette.muted,fontWeight:"700"}}>{label}</Text><Text selectable style={{fontSize:12,color:palette.ink,fontWeight:label==="Total"?"900":"700"}}>{value}</Text></View>)}</Card>
    <ActionButton label="Export / share receipt (PDF)" onPress={()=>void share()} loading={busy}/>
    {notice?<Notice text={notice} tone="error"/>:null}
    <Notice text="The receipt reflects the current provider status. Pending requests are not treated as successful purchases." tone="info"/>
+   <ServiceDiscoveryModal visible={thankYouVisible} currentServiceKey="bills" title="Thanks for choosing SKIMA!" message="Your bill payment has been processed. Thank you for using SKIMA." supabase={supabase} onClose={()=>setThankYouVisible(false)}/>
   </>}
  </Page>;
 }

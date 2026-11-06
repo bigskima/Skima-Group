@@ -27,6 +27,7 @@ import { AppButton } from "./AppButton";
 import { AppModal } from "./AppModal";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { Screen } from "./Screen";
+import { ServiceDiscoveryModal } from "./ServiceDiscoveryModal";
 
 const TYPE = "customer-refill-request";
 const STATION_PREVIEW_LIMIT = 4;
@@ -54,6 +55,7 @@ export function NewRefillScreen() {
   const [quoteRecord, setQuoteRecord] = useState<PlatformRecord | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [serviceDiscoveryVisible, setServiceDiscoveryVisible] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const draftCreatedAt = useRef(new Date().toISOString());
 
@@ -714,6 +716,7 @@ export function NewRefillScreen() {
                   <AppButton label={expansionInterest.isSuccess ? "We’ll let you know when delivery is available" : "Let me know when delivery is available"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
                   {driverOnboardingAvailable ? <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} /> : null}
                   {stationOnboardingAvailable ? <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} /> : null}
+                  <AppButton label="Explore other SKIMA services" size="sm" onPress={() => setServiceDiscoveryVisible(true)} />
                 </View>
               </View>
             ) : skimaManagedTripEnabled ? (
@@ -1025,6 +1028,7 @@ export function NewRefillScreen() {
       ) : null}
 
       {!quoteId ? <Text style={[styles.draftNote, { color: palette.muted }]}>Your selections are saved on this device so you can continue if you leave this screen before placing the order.</Text> : null}
+      <ServiceDiscoveryModal visible={serviceDiscoveryVisible} currentServiceKey="refill" title="Explore other SKIMA services" message="Refill delivery is not currently available at this location. You can still explore our other services below." supabase={session.supabase} onClose={() => setServiceDiscoveryVisible(false)} />
     </Screen>
   );
 }

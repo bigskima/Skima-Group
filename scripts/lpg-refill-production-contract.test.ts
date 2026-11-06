@@ -1102,10 +1102,10 @@ Deno.test("Admin fulfillment availability saves and confirms the effective netwo
   ]);
 
   assertIncludes(admin, "Available fulfillment networks");
-  assertIncludes(admin, "Both: Partner Network + SKIMA Fleet");
+  assertIncludes(admin, "Both: Partner Network + SKIMA Managed");
   assertIncludes(admin, "Partner Network only");
-  assertIncludes(admin, "SKIMA Fleet only");
-  assertIncludes(admin, "SKIMA Fleet master switch");
+  assertIncludes(admin, "SKIMA Managed only");
+  assertIncludes(admin, "SKIMA Managed master switch");
   assertIncludes(admin, "Saved and verified:");
   assertIncludes(eligibilityGate, "SKIMA Fleet is disabled by the current Admin fulfillment availability settings");
   assertIncludes(eligibilityGate, "Partner Network is disabled by the current Admin fulfillment availability settings");

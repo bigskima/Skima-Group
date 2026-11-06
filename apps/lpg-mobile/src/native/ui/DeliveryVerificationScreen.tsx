@@ -13,6 +13,7 @@ import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { Screen } from "./Screen";
+import { ServiceDiscoveryModal } from "./ServiceDiscoveryModal";
 
 type NoticeTone = "success" | "error" | "neutral";
 
@@ -28,6 +29,7 @@ export function DeliveryVerificationScreen() {
   const [code, setCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<NoticeTone>("neutral");
+  const [thankYouVisible, setThankYouVisible] = useState(false);
 
   const mutation = useGatewayMutation({
     path: "/lpg/orders/delivery-challenge",
@@ -193,7 +195,7 @@ export function DeliveryVerificationScreen() {
       await draftStore.clear(owner, draftType);
       setNoticeTone("success");
       setNotice("Delivery confirmed successfully.");
-      router.replace(`/(customer)/orders/${id}/feedback` as never);
+      setThankYouVisible(true);
     } catch (cause) {
       setNoticeTone("error");
       setNotice(
@@ -365,6 +367,7 @@ export function DeliveryVerificationScreen() {
         <ShieldCheck color={palette.mutedStrong} size={18} />
         <Text style={[styles.safetyText, { color: palette.muted }]}>Do not share this code with anyone who is not completing this specific SKIMA delivery with you.</Text>
       </View>
+      <ServiceDiscoveryModal visible={thankYouVisible} currentServiceKey="refill" title="Thanks for choosing SKIMA!" message="Your refill delivery is complete. Thank you for trusting us with your order." supabase={session.supabase} onClose={() => { setThankYouVisible(false); router.replace(`/(customer)/orders/${id}/feedback` as never); }} />
     </Screen>
   );
 }
