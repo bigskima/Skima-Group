@@ -711,7 +711,7 @@ export function NewRefillScreen() {
                 </View>
                 <View style={styles.availabilityActions}>
                   <AppButton label="Choose another location" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
-                  <AppButton label={expansionInterest.isSuccess ? "Launch notification saved" : "Notify me when SKIMA launches here"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
+                  <AppButton label={expansionInterest.isSuccess ? "We’ll let you know when delivery is available" : "Notify me when SKIMA launches here"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
                   {driverOnboardingAvailable ? <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} /> : null}
                   {stationOnboardingAvailable ? <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} /> : null}
                 </View>
@@ -895,9 +895,9 @@ export function NewRefillScreen() {
               <View style={styles.availabilityLead}>
                 <MapPin color={palette.brand} size={22} />
                 <View style={styles.requirementCopy}>
-                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>No active refill team in this location yet</Text>
+                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>Refills aren’t available at this address yet</Text>
                   <Text style={[styles.requirementBody, { color: palette.muted }]}>
-                    SKIMA can accept location checks across Nigeria, but we can only quote and accept a refill when an approved station has stock and an eligible driver and vehicle can serve this route. No order or wallet reservation is created just because the location is enabled.
+                    We can check addresses across Nigeria, but we can only confirm a refill when a nearby station has gas and a delivery partner can serve both addresses. Checking this address does not place an order or charge your wallet.
                   </Text>
                 </View>
               </View>
