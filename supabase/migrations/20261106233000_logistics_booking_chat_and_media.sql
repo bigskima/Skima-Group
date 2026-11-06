@@ -216,6 +216,12 @@ begin
       or char_length(btrim(target_attachment_mime_type)) not between 3 and 160 then
       raise exception 'attachment name and MIME type are invalid';
     end if;
+    if (message_type_value = 'image' and lower(target_attachment_mime_type) not like 'image/%')
+      or (message_type_value = 'video' and lower(target_attachment_mime_type) not like 'video/%')
+      or (message_type_value = 'audio' and lower(target_attachment_mime_type) not like 'audio/%')
+      or (message_type_value = 'file' and lower(target_attachment_mime_type) like any (array['image/%', 'video/%', 'audio/%'])) then
+      raise exception 'attachment MIME type does not match its chat message type';
+    end if;
   end if;
 
   if target_reply_to_message_id is not null and not exists (
@@ -308,10 +314,27 @@ grant execute on function public.send_logistics_booking_chat_message(uuid,text,t
 grant execute on function public.mark_logistics_booking_chat_read(uuid) to authenticated;
 
 -- A private bucket keeps order media non-public even when an attachment URL is shared.
-insert into storage.buckets (id, name, public, file_size_limit)
-values ('logistics-booking-chat', 'logistics-booking-chat', false, 52428800)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'logistics-booking-chat',
+  'logistics-booking-chat',
+  false,
+  52428800,
+  array[
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif',
+    'video/mp4', 'video/quicktime', 'video/webm',
+    'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/webm', 'audio/wav',
+    'application/pdf', 'text/plain', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/zip', 'application/octet-stream'
+  ]
+)
 on conflict (id) do update
-set public = false, file_size_limit = 52428800;
+set public = false,
+    file_size_limit = 52428800,
+    allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists logistics_booking_chat_media_read_participants on storage.objects;
 create policy logistics_booking_chat_media_read_participants
