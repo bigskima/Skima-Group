@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, Text, View } from "react-native";
 import { CheckCircle2, Clock3, Package, ReceiptText } from "lucide-react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import { useStoreRecords, asNumber, asString, makeIdempotencyKey, money } from "
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./StoreUI";
 import { GuideTarget } from "../onboarding/StoreGuideProvider";
+import { ServiceDiscoveryModal } from "./ServiceDiscoveryModal";
 
 const ActionSchema = z.union([z.string(), z.record(z.string(), z.unknown()), z.null()]);
 const statusLabel = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -18,6 +19,7 @@ const dateLabel = (value: string | null) => value
 export function StoreOrdersScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
+  const [thankYouVisible, setThankYouVisible] = useState(false);
   const orders = useStoreRecords(["orders"], "/runtime/storefront/orders", true, 15_000);
   const confirmReceipt = useMutation({
     mutationFn: (orderId: string) => session.api.post(
@@ -25,7 +27,11 @@ export function StoreOrdersScreen() {
       { orderId, idempotencyKey: makeIdempotencyKey("store-receipt:" + orderId) },
       ActionSchema,
     ),
-    onSuccess: async () => { await orders.refetch(); },
+    onSuccess: async (_result, orderId) => {
+      const refreshed = await orders.refetch();
+      const completedOrder = (refreshed.data ?? []).find((item) => asString(item, "id") === orderId);
+      if ((asString(completedOrder, "status") ?? "").toLowerCase() === "completed") setThankYouVisible(true);
+    },
   });
   const rows = useMemo(() => [...(orders.data ?? [])].sort((left, right) => {
     const a = Date.parse(asString(left, "created_at") ?? "");
@@ -87,6 +93,7 @@ export function StoreOrdersScreen() {
             );
           })}
         </View>}
+      <ServiceDiscoveryModal visible={thankYouVisible} currentServiceKey="store" title="Thanks for choosing SKIMA!" message="Your Store delivery is complete and your receipt is confirmed. Thank you for shopping with SKIMA." supabase={session.supabase} onClose={() => setThankYouVisible(false)} />
     </Page>
   );
 }
