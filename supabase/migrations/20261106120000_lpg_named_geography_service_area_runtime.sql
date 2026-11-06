@@ -167,6 +167,8 @@ declare
   coverage_record public.operational_coverage_assignments%rowtype;
   geography_id uuid;
   legacy_area_id uuid;
+  legacy_mapping_count integer := 0;
+  geography_mapping_count integer := 0;
   coverage_assignment_id uuid;
   managed_key text;
   service_area_key text := btrim(coalesce(target_service_area_key,''));
@@ -273,17 +275,34 @@ begin
         raise exception using errcode='22023',message='Service area was not found';
       end if;
 
-      select mapping.geography_id
-      into geography_id
+      select
+        count(distinct mapping.geography_id)::integer,
+        min(mapping.geography_id::text)::uuid
+      into legacy_mapping_count,geography_id
       from public.geography_migration_mappings mapping
-      join public.geographies geography on geography.id=mapping.geography_id
       where mapping.legacy_source='service_areas'
         and mapping.legacy_id=legacy_area_id
-        and mapping.migration_status='verified'
-        and geography.status='active'
-        and geography.boundary_geometry is not null
-      order by mapping.verified_at desc nulls last,mapping.created_at desc
-      limit 1;
+        and mapping.migration_status='verified';
+
+      if legacy_mapping_count=1 then
+        select count(distinct mapping.legacy_id)::integer
+        into geography_mapping_count
+        from public.geography_migration_mappings mapping
+        where mapping.legacy_source='service_areas'
+          and mapping.geography_id=geography_id
+          and mapping.migration_status='verified';
+      else
+        geography_mapping_count:=0;
+      end if;
+
+      if legacy_mapping_count<>1 or geography_mapping_count<>1 or not exists (
+        select 1 from public.geographies geography
+        where geography.id=geography_id
+          and geography.status='active'
+          and geography.boundary_geometry is not null
+      ) then
+        geography_id:=null;
+      end if;
 
       if geography_id is null then
         raise exception using errcode='55000',
@@ -438,14 +457,13 @@ begin
       message='SKIMA Managed coverage must resolve to a named service area before pricing';
   end if;
 
-  select count(*) into mapping_count
+  select count(distinct mapping.legacy_id)::integer into mapping_count
   from public.geography_migration_mappings mapping
-  join public.service_areas area on area.id=mapping.legacy_id
   where mapping.legacy_source='service_areas'
     and mapping.migration_status='verified'
-    and mapping.geography_id=matched_geography_id
-    and area.status='active';
+    and mapping.geography_id=matched_geography_id;
 
+  geography_key:=null;
   if mapping_count=1 then
     select area.key into geography_key
     from public.geography_migration_mappings mapping
@@ -456,7 +474,8 @@ begin
       and area.status='active'
     order by mapping.verified_at desc,area.key
     limit 1;
-  else
+  end if;
+  if geography_key is null then
     geography_key:='geography:'||matched_geography_id::text;
   end if;
 
