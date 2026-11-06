@@ -79,9 +79,9 @@ function readString(value: unknown): string | null {
 }
 
 const styles = StyleSheet.create({
-  image: { width: 148, height: 44 },
-  compactImage: { width: 40, height: 40 },
-  compactFallback: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  image: { width: 138, height: 40 },
+  compactImage: { width: 44, height: 44 },
+  compactFallback: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   compactInitial: { color: "#FFFFFF", fontSize: 22, fontWeight: "900" },
   wordmark: { alignItems: "flex-start", gap: 0 },
   name: { ...typography.sectionTitle, fontSize: 18, letterSpacing: 1.1, lineHeight: 20 },
