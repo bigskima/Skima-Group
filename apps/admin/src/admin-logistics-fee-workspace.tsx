@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeDollarSign, CheckCircle2, Clock3, RefreshCcw, ShieldCheck } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { z } from "zod";
 
 import { createClientIdempotencyKey } from "@skima/frontend-core";
@@ -181,6 +181,11 @@ function LogisticsFeePolicyCard(props: {
   const [percentage, setPercentage] = useState(active ? String(active.configuration.percentage_basis_points / 100) : "");
   const [reason, setReason] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFixedAmount(active ? String(active.configuration.fixed_amount) : "");
+    setPercentage(active ? String(active.configuration.percentage_basis_points / 100) : "");
+  }, [active?.id]);
 
   const createDraft = useMutation({
     mutationFn: async (event: FormEvent<HTMLFormElement>) => {
