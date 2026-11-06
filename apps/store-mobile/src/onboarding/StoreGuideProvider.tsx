@@ -51,12 +51,12 @@ const STEPS: TourStep[] = [
     page: "orders",
     targetKey: "store.orders.history",
     title: "Track your orders",
-    body: "Follow preparation and delivery updates here. When an order is fulfilled, confirm receipt to finish the order.",
+    body: "Follow preparation and delivery updates here. When your order arrives, confirm receipt to complete your purchase.",
   },
   {
     page: "wallet",
     targetKey: "store.wallet.balance",
-    title: "Use your SKIMA wallet",
+    title: "Your SKIMA Wallet",
     body: "Check your available balance and pending payments, add money, or withdraw to a verified bank account when supported.",
   },
   {
