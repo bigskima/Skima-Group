@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { Button, ErrorState, LoadingState, PageHeader, StatusBadge, TextAreaInput, TextInput } from "@skima/ui";
 import { useSessionState } from "./session";
+import "./admin-logistics-fee-workspace.css";
 
 const ConfigurationSchema = z.object({
   fixed_amount: z.coerce.number().nonnegative(),
@@ -112,8 +113,8 @@ export function AdminLogisticsFeeWorkspace() {
       const key = version.financial_policy_definitions.key;
       if (!POLICIES.some((policy) => policy.key === key)) continue;
       if (version.currency_code !== "NGN") continue;
-      if (version.service_key && version.service_key !== "logistics.booking") continue;
-      if (version.geography_type && version.geography_type !== "global") continue;
+      if (version.service_key !== "logistics.booking") continue;
+      if (version.geography_type !== "global") continue;
       if (version.organization_id) continue;
       grouped.set(key, [...(grouped.get(key) ?? []), version]);
     }
