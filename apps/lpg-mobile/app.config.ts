@@ -1,5 +1,6 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 import { config as loadEnvironment } from "dotenv";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 loadEnvironment({
@@ -9,6 +10,8 @@ loadEnvironment({
 });
 
 const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || "dfa8a21f-0a5c-4d9c-b0ef-49c9ebe2da66";
+const googleServicesCandidate = process.env.SKIMA_REFILL_GOOGLE_SERVICES_FILE?.trim() || "./google-services.json";
+const googleServicesFile = existsSync(resolve(__dirname, googleServicesCandidate)) ? googleServicesCandidate : undefined;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -34,6 +37,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: "com.skima.lpg",
+    ...(googleServicesFile ? { googleServicesFile } : {}),
     blockedPermissions: ["android.permission.RECORD_AUDIO"],
     permissions: [
       "CAMERA",
@@ -87,7 +91,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         isIosBackgroundLocationEnabled: true,
       },
     ],
-    ["expo-notifications", { defaultChannel: "operations" }],
+    ["expo-notifications", { defaultChannel: "refill", color: "#E21D2E", enableRemoteNotifications: true }],
     "expo-sharing",
     [
       "expo-splash-screen",
