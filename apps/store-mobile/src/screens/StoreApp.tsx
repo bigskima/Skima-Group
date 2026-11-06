@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Bell, Package, ShoppingBag, UserRound, WalletCards, Gift } from "lucide-react-native";
+import { ArrowLeft, Bell, Package, ShoppingBag, UserRound, WalletCards } from "lucide-react-native";
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { StoreBrandMark } from "../ui/BrandMark";
