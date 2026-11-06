@@ -33,13 +33,13 @@ const STEPS: TourStep[] = [
     page: "shop",
     targetKey: "store.shop.hero",
     title: "Welcome to SKIMA Store",
-    body: "Browse products from participating sellers. The catalogue shows active products with current prices and available stock.",
+    body: "Browse products from participating sellers. Product pages show current prices and availability.",
   },
   {
     page: "shop",
     targetKey: "store.shop.categories",
     title: "Find what you need",
-    body: "Search by product name and use the category filters to narrow the catalogue before adding items to your basket.",
+    body: "Search by product name and use the category filters to narrow your choices before adding items to your basket.",
   },
   {
     page: "shop",
@@ -51,13 +51,13 @@ const STEPS: TourStep[] = [
     page: "orders",
     targetKey: "store.orders.history",
     title: "Track your orders",
-    body: "Follow preparation and delivery updates here. When an order is fulfilled, confirm receipt to complete its settlement.",
+    body: "Follow preparation and delivery updates here. When an order is fulfilled, confirm receipt to finish the order.",
   },
   {
     page: "wallet",
     targetKey: "store.wallet.balance",
     title: "Use your SKIMA wallet",
-    body: "View available and reserved funds, add money, and withdraw to a verified bank account when supported.",
+    body: "Check your available balance and pending payments, add money, or withdraw to a verified bank account when supported.",
   },
   {
     page: "account",
