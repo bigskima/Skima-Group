@@ -1,4 +1,4 @@
-export type StorePage = "shop" | "orders" | "wallet" | "account" | "top-up" | "withdraw" | "notifications";
+export type StorePage = "shop" | "orders" | "wallet" | "account" | "top-up" | "withdraw" | "notifications" | "referrals";
 type StoreNavigationEvent = { page: StorePage };
 type Listener = (event: StoreNavigationEvent) => void;
 const listeners = new Set<Listener>();
@@ -16,6 +16,7 @@ export function navigateStoreRoute(route: unknown) {
     "/orders": "orders", "/store/orders": "orders", "/wallet": "wallet",
     "/account": "account", "/top-up": "top-up", "/withdraw": "withdraw",
     "/notifications": "notifications",
+    "/referrals": "referrals",
   };
   const page = pages[path];
   if (!page) return false;
