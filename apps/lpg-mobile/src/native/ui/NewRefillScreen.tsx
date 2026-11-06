@@ -528,7 +528,7 @@ export function NewRefillScreen() {
     try {
       await expansionInterest.mutateAsync({ locationIds });
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't save your launch notification request. Please try again."));
+      setError(friendlyError(cause, "We couldn’t save your request. Please try again."));
     }
   };
 
@@ -711,7 +711,7 @@ export function NewRefillScreen() {
                 </View>
                 <View style={styles.availabilityActions}>
                   <AppButton label="Choose another location" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
-                  <AppButton label={expansionInterest.isSuccess ? "We’ll let you know when delivery is available" : "Notify me when SKIMA launches here"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
+                  <AppButton label={expansionInterest.isSuccess ? "We’ll let you know when delivery is available" : "Let me know when delivery is available"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
                   {driverOnboardingAvailable ? <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} /> : null}
                   {stationOnboardingAvailable ? <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} /> : null}
                 </View>
@@ -740,7 +740,7 @@ export function NewRefillScreen() {
           ) : null}
 
           {refillStep === 3 ? <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <SectionLead eyebrow="REFILL AMOUNT" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected refill option's current price." />
+            <SectionLead eyebrow="REFILL AMOUNT" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. Your chosen refill option’s current price determines how many kilograms you receive." />
 
             <View style={styles.modeSwitch}>
               <AppButton label="Buy by kg" size="sm" variant={purchaseMode === "kg" ? "primary" : "secondary"} onPress={() => changePurchaseMode("kg")} />
@@ -1239,7 +1239,7 @@ function StationSelectionSection({
                 </View>
                 <View style={styles.stationFacts}>
                   <Text style={[styles.stationFact, { color: palette.ink }]}>
-                    {internal ? "Reference " : ""}{money(station.price_per_kg, station.currency_code)}/kg
+                    {money(station.price_per_kg, station.currency_code)}/kg
                   </Text>
                   {internal ? (
                     <Text style={[styles.stationFactMuted, { color: palette.muted }]}>SKIMA delivery team and vehicle</Text>
