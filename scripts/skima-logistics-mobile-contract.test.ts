@@ -48,6 +48,7 @@ const driverLocationShare = await Deno.readTextFile("apps/logistics-mobile/src/s
 const providerDriverRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/driver.tsx");
 const providerJobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderJobsScreen.tsx");
 const providerBookingDetail = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderBookingDetailScreen.tsx");
+const bookingChat = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsBookingChat.tsx");
 const providerRoutes = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/_layout.tsx");
 const providerWorkRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work/[id].tsx");
 const providerJobRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work.tsx");
@@ -691,4 +692,34 @@ Deno.test("Logistics visual tours normalize routes and resolve customer/company 
   requireText(guideProvider, "7 days", "tour reminder period");
   requireText(guideProvider, "customer-home-request", "customer request highlight");
   requireText(guideProvider, "company-workspace-finance", "company finance highlight");
+});
+
+
+Deno.test("Customer and company booking details open one live order-specific chat", () => {
+  requireText(booking, 'LogisticsBookingChat bookingId={bookingId} viewerRole="customer"', "customer chat is inside its booking detail");
+  requireText(providerBookingDetail, 'LogisticsBookingChat bookingId={bookingId} viewerRole="company"', "company chat is inside the same booking detail");
+  requireText(bookingChat, 'table: "logistics_booking_chat_messages"', "Realtime changes subscribe to the booking chat table");
+  requireText(bookingChat, '"booking_id=eq." + props.bookingId', "Realtime subscription filters to the open booking");
+  requireText(bookingChat, '.eq("booking_id", props.bookingId)', "message query filters to the open booking");
+  requireText(bookingChat, 'rpc("send_logistics_booking_chat_message"', "messages are sent through the participant-checked RPC");
+  requireText(bookingChat, 'rpc("mark_logistics_booking_chat_read"', "opening the booking records read receipts");
+  requireText(bookingChat, "reply_to_message_id", "chat replies are persisted");
+  requireText(bookingChat, "Seen", "sender sees read receipts");
+});
+
+Deno.test("Booking chat shares photos, videos, audio and documents through private media storage", () => {
+  requireText(bookingChat, 'launchImageLibraryAsync', "customer and company can pick photos/videos");
+  requireText(bookingChat, 'mediaTypes: ["images", "videos"]', "photo and video selection");
+  requireText(bookingChat, "DocumentPicker.getDocumentAsync", "files and audio attachments");
+  requireText(bookingChat, 'storage.from(BUCKET).upload', "selected media is uploaded");
+  requireText(bookingChat, 'createSignedUrl', "private media uses signed read URLs");
+  requireText(bookingChat, "MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024", "client upload limit matches server");
+  requireText(bookingChat, 'props.bookingId + "/" + userId + "/"', "attachment object path is booking and sender scoped");
+});
+
+Deno.test("The quote and request notes can be read by both sides", () => {
+  requireText(detail, "Company note", "customer can read provider quote notes before confirming");
+  requireText(providerBookingDetail, "Customer request notes", "company can read the original customer request notes from the booking");
+  requireText(providerOpportunities, "Customer note:", "company can read customer counteroffer notes while negotiating");
+  requireText(booking, "Company quote note", "customer can read provider notes after confirming the order");
 });

@@ -299,6 +299,12 @@ export function LogisticsJobDetailScreen() {
                               <View style={{ flex: 1, gap: 3 }}>
                                 <Text style={[styles.offerPrice, { color: palette.ink }]}>{amountMinor !== null ? majorAmount(amountMinor, currency, decimals) : "Price unavailable"}</Text>
                                 <Text style={[styles.offerMeta, { color: palette.muted }]}>{asNumber(offer, "estimated_duration_minutes") ? `Approx. ${asNumber(offer, "estimated_duration_minutes")} minutes` : "Delivery time to be agreed"} · {asString(offer, "offer_type")?.replace(/_/g, " ") ?? "Provider quote"}</Text>
+                                {asString(nested(offer, "terms"), "message", "note") ? (
+                                  <View style={[styles.additionalInstructions, { backgroundColor: palette.warningSoft }]}>
+                                    <Text style={[styles.additionalInstructionsLabel, { color: palette.ink }]}>Company note</Text>
+                                    <Text style={[styles.description, { color: palette.ink }]}>{asString(nested(offer, "terms"), "message", "note")}</Text>
+                                  </View>
+                                ) : null}
                               </View>
                               <View style={styles.offerActions}>
                                 <AppButton

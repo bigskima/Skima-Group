@@ -37,6 +37,12 @@ const migrationCargoRecovery = await Deno.readTextFile(
 const migrationCategoryAmbiguityFix = await Deno.readTextFile(
   "supabase/migrations/20261106130000_fix_logistics_job_category_id_ambiguity.sql",
 );
+const logisticsChatMigration = await Deno.readTextFile(
+  "supabase/migrations/20261106233000_logistics_booking_chat_and_media.sql",
+);
+const logisticsFeesAdmin = await Deno.readTextFile("apps/admin/src/admin-logistics-fee-workspace.tsx");
+const moneyRouter = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
+const adminNavigation = await Deno.readTextFile("apps/admin/src/app/admin-v2-navigation.ts");
 const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions + "\n" + migrationCargoRecovery;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const providerDriver = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
@@ -732,4 +738,52 @@ Deno.test("Failed Logistics deliveries use a controlled recovery assignment and 
   requireText(migrationCargoRecovery, "'in_progress','in_progress'", "recovery job event uses the active service state");
   requireText(runtime, '"/runtime/logistics/bookings/assign-recovery-driver"', "recovery dispatch runtime route");
   requireText(runtime, '"/runtime/logistics/bookings/recovery/start"', "recovery start runtime route");
+});
+
+
+Deno.test("Logistics order chat is booking-scoped and limited to the customer and provider company", () => {
+  requireText(logisticsChatMigration, "create table if not exists public.logistics_booking_chat_messages", "dedicated booking chat table");
+  requireText(logisticsChatMigration, "booking_id uuid not null references public.logistics_bookings(id)", "message is attached to one confirmed booking");
+  requireText(logisticsChatMigration, "booking.requester_user_id = auth.uid()", "customer participant guard");
+  requireText(logisticsChatMigration, "public.can_read_logistics_company(booking.provider_organization_id)", "matched company participant guard");
+  requireText(logisticsChatMigration, "logistics_booking_chat_messages_read_participants", "RLS limits message reads to booking participants");
+  requireText(logisticsChatMigration, "revoke all on table public.logistics_booking_chat_messages from anon, authenticated", "no direct client mutations");
+  requireText(logisticsChatMigration, "grant select on table public.logistics_booking_chat_messages to authenticated", "authenticated users can read only through RLS");
+  requireText(logisticsChatMigration, "target_reply_to_message_id", "message replies");
+  requireText(logisticsChatMigration, "reply.booking_id = target_booking_id", "reply cannot cross order boundaries");
+  requireText(logisticsChatMigration, "unique (sender_user_id, idempotency_key)", "message send idempotency");
+  requireText(logisticsChatMigration, "public.mark_logistics_booking_chat_read", "booking-specific read receipts");
+  requireNotText(logisticsChatMigration, "create policy logistics_booking_chat_messages_write", "no direct authenticated chat writes");
+});
+
+Deno.test("Logistics order chat attachments use a private participant-scoped bucket", () => {
+  requireText(logisticsChatMigration, "'logistics-booking-chat',", "private order-media bucket");
+  requireText(logisticsChatMigration, "false,", "bucket is private");
+  requireText(logisticsChatMigration, "file_size_limit", "bounded upload size");
+  requireText(logisticsChatMigration, "52428800", "50 MiB upload limit");
+  requireText(logisticsChatMigration, "allowed_mime_types", "MIME allowlist");
+  requireText(logisticsChatMigration, "public.can_upload_logistics_booking_chat_attachment(name)", "uploader must be a participant and own the booking folder");
+  requireText(logisticsChatMigration, "public.can_read_logistics_booking_chat_attachment(name)", "only booking participants can read media");
+  requireText(logisticsChatMigration, "object.owner_id = actor::text", "uploaded object ownership check");
+  requireText(logisticsChatMigration, "alter publication supabase_realtime add table public.logistics_booking_chat_messages", "Realtime publication for booking messages");
+});
+
+Deno.test("Logistics fee administration configures all booking and settlement policies through financial governance", () => {
+  for (const key of [
+    "fees.logistics.customer_booking",
+    "fees.logistics.provider_receival",
+    "commission.logistics.provider",
+  ]) {
+    requireText(logisticsFeesAdmin, key, key + " has its own Admin policy control");
+  }
+  requireText(logisticsFeesAdmin, "target_service_key: \"logistics.booking\"", "booking service scope");
+  requireText(logisticsFeesAdmin, "target_module_key: \"logistics_network\"", "Logistics module scope");
+  requireText(logisticsFeesAdmin, "create_financial_policy_version", "initial fee version creation");
+  requireText(logisticsFeesAdmin, "submit_financial_policy_version", "fee proposal submission");
+  requireText(logisticsFeesAdmin, "review_financial_policy_version", "independent fee approval");
+  requireText(logisticsFeesAdmin, "activate_financial_policy_version", "explicit activation");
+  requireText(logisticsFeesAdmin, "A different authorised administrator must approve your proposal.", "self-approval is prevented in the interface");
+  requireText(moneyRouter, "/money/pricing/logistics", "dedicated Logistics pricing route");
+  requireText(adminNavigation, "\"logistics-fees\": \"/money/pricing/logistics\"", "Money workspace navigation route");
+  requireNotText(logisticsFeesAdmin, "fixed_amount: 0, percentage_basis_points: 0", "no guessed zero-rate customer fee is silently activated");
 });

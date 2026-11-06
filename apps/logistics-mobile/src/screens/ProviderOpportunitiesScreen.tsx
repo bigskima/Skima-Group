@@ -224,6 +224,11 @@ export function ProviderOpportunitiesScreen() {
                           {asString(contact, "phone") ? <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(`tel:${asString(contact, "phone")}`)} style={styles.contactLine}><Phone color={palette.brand} size={14} /><Text style={[styles.contactValue, { color: palette.brand }]}>{asString(contact, "phone")}</Text></Pressable> : null}
                           {asString(contact, "email") ? <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(`mailto:${asString(contact, "email")}`)} style={styles.contactLine}><Mail color={palette.brand} size={14} /><Text style={[styles.contactValue, { color: palette.brand }]}>{asString(contact, "email")}</Text></Pressable> : null}
                         </View>
+                        {asString(nested(latest, "terms"), "note", "message") ? (
+                          <View style={[styles.instructions, { backgroundColor: palette.warningSoft }]}>
+                            <Text style={[styles.instructionsText, { color: palette.ink }]}>Customer note: {asString(nested(latest, "terms"), "note", "message")}</Text>
+                          </View>
+                        ) : null}
                         {isCustomerCounter ? (
                           <Card variant="warning" padding="sm">
                             <Text style={[styles.counterTitle, { color: palette.ink }]}>Customer sent a counteroffer</Text>

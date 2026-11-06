@@ -12,6 +12,7 @@ import {
 import { usePermissionCheck } from "@skima/ui";
 
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "../../admin-delivery-pricing-workspace";
+import { AdminLogisticsFeeWorkspace } from "../../admin-logistics-fee-workspace";
 import { AdminFinancialAnalyticsWorkspace } from "../../admin-financial-analytics-workspace";
 import { AdminLaunchAssuranceWorkspace } from "../../admin-launch-assurance-workspace";
 import { AdminManagedDriverPayrollWorkspace } from "../../admin-managed-driver-payroll-workspace";
@@ -47,6 +48,7 @@ export function MoneyWorkspaceRouter(props: {
   if (props.route === "/money/pricing") return <MoneyPricingScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/pricing/delivery") return <AdminDeliveryPricingWorkspace />;
   if (props.route === "/money/pricing/drivers") return <AdminDriverPricingWorkspace />;
+  if (props.route === "/money/pricing/logistics") return <AdminLogisticsFeeWorkspace />;
   if (props.route === FULFILLMENT_PATH || props.route.startsWith(`${FULFILLMENT_PATH}/`)) {
     return (
       <FulfillmentWorkspaceV2
@@ -203,6 +205,15 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
           icon: WalletCards,
           meta: "Driver earnings",
           permissionKey: "driver-pricing",
+        },
+        {
+          key: "logistics-fees",
+          title: "Logistics fees & settlement",
+          description: "Configure customer booking fees, offline company fees and the percentage deducted at successful online settlement.",
+          href: "/money/pricing/logistics",
+          icon: BadgeDollarSign,
+          meta: "Marketplace booking & settlement",
+          anyOfPermissions: ["platform.financial_policy.read", "platform.financial_policy.draft", "platform.financial_policy.approve", "platform.financial_policy.activate", "platform.financial.manage"],
         },
         {
           key: "launch-assurance",

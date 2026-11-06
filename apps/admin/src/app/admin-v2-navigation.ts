@@ -42,6 +42,7 @@ const screenRoutes: Readonly<Record<string, string>> = {
   "money-analytics": "/money/analytics",
   "delivery-pricing": "/money/pricing/delivery",
   "driver-pricing": "/money/pricing/drivers",
+  "logistics-fees": "/money/pricing/logistics",
   billing: "/services/utility-billing",
   refill: "/refill",
   bills: "/bills",
@@ -91,7 +92,7 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     description: "Revenue, balances, withdrawals, settlements and pricing controls.",
     basePath: "/money",
     icon: "money",
-    screenKeys: ["revenue", "finance", "delivery-pricing", "driver-pricing"],
+    screenKeys: ["revenue", "finance", "delivery-pricing", "driver-pricing", "logistics-fees"],
   },
   {
     key: "services",
