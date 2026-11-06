@@ -21,9 +21,9 @@ const STEPS:Record<Workspace,Step[]>={
   {route:"/",targetKey:"customer-home-store",title:"SKIMA Store",body:"Shop for everyday essentials in SKIMA Store."},
  ],
  company:[
-  {route:"/",targetKey:"company-home-overview",title:"Company operations",body:"Your company overview shows matched opportunities and active jobs. Open an opportunity to review and respond."},
-  {route:"/workspace",targetKey:"company-workspace-finance",title:"Company wallet and payouts",body:"Only authorized company owners can manage earnings and payment settings. Operating-fee funds remain separate from withdrawable Logistics earnings."},
-  {route:"/workspace",targetKey:"company-workspace-services",title:"Services and team",body:"Configure what the company can fulfil and grant staff only the workspace access they need."},
+  {route:"/",targetKey:"company-home-overview",title:"Company operations",body:"See new requests and active jobs here. Open a request to review the details and send an offer."},
+  {route:"/workspace",targetKey:"company-workspace-finance",title:"Company wallet and payouts",body:"Company owners can manage payments and withdrawals here. Money set aside for company expenses is separate from earnings available to withdraw."},
+  {route:"/workspace",targetKey:"company-workspace-services",title:"Services and team",body:"Choose the services your company offers and invite team members to help manage the work."},
  ],
 };
 
