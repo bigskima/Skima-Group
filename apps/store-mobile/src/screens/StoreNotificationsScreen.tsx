@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { requestStoreNotificationPermission } from "../notifications/StoreNotificationLifecycle";
+import { requestStoreNotificationPermission, registerStorePushDevice } from "../notifications/StoreNotificationLifecycle";
 import { navigateStoreRoute } from "../navigation/storeNavigation";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./StoreUI";
 
@@ -19,7 +19,7 @@ export function StoreNotificationsScreen(){
  const mark=useMutation({mutationFn:async(id:string)=>{const r=await session.supabase.rpc("mark_notification_read",{target_message_id:id,target_read:true});if(r.error)throw r.error;return r.data;},onSuccess:()=>client.invalidateQueries({queryKey:["skima-store","inbox"]})});
  const markAll=useMutation({mutationFn:async()=>{const r=await session.supabase.rpc("mark_all_notifications_read");if(r.error)throw r.error;return r.data;},onSuccess:()=>client.invalidateQueries({queryKey:["skima-store","inbox"]})});
  const [feedback,setFeedback]=useState("");
- const enable=async()=>{try{await requestStoreNotificationPermission();setFeedback("Device notification permission is enabled. Push delivery also requires the SKIMA notification channel to be configured for this app.");}catch(e){setFeedback(e instanceof Error?e.message:"Notification permission was not granted.");}};
+ const enable=async()=>{try{await requestStoreNotificationPermission();await registerStorePushDevice(session.session,session.supabase);setFeedback("Device permission is enabled and this installation is registered for remote SKIMA store notifications.");}catch(e){setFeedback(e instanceof Error?e.message:"Notification permission was not granted.");}};
 
  const rows=useMemo(()=>query.data?.items??[],[query.data]);
  return <Page refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={()=>void query.refetch()} tintColor={palette.brand}/>}>
