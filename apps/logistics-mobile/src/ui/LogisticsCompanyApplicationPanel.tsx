@@ -415,7 +415,7 @@ export function LogisticsCompanyApplicationPanel({
         : status === "manual_review"
           ? "Your identity check is with the verification provider for review."
           : status === "failed"
-            ? "The automatic check did not pass. Upload the required identity evidence or retry."
+            ? "The automatic check did not pass. Upload an identity document for manual review or try again."
             : "Your identity check is still processing.");
       await verification.refetch();
     } catch (cause) {
@@ -438,14 +438,11 @@ export function LogisticsCompanyApplicationPanel({
         (asString(document, "requirement_id") === identityRequirementId ||
           asString(record(document.metadata), "requirement_key") === "logistics.company.owner-identity")
       );
-      if (!hasIdentityEvidence) {
-        throw new Error("Upload the applicant's NIN/identity document before submitting.");
+      if (!identityPassed && !hasIdentityEvidence) {
+        throw new Error("Complete the secure identity check or upload the applicant's identity document for manual review.");
       }
       if (acceptedPolicy.data !== true) {
         throw new Error("Review and accept the current SKIMA Partner Participation Terms before submitting.");
-      }
-      if (!identityPassed && !hasIdentityEvidence) {
-        throw new Error("Complete identity verification or provide the required identity evidence.");
       }
       return api.post("/runtime/applications/submit", {
         applicationId,
@@ -524,7 +521,7 @@ export function LogisticsCompanyApplicationPanel({
   const policySourceUrl = asString(policy.data, "sourceUrl", "source_url");
   const applicationCanBeSubmitted = ["draft", "incomplete", "additional_info_required"].includes(applicationStatus);
   const canSubmit = canEdit && applicationCanBeSubmitted && !busy &&
-    identityEvidenceUploaded && termsAccepted;
+    (identityPassed || identityEvidenceUploaded) && termsAccepted;
   const showApplicantFields = !applicationId || editing;
 
   return (
@@ -625,7 +622,7 @@ export function LogisticsCompanyApplicationPanel({
                 <Text style={[styles.copy, { color: palette.muted }]}>
                   {identityPassed
                     ? "The applicant's identity check has passed."
-                    : "Complete the hosted Didit identity and liveness check, then return here to confirm the result."}
+                    : "Complete the secure identity check, then return here to confirm the result."}
                 </Text>
               </View>
               <StatusPill status={identityStatus} />
@@ -633,7 +630,7 @@ export function LogisticsCompanyApplicationPanel({
             {identityPassed ? (
               <Text style={[styles.copy, { color: palette.success }]}>Identity verified. Keep the requested identity evidence attached for SKIMA's review record.</Text>
             ) : (
-              <AppButton size="sm" variant="secondary" label={identitySessionId ? "Open secure check" : "Start Didit identity check"}
+              <AppButton size="sm" variant="secondary" label={identitySessionId ? "Open secure check" : "Start secure identity check"}
                 loading={verificationBusy} disabled={!canEdit || verificationBusy}
                 onPress={() => void startIdentityVerification()} />
             )}
