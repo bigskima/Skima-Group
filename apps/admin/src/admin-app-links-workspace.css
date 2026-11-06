@@ -1,0 +1,23 @@
+.admin-app-links{display:grid;gap:18px}
+.admin-app-links__notice{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border:1px solid var(--skima-border,#e2e2e7);border-radius:14px;background:var(--skima-surface-subtle,#f6f6f8)}
+.admin-app-links__notice p{margin:4px 0 0;color:var(--skima-muted,#71717b);font-size:12px;line-height:1.5}
+.admin-app-links__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.admin-app-links__card{min-width:0;display:grid;gap:13px;padding:17px;border:1px solid var(--skima-border,#e2e2e7);border-radius:17px;background:var(--skima-surface,#fff)}
+.admin-app-links__card-head{display:flex;align-items:center;gap:11px}
+.admin-app-links__app-icon{display:grid;place-items:center;width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:var(--skima-surface-subtle,#f2f2f4)}
+.admin-app-links__app-title{flex:1;min-width:0}
+.admin-app-links__app-title h2{margin:0;font-size:15px}
+.admin-app-links__app-title small{color:var(--skima-muted,#71717b);font-size:10px}
+.admin-app-links__field{display:grid;gap:6px;color:var(--skima-muted-strong,#55555d);font-size:11px;font-weight:700}
+.admin-app-links__field input,.admin-app-links__sort input{width:100%;min-width:0;height:39px;padding:0 10px;border:1px solid var(--skima-border,#d9d9df);border-radius:10px;background:var(--skima-input,#fff);color:var(--skima-ink,#202026);font:inherit;font-weight:500}
+.admin-app-links__field--wide{grid-column:1/-1}
+.admin-app-links__subhead{padding-top:5px;border-top:1px solid var(--skima-border,#e5e5e9);font-size:12px;font-weight:900}
+.admin-app-links__toggle{display:flex;align-items:center;gap:8px;color:var(--skima-muted-strong,#55555d);font-size:11px}
+.admin-app-links__toggle input{accent-color:var(--skima-brand,#e21d2f)}
+.admin-app-links__card-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--skima-border,#e5e5e9)}
+.admin-app-links__sort{display:flex;align-items:center;gap:6px;color:var(--skima-muted,#71717b);font-size:10px}
+.admin-app-links__sort input{width:70px}
+.admin-app-links__fallback{display:flex;align-items:center;gap:6px;margin:0;color:var(--skima-muted,#71717b);font-size:10px}
+.admin-app-links__message{padding:10px 12px;border-radius:10px;background:#edf8f1;color:#187344;font-size:12px}
+.admin-app-links__message.is-error{background:#fff0f0;color:#b4232f}
+@media(max-width:900px){.admin-app-links__grid{grid-template-columns:1fr}}
