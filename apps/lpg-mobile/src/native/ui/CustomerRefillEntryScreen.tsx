@@ -30,7 +30,7 @@ export function CustomerRefillEntryScreen() {
     <Screen
       eyebrow="Before your first order"
       title="Review the current customer terms"
-      subtitle="You only need to accept the current published version. If SKIMA later publishes a version that requires renewed acceptance, you will be asked again before a new order."
+      subtitle="Review and accept the terms before your next order. We’ll let you know when an update needs your attention."
     >
       <PolicySummaryCard
         policyKey="policy.customer.terms"
@@ -42,7 +42,7 @@ export function CustomerRefillEntryScreen() {
       <View style={[styles.note, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.brand} size={20} />
         <Text style={[styles.noteText, { color: palette.muted }]}>
-          Tap Learn more to read the full policy inside SKIMA. The Notion page is only an external fallback/reference from the reader.
+          Tap Learn more to read the full terms in SKIMA.
         </Text>
       </View>
 
