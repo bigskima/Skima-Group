@@ -155,6 +155,8 @@ Deno.test("Logistics address matching chooses the most specific geography and bl
   requireText(geography, "resolveMostSpecificGeography", "hierarchy-aware location resolution");
   requireText(geography, "hierarchyParts", "canonical parent/child location hierarchy");
   requireText(geography, "deepest.length === 1 ? deepest[0] : null", "ambiguous city aliases require a specific LGA choice");
+  requireText(geography, "if (specificMatches.length) return resolveMostSpecificGeography(specificMatches)", "ambiguous LGA matches cannot fall through to a broader state");
+  requireText(geography, "if (lgaMatches.length) return resolveMostSpecificGeography(lgaMatches)", "ambiguous LGA component matches stay unresolved");
   requireText(geography, "geography_hierarchy_path", "selected address retains its resolved hierarchy");
   requireNotText(geography, 'normalized(asString(item, "canonical_name")) === "nigeria"', "no silent country-root fallback for an unresolved street");
   requireText(request, "hasServiceGeography(pickup)", "pickup cannot publish at country-only scope");
