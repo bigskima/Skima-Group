@@ -66,7 +66,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/experience/app-links",
           icon: Link2,
           meta: "Website and app destinations",
-          permissionKey: "app-links",
+          permissionKey: "content",
         },
         {
           key: "referrals",
