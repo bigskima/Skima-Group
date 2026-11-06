@@ -82,7 +82,7 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
   const name = context?.profile?.display_name ?? (typeof session?.user.user_metadata?.display_name === "string" ? session.user.user_metadata.display_name : "SKIMA customer");
   const email = session?.user.email ?? "Signed-in account";
   return (
-    <Screen eyebrow="YOUR ACCOUNT" title="Account & preferences" subtitle="Manage your SKIMA Logistics experience.">
+    <Screen eyebrow="YOUR ACCOUNT" title="Account & preferences" subtitle="Update your profile and preferences.">
       <View style={styles.brandRow}><BrandMark /></View>
       <Card padding="lg">
         <View style={styles.profileRow}>
@@ -175,12 +175,12 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Preferences</Text>
         <PressableRow icon={scheme === "dark" ? <Moon color={palette.brand} size={19} /> : <Sun color={palette.brand} size={19} />}
           title="Appearance" subtitle={scheme === "dark" ? "Dark mode" : "Light mode"} action={scheme === "dark" ? "Switch to light" : "Switch to dark"} onPress={() => void toggle()} />
-        <PressableRow icon={<CircleHelp color={palette.brand} size={19} />} title="Help & support" subtitle="Get assistance with a request or booking" action="Coming soon" disabled />
+        
       </View>
 
       <Card variant="subtle" padding="lg">
         <View style={styles.securityRow}><ShieldCheck color={palette.success} size={18} /><Text style={[styles.securityTitle, { color: palette.ink }]}>Your information is protected</Text></View>
-        <Text style={[styles.securityCopy, { color: palette.muted }]}>Your account is secured through SKIMA authentication. Job and payment details are shared only with the participants authorised to see them.</Text>
+        <Text style={[styles.securityCopy, { color: palette.muted }]}>Your booking and payment details are only shown to the people involved in your bookings and authorised support staff.</Text>
       </Card>
 
       <AppButton
@@ -190,7 +190,7 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
         icon={<LogOut color={palette.ink} size={16} />}
         onPress={() => { setLogoutError(null); setLogoutOpen(true); }}
       />
-      <Text style={[styles.version, { color: palette.muted }]}>SKIMA Logistics · {workspace === "customer" ? "Customer app" : workspace === "driver" ? "Driver workspace" : "Company workspace"}</Text>
+      
       <Modal
         visible={logoutOpen}
         transparent
