@@ -297,7 +297,7 @@ begin
 
       if legacy_mapping_count<>1 or geography_mapping_count<>1 or not exists (
         select 1 from public.geographies geography
-        where geography.id=geography_id
+        where geography.id=resolved_geography_id
           and geography.status='active'
           and geography.boundary_geometry is not null
       ) then
@@ -388,7 +388,7 @@ begin
     );
 
     coverage_assignment_id := public.configure_operational_coverage_assignment(
-      coverage_assignment_id,'DRIVER',driver_record.id,'lpg','ADMIN_GEOGRAPHY',geography_id,
+      coverage_assignment_id,'DRIVER',driver_record.id,'lpg','ADMIN_GEOGRAPHY',resolved_geography_id,
       null,null,null,null,'retired',retire_valid_from,retire_valid_to,effective_reason,effective_metadata
     );
   end if;
