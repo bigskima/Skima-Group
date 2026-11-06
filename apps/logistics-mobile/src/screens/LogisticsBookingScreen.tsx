@@ -19,6 +19,7 @@ import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
 import { LogisticsPublicEntityImage } from "../ui/LogisticsPublicEntityImage";
 import { ServiceDiscoveryModal } from "../ui/ServiceDiscoveryModal";
+import { LogisticsBookingChat } from "../ui/LogisticsBookingChat";
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
@@ -67,6 +68,9 @@ export function LogisticsBookingScreen() {
   const assignedDriverProfileId = asString(booking, "assigned_driver_profile_id");
   const assignedVehicleId = asString(booking, "assigned_vehicle_id");
   const providerOrganizationId = asString(booking, "provider_organization_id");
+  const bookingOffer = nested(booking, "offer");
+  const providerOfferTerms = nested(bookingOffer, "terms");
+  const providerOfferNote = asString(providerOfferTerms, "message", "note");
   const bookingAssignments = Array.isArray(booking?.assignments)
     ? booking.assignments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
     : [];
@@ -231,6 +235,13 @@ export function LogisticsBookingScreen() {
             {paymentMode === "offline" ? <AmountLine label="Provider receival fee" value="Paid by the company" subtle /> : null}
             {paymentMode === "online_wallet" && (asNumber(booking, "provider_commission_amount") ?? 0) > 0 ? <AmountLine label="Provider commission" value="Deducted from provider proceeds" subtle /> : null}
           </Card>
+
+          {providerOfferNote ? (
+            <Card padding="lg">
+              <SectionHeader title="Company quote note" description="The provider's additional terms for this booking." />
+              <Text style={[styles.sectionDescription, { color: palette.ink }]}>{providerOfferNote}</Text>
+            </Card>
+          ) : null}
 
           {booking && (providerOrganizationId || assignedDriverProfileId || assignedVehicleId) ? (
             <Card padding="lg" gap={spacing.md}>
@@ -550,6 +561,7 @@ export function LogisticsBookingScreen() {
               <Text style={[styles.sectionDescription, { color: palette.muted }]}>Your customer booking fee has been recorded. The company’s receival fee was handled separately.</Text>
             </Card>
           ) : null}
+          {bookingId ? <LogisticsBookingChat bookingId={bookingId} viewerRole="customer" /> : null}
           <ServiceDiscoveryModal visible={thankYouVisible} currentServiceKey="logistics" title="Thanks for choosing SKIMA!" message="Your logistics delivery has been completed and confirmed. Thank you for choosing SKIMA." supabase={supabase} onClose={() => setThankYouVisible(false)} />
 
           {openDispute.error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><AlertCircle color={palette.danger} size={16} /><Text style={[styles.inlineError, { color: palette.danger }]}>{openDispute.error instanceof Error ? openDispute.error.message : "The delivery dispute could not be opened."}</Text></View> : null}
