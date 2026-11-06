@@ -151,6 +151,24 @@ Deno.test("Logistics request review actions fit the mobile viewport", () => {
   requireText(request, 'disabled={!canSubmit}', "publish action respects complete request validation");
 });
 
+Deno.test("Logistics address matching chooses the most specific geography and blocks country-only requests", () => {
+  requireText(geography, "resolveMostSpecificGeography", "hierarchy-aware location resolution");
+  requireText(geography, "hierarchyParts", "canonical parent/child location hierarchy");
+  requireText(geography, "parent_id", "ambiguous city aliases resolve to their common parent");
+  requireText(geography, "geography_hierarchy_path", "selected address retains its resolved hierarchy");
+  requireNotText(geography, 'normalized(asString(item, "canonical_name")) === "nigeria"', "no silent country-root fallback for an unresolved street");
+  requireText(request, "hasServiceGeography(pickup)", "pickup cannot publish at country-only scope");
+  requireText(request, "hasServiceGeography(destination)", "destination cannot publish at country-only scope");
+  requireText(request, "geography_hierarchy_path", "request snapshot stores coverage hierarchy");
+});
+
+Deno.test("Logistics publish actions are constrained and customer order details display handling notes", () => {
+  requireText(request, 'backAction: { flexBasis: "30%", flexGrow: 0', "back button has a bounded share of the action row");
+  requireText(request, "primaryActionWithBack: { flex: 1, maxWidth: 230", "publish button has a maximum mobile width");
+  requireText(detail, "Additional instructions", "customer can read handling notes after publishing");
+  requireText(detail, 'asString(job, "instructions")', "order page reads saved instructions");
+});
+
 Deno.test("The app preserves the LPG visual standard with red brand, premium surfaces and dark/light themes", () => {
   requireText(theme, '"#E21D2F"', "SKIMA red brand");
   requireText(theme, '"#B91323"', "deep red brand shade");
