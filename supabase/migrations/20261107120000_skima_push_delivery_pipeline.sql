@@ -126,18 +126,16 @@ grant execute on function public.claim_skima_push_outbox(integer) to service_rol
 -- are not committed to Git and are never returned by this migration.
 do $$
 declare
-  endpoint_value text;
-  service_role_value text;
+  has_endpoint boolean;
+  has_service_role boolean;
   existing_job bigint;
 begin
-  select decrypted_secret into endpoint_value
-  from vault.decrypted_secrets
-  where name = 'skima_supabase_url'
-  limit 1;
-  select decrypted_secret into service_role_value
-  from vault.decrypted_secrets
-  where name = 'skima_service_role_key'
-  limit 1;
+  select exists (
+    select 1 from vault.decrypted_secrets where name = 'skima_supabase_url'
+  ) into has_endpoint;
+  select exists (
+    select 1 from vault.decrypted_secrets where name = 'skima_service_role_key'
+  ) into has_service_role;
 
   select jobid into existing_job
   from cron.job
@@ -148,20 +146,21 @@ begin
     perform cron.unschedule(existing_job);
   end if;
 
-  if endpoint_value is not null and service_role_value is not null then
+  if has_endpoint and has_service_role then
     perform cron.schedule(
       'skima-push-outbox-dispatch',
       '* * * * *',
-      format(
-        $job$select net.http_post(
-          url := %L,
-          headers := jsonb_build_object('Authorization', 'Bearer ' || %L, 'Content-Type', 'application/json'),
-          body := '{"batchSize":100}'::jsonb,
-          timeout_milliseconds := 15000
-        );$job$,
-        rtrim(endpoint_value,'/') || '/functions/v1/skima-push-dispatch',
-        service_role_value
-      )
+      $job$select net.http_post(
+        url := (select rtrim(decrypted_secret, '/') || '/functions/v1/skima-push-dispatch'
+                from vault.decrypted_secrets where name = 'skima_supabase_url'),
+        headers := jsonb_build_object(
+          'Authorization', 'Bearer ' || (select decrypted_secret
+            from vault.decrypted_secrets where name = 'skima_service_role_key'),
+          'Content-Type', 'application/json'
+        ),
+        body := '{"batchSize":100}'::jsonb,
+        timeout_milliseconds := 15000
+      );$job$
     );
   end if;
 end;
