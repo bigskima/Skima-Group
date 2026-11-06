@@ -63,6 +63,8 @@ begin
       on mapping.legacy_id=area.id and mapping.mapping_count=1
     join public.geographies geography
       on geography.id=mapping.geography_id and geography.status='active'
+    join verified_geography_mapping_counts geography_mapping
+      on geography_mapping.geography_id=geography.id and geography_mapping.mapping_count=1
     join public.geography_levels level
       on level.id=geography.geography_level_id and level.status='active'
     where area.status='active'
@@ -92,6 +94,8 @@ begin
           select 1
           from public.geography_migration_mappings legacy_mapping
           join public.service_areas legacy_area on legacy_area.id=legacy_mapping.legacy_id
+          join verified_legacy_mapping_counts legacy_count
+            on legacy_count.legacy_id=legacy_area.id and legacy_count.mapping_count=1
           where legacy_mapping.legacy_source='service_areas'
             and legacy_mapping.migration_status='verified'
             and legacy_mapping.geography_id=geography.id
