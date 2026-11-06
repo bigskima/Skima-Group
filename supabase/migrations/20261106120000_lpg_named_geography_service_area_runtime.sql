@@ -165,7 +165,7 @@ as $function$
 declare
   driver_record public.driver_profiles%rowtype;
   coverage_record public.operational_coverage_assignments%rowtype;
-  geography_id uuid;
+  resolved_geography_id uuid;
   legacy_area_id uuid;
   legacy_mapping_count integer := 0;
   geography_mapping_count integer := 0;
@@ -244,7 +244,7 @@ begin
   if target_active then
     if left(service_area_key,10) = 'geography:' then
       begin
-        geography_id := substring(service_area_key from 11)::uuid;
+        resolved_geography_id := substring(service_area_key from 11)::uuid;
       exception when others then
         raise exception using errcode='22023',message='service-area geography identifier is invalid';
       end;
@@ -256,7 +256,7 @@ begin
         on level.id=geography.geography_level_id
         and level.status='active'
         and level.is_service_selectable=true
-      where geography.id=geography_id
+      where geography.id=resolved_geography_id
         and geography.status='active'
         and geography.boundary_geometry is not null;
 
@@ -278,7 +278,7 @@ begin
       select
         count(distinct mapping.geography_id)::integer,
         min(mapping.geography_id::text)::uuid
-      into legacy_mapping_count,geography_id
+      into legacy_mapping_count,resolved_geography_id
       from public.geography_migration_mappings mapping
       where mapping.legacy_source='service_areas'
         and mapping.legacy_id=legacy_area_id
@@ -289,7 +289,7 @@ begin
         into geography_mapping_count
         from public.geography_migration_mappings mapping
         where mapping.legacy_source='service_areas'
-          and mapping.geography_id=geography_id
+          and mapping.geography_id=resolved_geography_id
           and mapping.migration_status='verified';
       else
         geography_mapping_count:=0;
@@ -301,10 +301,10 @@ begin
           and geography.status='active'
           and geography.boundary_geometry is not null
       ) then
-        geography_id:=null;
+        resolved_geography_id:=null;
       end if;
 
-      if geography_id is null then
+      if resolved_geography_id is null then
         raise exception using errcode='55000',
           message='Add a verified map boundary to this area before assigning it to a physical Managed Driver.';
       end if;
@@ -320,7 +320,7 @@ begin
         'coverageAssignmentId',null
       );
     end if;
-    geography_id := coverage_record.geography_id;
+    resolved_geography_id := coverage_record.geography_id;
     service_area_label := coalesce(
       coverage_record.metadata->>'managedDriverServiceAreaLabel',
       coverage_record.metadata->>'serviceAreaName',
@@ -374,7 +374,7 @@ begin
     end if;
 
     coverage_assignment_id := public.configure_operational_coverage_assignment(
-      coverage_assignment_id,'DRIVER',driver_record.id,'lpg','ADMIN_GEOGRAPHY',geography_id,
+      coverage_assignment_id,'DRIVER',driver_record.id,'lpg','ADMIN_GEOGRAPHY',resolved_geography_id,
       null,null,null,null,'active',timezone('utc',now()),null,effective_reason,effective_metadata
     );
   elsif coverage_assignment_id is not null then
