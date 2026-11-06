@@ -131,7 +131,7 @@ Deno.test("Customer category requests match all eligible provider services in th
   requireText(createJob, "where service.category_id = v_category_id", "customer category match uses an unambiguous local variable");
   requireNotText(createJob, "service.category_id = category_id", "no PL/pgSQL variable/column ambiguity in customer category matching");
   requireText(createJob, "v_job_id uuid;", "request id uses a collision-free PL/pgSQL variable");
-  requireNotText(createJob, "\\n  job_id uuid;", "no PL/pgSQL job_id variable can collide with the opportunity column");
+  requireNotText(createJob, "  job_id uuid;", "no PL/pgSQL job_id variable can collide with the opportunity column");
   requireText(migration, "where service.category_id = job.category_id", "rematch category scope");
   requireNotText(
     migration.slice(
