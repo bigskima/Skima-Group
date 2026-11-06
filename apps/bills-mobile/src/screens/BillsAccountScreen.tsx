@@ -85,7 +85,7 @@ export function BillsAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
         <Text style={{ fontSize: 11, color: palette.muted }}>{email}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
           <ShieldCheck color={palette.success} size={13} />
-          <Text style={{ fontSize: 9, color: palette.success, fontWeight: "900" }}>Authenticated SKIMA account</Text>
+          
         </View>
       </Card></GuideTarget>
       <Card>
@@ -95,9 +95,9 @@ export function BillsAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
       </Card>
       <View style={{ gap: 8 }}>
         <SectionTitle title="Manage your account" />
-        <AccountLink icon={<WalletCards color={palette.brand} size={18} />} title="Shared wallet" subtitle="Funding, balances and withdrawals" onPress={() => onOpenPage("wallet")} />
+        <AccountLink icon={<WalletCards color={palette.brand} size={18} />} title="Wallet" subtitle="Funding, balances and withdrawals" onPress={() => onOpenPage("wallet")} />
         <AccountLink icon={<Bell color={palette.brand} size={18} />} title="Notifications" subtitle="Bill payment and account updates" onPress={() => onOpenPage("notifications")} />
-        <AccountLink icon={<ReceiptIcon />} title="Saved billers" subtitle="Store frequent account details securely" onPress={() => onOpenPage("saved")} />
+        <AccountLink icon={<ReceiptIcon />} title="Saved billers" subtitle="Save details for bills you pay often" onPress={() => onOpenPage("saved")} />
         <AccountLink icon={<LockKeyhole color={palette.brand} size={18} />} title="Password and security" subtitle="Request a secure password reset" onPress={() => void changePassword()} />
         <Pressable onPress={() => void toggle()} style={{ minHeight: 57, flexDirection: "row", alignItems: "center", gap: 10, padding: 11, borderRadius: 15, backgroundColor: palette.surface, borderWidth: 0.5, borderColor: palette.border }}>
           <Moon color={palette.brand} size={18} />
