@@ -256,6 +256,7 @@ export function CoverageWorkspaceV2(props: {
 function CoverageOverview(props: { readonly onNavigate: (href: string) => void }) {
   const { supabase, status } = useSessionState();
   const enabled = status === "authenticated";
+  const [geographyOpen, setGeographyOpen] = useState(false);
   const setup = useQuery({
     queryKey: ["coverage-v2", "admin-setup"],
     enabled,
@@ -292,7 +293,11 @@ function CoverageOverview(props: { readonly onNavigate: (href: string) => void }
         eyebrow="Operations · Service coverage"
         title="Coverage overview"
         description="See whether SKIMA's map-based availability is healthy, then open only the task you need."
-        actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void Promise.all([setup.refetch(), production.refetch()])}>Refresh</Button>}
+        actions={<>
+          <Button icon={RefreshCcw} variant="outline" onClick={() => void Promise.all([setup.refetch(), production.refetch()])}>Refresh</Button>
+          <Button icon={MapPinned} disabled={!data?.permissions.canManageGeographies} onClick={() => setGeographyOpen(true)}>Add service area</Button>
+          <Button icon={ArrowRight} variant="outline" onClick={() => props.onNavigate("/money/pricing/launch-assurance/routing")}>Network priority</Button>
+        </>}
       />
 
       <section className="skima-grid skima-grid--compact">
@@ -344,6 +349,15 @@ function CoverageOverview(props: { readonly onNavigate: (href: string) => void }
           );
         })}
       </section>
+      <p className="skima-muted">Add a country, state, LGA or town by name — drawing a map and entering coordinates are not required for address-based availability. A verified map boundary is still required when assigning a physical Driver or Station for dispatch.</p>
+      <GeographyFlowDialog
+        open={geographyOpen}
+        levels={data?.levels ?? []}
+        geographies={data?.geographies ?? []}
+        defaultCountryCode={data?.defaultCountryCode ?? "NG"}
+        onClose={() => setGeographyOpen(false)}
+        onSaved={async () => { setGeographyOpen(false); await setup.refetch(); }}
+      />
     </div>
   );
 }
@@ -388,7 +402,7 @@ function CoverageAvailability() {
       <AdminV2PageHeader
         eyebrow="Service coverage · Availability"
         title="Areas & availability"
-        description="Define real map areas first, then decide what SKIMA can do inside each area. Advanced priority and scheduling stay out of the way until needed."
+        description="Add named locations and configure customer, Partner Network, Station, Driver and SKIMA Managed availability together. Map boundaries are optional for address rules; dispatch assignments still need a verifiable operating area."
         actions={<>
           <Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>
           <Button icon={MapPinned} disabled={!data?.permissions.canManageGeographies} onClick={() => setGeographyOpen(true)}>Add service area</Button>
@@ -814,6 +828,7 @@ function PolicyFlowDialog(props: {
                     { label: "Customers can place refill orders", value: "customer_ordering" },
                     { label: "Drivers can register and operate", value: "driver_onboarding" },
                     { label: "Stations can register and operate", value: "station_onboarding" },
+                    { label: "SKIMA Managed delivery can serve this area", value: "skima_managed_fulfillment" },
                   ]}
                   required
                 />
@@ -938,6 +953,7 @@ function friendlyCapabilityName(key: string) {
     customer_ordering: "Customers can place refill orders",
     driver_onboarding: "Drivers can register and operate",
     station_onboarding: "Stations can register and operate",
+    skima_managed_fulfillment: "SKIMA Managed delivery",
   };
   return labels[key] ?? friendlyCode(key);
 }
