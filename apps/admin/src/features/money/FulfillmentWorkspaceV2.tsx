@@ -316,7 +316,7 @@ function OverviewSection(props: {
   const steps = [
     {
       label: "Order routing",
-      detail: props.configuration.priority === "marketplace_first" ? "Partner Network goes first" : "SKIMA Fleet goes first",
+      detail: props.configuration.priority === "marketplace_first" ? "Partner Network goes first" : "SKIMA Managed goes first",
       done: true,
       href: sectionHref("routing"),
       icon: Route,
@@ -376,7 +376,7 @@ function OverviewSection(props: {
             <h2>{ready.ready ? "Managed fulfillment is ready" : "Finish the remaining setup"}</h2>
             <p className="skima-muted">Open only the item you want to configure. Completed items stay collapsed here as a status summary.</p>
           </div>
-          <StatusBadge tone={ready.enabled ? "success" : "neutral"}>{ready.enabled ? "SKIMA Fleet on" : "SKIMA Fleet off"}</StatusBadge>
+          <StatusBadge tone={ready.enabled ? "success" : "neutral"}>{ready.enabled ? "SKIMA Managed on" : "SKIMA Managed off"}</StatusBadge>
         </div>
 
         <div className="fulfillment-v2__setup-grid">
@@ -424,7 +424,7 @@ function AvailabilitySection(props: {
     mutationFn: async () => {
       const enableFleet = mode !== "marketplace_only";
       if (enableFleet && !props.readiness.ready) {
-        throw new Error("Finish the Managed Driver, SKIMA vehicle, service-area, Driver-pay and LPG-price setup before turning on the SKIMA Fleet route.");
+        throw new Error("Finish the Managed Driver, SKIMA vehicle, service-area, Driver-pay and LPG-price setup before turning on the SKIMA Managed route.");
       }
       const { error } = await supabase.rpc("set_lpg_launch_assurance_configuration", {
         target_enabled: enableFleet,
@@ -443,9 +443,9 @@ function AvailabilitySection(props: {
   });
 
   const choices: readonly { mode: FulfillmentMode; title: string; detail: string; icon: typeof Building2 }[] = [
-    { mode: "hybrid", title: "Partner Network + SKIMA Fleet", detail: "Use both delivery networks according to your order-routing priority.", icon: Building2 },
-    { mode: "marketplace_only", title: "Partner Network only", detail: "Use registered stations and Independent Drivers. SKIMA Fleet stays off.", icon: UsersRound },
-    { mode: "internal_only", title: "SKIMA Fleet only", detail: "Use Managed Drivers with assigned SKIMA-owned vehicles only.", icon: Truck },
+    { mode: "hybrid", title: "Partner Network + SKIMA Managed", detail: "Use both delivery networks according to your order-routing priority.", icon: Building2 },
+    { mode: "marketplace_only", title: "Partner Network only", detail: "Use registered stations and Independent Drivers. SKIMA Managed stays off.", icon: UsersRound },
+    { mode: "internal_only", title: "SKIMA Managed only", detail: "Use Managed Drivers with assigned SKIMA-owned vehicles only.", icon: Truck },
   ];
 
   return (
@@ -482,7 +482,7 @@ function AvailabilitySection(props: {
             value={fallbackOnly ? "fallback" : "both"}
             onChange={(event) => setFallbackOnly(event.currentTarget.value === "fallback")}
             options={[
-              { label: "Use SKIMA Fleet only if partners cannot serve", value: "fallback" },
+              { label: "Use SKIMA Managed only if partners cannot serve", value: "fallback" },
               { label: "Keep both routes available", value: "both" },
             ]}
           />
@@ -491,7 +491,7 @@ function AvailabilitySection(props: {
 
       {mode !== "marketplace_only" && !props.readiness.ready ? (
         <div className="admin-inline-warning">
-          <strong>SKIMA Fleet cannot be turned on yet.</strong> {friendlyReason(props.readiness.reasons[0] ?? "Complete Managed Fulfillment setup.")}
+          <strong>SKIMA Managed cannot be turned on yet.</strong> {friendlyReason(props.readiness.reasons[0] ?? "Complete Managed Fulfillment setup.")}
         </div>
       ) : null}
 
@@ -1186,7 +1186,7 @@ function DriverPaySection(props: {
       <div className="sk-panel__header">
         <div>
           <span className="section-kicker">Managed Driver pay</span>
-          <h2>Set the Driver share for SKIMA Fleet deliveries</h2>
+          <h2>Set the Driver share for SKIMA Managed deliveries</h2>
           <p className="skima-muted">This percentage is applied to the delivery fee for new SKIMA-managed orders. Completed earnings are paid later through Managed Driver Payroll.</p>
         </div>
         <StatusBadge tone={currentPercent ? "success" : "warning"}>{currentPercent ? `${currentPercent}% now` : "Not set"}</StatusBadge>
@@ -1303,7 +1303,7 @@ function ManagedTeamSection(props: {
       ready: props.readiness.managedApprovedDriverCount > 0,
     },
     {
-      title: "SKIMA Fleet",
+      title: "SKIMA Managed",
       detail: `${props.readiness.vehicleReadyDriverCount} Managed Driver${props.readiness.vehicleReadyDriverCount === 1 ? "" : "s"} with a service-ready SKIMA vehicle`,
       button: "Manage SKIMA vehicles",
       href: "/partners/fleet",
@@ -1397,7 +1397,7 @@ function ActivitySection(props: { readonly onNavigate: (href: string) => void })
             <strong>{String(row.supplierName ?? "Supplier")}</strong>
             <span>{money(Number(row.procurementAmount ?? 0))} · {String(row.actualKg ?? "—")} kg · {normalizeStatusLabel(String(row.status ?? "recorded"))}</span>
           </div>
-        )) : <p className="skima-muted">No SKIMA Fleet supplier purchase has been recorded yet.</p>}
+        )) : <p className="skima-muted">No SKIMA Managed supplier purchase has been recorded yet.</p>}
       </section>
 
       <section className="sk-panel stack-md">
@@ -1442,8 +1442,8 @@ function areaLabel(area: ServiceArea): string {
 
 function availabilityLabel(mode: FulfillmentMode): string {
   if (mode === "marketplace_only") return "Partner Network only";
-  if (mode === "internal_only") return "SKIMA Fleet only";
-  return "Partner Network + SKIMA Fleet";
+  if (mode === "internal_only") return "SKIMA Managed only";
+  return "Partner Network + SKIMA Managed";
 }
 
 function friendlyReason(reason: string): string {
