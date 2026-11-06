@@ -61,7 +61,7 @@ export function AdminFulfillmentPriorityControl(props: {
         target_priority: priority,
         target_reason: priority === "marketplace_first"
           ? "Operations set Partner Network as the first LPG fulfillment route"
-          : "Operations set SKIMA Fleet as the first LPG fulfillment route",
+          : "Operations set SKIMA Managed as the first LPG fulfillment route",
       });
       if (error) throw error;
       return data;
@@ -72,7 +72,7 @@ export function AdminFulfillmentPriorityControl(props: {
       setNotice(hybridIsActive
         ? priority === "marketplace_first"
           ? "Saved. New orders will try the Partner Network first while both routes are enabled."
-          : "Saved. New orders will try SKIMA Fleet first while both routes are enabled."
+          : "Saved. New orders will try SKIMA Managed first while both routes are enabled."
         : `Priority saved for Hybrid mode. Current availability remains ${fulfillmentModeLabel(current?.mode ?? "hybrid")}.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["lpg-launch-assurance-configuration"] }),
@@ -104,7 +104,7 @@ export function AdminFulfillmentPriorityControl(props: {
   const current = configuration.data;
   const currentPriorityLabel = current.priority === "marketplace_first"
     ? "Partner Network first"
-    : "SKIMA Fleet first";
+    : "SKIMA Managed first";
   const modeLabel = fulfillmentModeLabel(current.mode);
   const priorityIsActive = current.enabled && current.mode === "hybrid";
   const hasUnsavedChange = selectedPriority !== current.priority;
@@ -116,7 +116,7 @@ export function AdminFulfillmentPriorityControl(props: {
           <span className="section-kicker">LPG order routing</span>
           <h2>Who should get new LPG orders first?</h2>
           <p className="skima-muted">
-            Priority only controls which route is tried first in Hybrid mode. It does not enable or disable a network. Use Service Availability to choose Partner Network only or SKIMA Fleet only.
+            Priority only controls which route is tried first in Hybrid mode. It does not enable or disable a network. Use Service Availability to choose Partner Network only or SKIMA Managed only.
           </p>
         </div>
         <StatusBadge tone={priorityIsActive ? "success" : "neutral"}>{currentPriorityLabel}</StatusBadge>
@@ -131,7 +131,7 @@ export function AdminFulfillmentPriorityControl(props: {
             </div>
           </div>
           <p className="skima-muted">
-            Try registered LPG stations and Independent Drivers first. SKIMA Fleet remains available according to your fulfillment setup.
+            Try registered LPG stations and Independent Drivers first. SKIMA Managed remains available according to your fulfillment setup.
           </p>
           <Button
             variant={selectedPriority === "marketplace_first" ? undefined : "outline"}
@@ -149,7 +149,7 @@ export function AdminFulfillmentPriorityControl(props: {
           <div className="section-heading">
             <div>
               <Truck size={20} aria-hidden="true" />
-              <h3>SKIMA Fleet first</h3>
+              <h3>SKIMA Managed first</h3>
             </div>
           </div>
           <p className="skima-muted">
@@ -163,7 +163,7 @@ export function AdminFulfillmentPriorityControl(props: {
               setSelectedPriority("internal_first");
             }}
           >
-            {selectedPriority === "internal_first" ? "Selected" : "Choose SKIMA Fleet first"}
+            {selectedPriority === "internal_first" ? "Selected" : "Choose SKIMA Managed first"}
           </Button>
         </div>
       </div>
@@ -173,7 +173,7 @@ export function AdminFulfillmentPriorityControl(props: {
           ? "The priority above is active now."
           : current.enabled
             ? "The saved priority becomes relevant when both routes are allowed."
-            : "SKIMA Fleet fulfillment is currently off, so this priority is saved for when it is enabled."}
+            : "SKIMA Managed fulfillment is currently off, so this priority is saved for when it is enabled."}
       </div>
 
       {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
@@ -205,8 +205,8 @@ export function AdminFulfillmentPriorityControl(props: {
 
 function fulfillmentModeLabel(mode: "marketplace_only" | "internal_only" | "hybrid"): string {
   if (mode === "marketplace_only") return "Partner Network only";
-  if (mode === "internal_only") return "SKIMA Fleet only";
-  return "Partner Network + SKIMA Fleet";
+  if (mode === "internal_only") return "SKIMA Managed only";
+  return "Partner Network + SKIMA Managed";
 }
 
 function readError(error: unknown): string {
