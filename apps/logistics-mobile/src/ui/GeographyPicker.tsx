@@ -257,7 +257,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
         aliases.some((alias) => alias.length >= 3 && queryText.includes(alias));
     });
     return resolveMostSpecificGeography(specificMatches);
-  }, [countryRoot.data, query.data, search]);
+  }, [query.data, search]);
   const useManualAddress = () => {
     const id = asString(manualBase, "id");
     if (!id || !search) return;
