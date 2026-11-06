@@ -91,6 +91,8 @@ jobs:
         run: npm run in-app-guide:contract
       - name: Verify customer-facing copy across SKIMA services
         run: deno test --allow-read scripts/skima-customer-facing-copy-contract.test.ts
+      - name: Verify service discovery and post-completion customer experience
+        run: deno test --allow-read scripts/skima-customer-success-experience-contract.test.ts
       - name: Verify LPG auth production contracts
         run: npm run lpg-auth:contract
       - name: Verify payout runtime production contracts
