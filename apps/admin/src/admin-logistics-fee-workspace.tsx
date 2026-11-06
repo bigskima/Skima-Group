@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { Button, ErrorState, LoadingState, PageHeader, StatusBadge, TextAreaInput, TextInput } from "@skima/ui";
-import { isSuperAdmin, useSessionState } from "./session";
+import { useSessionState } from "./session";
 
 const ConfigurationSchema = z.object({
   fixed_amount: z.coerce.number().nonnegative(),
@@ -85,9 +85,9 @@ const POLICIES: FeePolicySpec[] = [
 ];
 
 export function AdminLogisticsFeeWorkspace() {
-  const { api, context, status } = useSessionState();
+  const { api, context, session, status } = useSessionState();
   const client = useQueryClient();
-  const superAdmin = isSuperAdmin(context);
+  const superAdmin = context?.platformAdmin?.admin_kind === "super_admin";
   const canDraft = superAdmin || Boolean(context?.permissions.includes("platform.financial_policy.draft"));
   const canApprove = superAdmin || Boolean(context?.permissions.includes("platform.financial_policy.approve"));
   const canActivate = superAdmin || Boolean(context?.permissions.includes("platform.financial_policy.activate"));
@@ -126,7 +126,7 @@ export function AdminLogisticsFeeWorkspace() {
         eyebrow="Money · Logistics"
         title="Logistics fees & settlement"
         description="Configure the customer booking charge, offline company fee and the percentage SKIMA retains when an online delivery is successfully settled."
-        actions={<Button variant="secondary" onClick={() => void refresh()}><RefreshCcw size={15} /> Refresh</Button>}
+        actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
       />
       <div className="admin-money-guardrail">
         <ShieldCheck size={17} />
@@ -134,7 +134,7 @@ export function AdminLogisticsFeeWorkspace() {
       </div>
       {notice ? <div className={isError ? "admin-inline-alert admin-inline-alert--error" : "admin-inline-alert"}>{notice}</div> : null}
       {versions.isPending ? <LoadingState label="Loading Logistics fee policies…" /> : versions.error ? (
-        <ErrorState title="Logistics fee policies unavailable" description={versions.error instanceof Error ? versions.error.message : "The financial policy service could not be reached."} retry={() => void versions.refetch()} />
+        <ErrorState title="Logistics fee policies unavailable" message={versions.error instanceof Error ? versions.error.message : "The financial policy service could not be reached."} onRetry={() => void versions.refetch()} />
       ) : (
         <div className="admin-logistics-fee-grid">
           {POLICIES.map((policy) => (
@@ -145,7 +145,7 @@ export function AdminLogisticsFeeWorkspace() {
               canDraft={canDraft}
               canApprove={canApprove}
               canActivate={canActivate}
-              actorId={context?.userId ?? null}
+              actorId={session?.user.id ?? null}
               onSuccess={(message) => { setIsError(false); setNotice(message); void refresh(); }}
               onError={(message) => { setIsError(true); setNotice(message); }}
             />
@@ -308,9 +308,7 @@ function LogisticsFeePolicyCard(props: {
             value={percentage} onChange={(event) => setPercentage(event.currentTarget.value)} disabled={createDraft.isPending} required />
           <TextAreaInput label="Reason for change" name="logistics-policy-reason" value={reason}
             onChange={(event) => setReason(event.currentTarget.value)} rows={2} disabled={createDraft.isPending} required />
-          <Button type="submit" disabled={createDraft.isPending}>
-            <BadgeDollarSign size={15} /> {createDraft.isPending ? "Submitting…" : "Submit fee proposal"}
-          </Button>
+          <Button type="submit" icon={BadgeDollarSign} disabled={createDraft.isPending}>{createDraft.isPending ? "Submitting…" : "Submit fee proposal"}</Button>
         </form>
       ) : (
         <p className="skima-muted">You need financial policy draft permission to change this fee.</p>
@@ -327,16 +325,12 @@ function LogisticsFeePolicyCard(props: {
               <p>{version.change_reason ?? "No change reason supplied."}</p>
               {version.lifecycle_status === "submitted" && props.canApprove ? (
                 <div className="admin-logistics-fee-card__actions">
-                  <Button variant="secondary" disabled={Boolean(busyId)} onClick={() => review.mutate({ version, decision: "rejected" })}>Reject</Button>
-                  <Button disabled={Boolean(busyId) || version.created_by === props.actorId} onClick={() => review.mutate({ version, decision: "approved" })}>
-                    <CheckCircle2 size={15} /> Approve
-                  </Button>
+                  <Button variant="outline" disabled={Boolean(busyId)} onClick={() => review.mutate({ version, decision: "rejected" })}>Reject</Button>
+                  <Button icon={CheckCircle2} disabled={Boolean(busyId) || version.created_by === props.actorId} onClick={() => review.mutate({ version, decision: "approved" })}>Approve</Button>
                 </div>
               ) : null}
               {version.lifecycle_status === "approved" && props.canActivate ? (
-                <Button disabled={Boolean(busyId)} onClick={() => activate.mutate(version)}>
-                  <ShieldCheck size={15} /> Activate for new bookings
-                </Button>
+                <Button icon={ShieldCheck} disabled={Boolean(busyId)} onClick={() => activate.mutate(version)}>Activate for new bookings</Button>
               ) : null}
               {version.created_by === props.actorId && version.lifecycle_status === "submitted" && props.canApprove ? (
                 <small className="skima-muted">A different authorised administrator must approve your proposal.</small>
