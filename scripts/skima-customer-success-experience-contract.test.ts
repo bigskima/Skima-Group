@@ -1,14 +1,14 @@
 const read = (path: string) => Deno.readTextFile(path);
 
 function requireText(source: string, fragment: string, label: string) {
-  const normalized = source.replace(/\\s+/g, " ");
-  const expected = fragment.replace(/\\s+/g, " ");
+  const normalized = source.replace(/\s+/g, " ");
+  const expected = fragment.replace(/\s+/g, " ");
   if (!normalized.includes(expected)) throw new Error(label + ": missing " + fragment);
 }
 
 function rejectText(source: string, fragment: string, label: string) {
-  const normalized = source.replace(/\\s+/g, " ");
-  const expected = fragment.replace(/\\s+/g, " ");
+  const normalized = source.replace(/\s+/g, " ");
+  const expected = fragment.replace(/\s+/g, " ");
   if (normalized.includes(expected)) throw new Error(label + ": unexpected " + fragment);
 }
 
