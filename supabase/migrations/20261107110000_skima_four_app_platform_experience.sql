@@ -243,15 +243,15 @@ revoke all on table public.user_referral_codes from anon, authenticated;
 revoke all on table public.user_referrals from anon, authenticated;
 revoke all on table public.referral_reward_entries from anon, authenticated;
 grant select on public.user_referral_codes, public.user_referrals, public.referral_reward_entries to authenticated;
-grant select, insert, update, delete on public.referral_campaigns to authenticated;
+grant select, insert, update on public.referral_campaigns to authenticated;
 
 create or replace function public.read_my_referral_dashboard(target_campaign_id uuid default null)
 returns jsonb
 language plpgsql
-stable
+volatile
 security definer
 set search_path = public
-as $$
+as $
 declare
   actor uuid := auth.uid();
   code_value text;
@@ -415,6 +415,7 @@ create index if not exists push_notification_outbox_queue_idx
 
 alter table public.push_device_registrations enable row level security;
 alter table public.push_notification_outbox enable row level security;
+alter table public.push_notification_outbox enable row level security;
 drop policy if exists push_device_registrations_owner_read on public.push_device_registrations;
 create policy push_device_registrations_owner_read on public.push_device_registrations
 for select to authenticated using (user_id = auth.uid());
@@ -553,9 +554,7 @@ declare
   recent_rows jsonb;
   selected_currency text := upper(coalesce(nullif(target_currency_code,''),'NGN'));
   limit_value integer := greatest(1, least(coalesce(target_limit,20),100));
-  store_module_id uuid;
-  lpg_module_id uuid;
-  logistics_module_id uuid;
+
 begin
   if auth.uid() is null then raise exception 'authentication is required'; end if;
   actor_can_read := public.is_platform_super_admin()
@@ -566,19 +565,13 @@ begin
     or public.has_permission('platform.revenue.read', null)
     or public.has_permission('platform.revenue.manage', null);
 
-  select id into store_module_id from public.business_modules where key='store';
-  select id into lpg_module_id from public.business_modules where key='lpg';
-  select id into logistics_module_id from public.business_modules where key='logistics_network';
-
   with classified as (
     select transaction.*,
       case
-        when transaction.module_id = store_module_id
-          or transaction.source ilike 'skima.store.%'
+        when transaction.source ilike 'skima.store.%'
           or transaction.metadata->>'storefront_module' = 'store'
           or transaction.metadata->>'module_key' = 'store' then 'store'
-        when transaction.module_id = logistics_module_id
-          or transaction.source ilike '%logistics%'
+        when transaction.source ilike '%logistics%'
           or transaction.metadata->>'module_key' = 'logistics_network' then 'logistics'
         when transaction.source ilike '%utility%'
           or transaction.source ilike '%bills%'
@@ -586,8 +579,7 @@ begin
           or transaction.subject_type ilike '%bill%'
           or transaction.metadata->>'bounded_context' in ('utility_billing','bills')
           or transaction.metadata->>'module_key' in ('bills','utility_billing') then 'bills'
-        when transaction.module_id = lpg_module_id
-          or transaction.source ilike 'skima.lpg.%'
+        when transaction.source ilike 'skima.lpg.%'
           or transaction.source ilike 'lpg.%'
           or transaction.source ilike 'platform.fuel.%'
           or transaction.metadata->>'bounded_context' = 'lpg'
