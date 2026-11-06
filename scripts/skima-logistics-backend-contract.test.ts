@@ -124,7 +124,12 @@ Deno.test("Matching is capability, cargo, coverage, verification and capacity co
 });
 
 Deno.test("Customer category requests match all eligible provider services in that category", () => {
-  requireText(migration, "where service.category_id = category_id", "customer category match");
+    const createJob = migration.slice(
+    migration.indexOf("create or replace function public.create_logistics_job"),
+    migration.indexOf("create or replace function public.refresh_logistics_job_matches"),
+  );
+  requireText(createJob, "where service.category_id = v_category_id", "customer category match uses an unambiguous local variable");
+  requireNotText(createJob, "service.category_id = category_id", "no PL/pgSQL variable/column ambiguity in customer category matching");
   requireText(migration, "where service.category_id = job.category_id", "rematch category scope");
   requireNotText(
     migration.slice(
