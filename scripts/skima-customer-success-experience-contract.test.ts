@@ -77,6 +77,22 @@ Deno.test("Store delivery setup supplies valid origin coordinates and a positive
   requireText(migration, "target_delivery_radius_km is null or target_delivery_radius_km <= 0", "database remains authoritative for required delivery radius");
 });
 
+Deno.test("Store delivery setup supplies geocoded origin coordinates and a positive radius", async () => {
+  const [workspace, migration] = await Promise.all([
+    read("apps/admin/src/features/store/StoreWorkspace.tsx"),
+    read("supabase/migrations/20261103131401_skima_store_checkout_delivery.sql"),
+  ]);
+  requireText(workspace, 'api.post("/lpg/maps/geocode"', "Store dispatch origin uses the shared geocoding gateway");
+  requireText(workspace, "setDeliveryOriginLatitude(String(result.location.latitude))", "Store origin latitude is populated from geocoding");
+  requireText(workspace, "setDeliveryOriginLongitude(String(result.location.longitude))", "Store origin longitude is populated from geocoding");
+  requireText(workspace, 'label="Delivery radius (km)"', "delivery radius is operator-configurable");
+  requireText(workspace, "deliveryOriginLatitude: parsedOriginLatitude", "actual Store origin latitude is saved");
+  requireText(workspace, "deliveryOriginLongitude: parsedOriginLongitude", "actual Store origin longitude is saved");
+  requireText(workspace, "deliveryRadiusKm: parsedDeliveryRadius", "configured Store radius is saved");
+  requireText(workspace, "parsedDeliveryRadius <= 0", "Store rejects non-positive delivery radius");
+  requireText(migration, "target_delivery_radius_km is null or target_delivery_radius_km <= 0", "database remains authoritative for delivery radius");
+});
+
 Deno.test("All four customer apps share the database-driven service catalogue", async () => {
   const [migration, refill, bills, store, logistics] = await Promise.all([
     read("supabase/migrations/20261106100000_customer_service_discovery_and_logistics_admin_fixes.sql"),
