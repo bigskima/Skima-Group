@@ -33,7 +33,7 @@ const STEPS: TourStep[] = [
     page: "bills",
     targetKey: "bills.home.hero",
     title: "Welcome to SKIMA Bills",
-    body: "Discover supported electricity, airtime, data and TV services. Available billers and payment options are loaded from SKIMA's live utility catalogue.",
+    body: "Pay supported electricity, airtime, data and TV bills. Choose a biller and follow the steps shown on screen.",
   },
   {
     page: "bills",
@@ -57,7 +57,7 @@ const STEPS: TourStep[] = [
     page: "store",
     targetKey: "bills.store.catalogue",
     title: "Explore SKIMA Store",
-    body: "Browse the Store catalogue and place shopping orders. Orders and bill payments follow separate service flows.",
+    body: "Browse products and place a shopping order from SKIMA Store.",
   },
   {
     page: "account",
