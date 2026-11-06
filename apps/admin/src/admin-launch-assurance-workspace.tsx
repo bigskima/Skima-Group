@@ -312,18 +312,18 @@ export function AdminLaunchAssuranceWorkspace() {
     onSuccess: async (saved) => {
       const configuration = LaunchConfigSchema.parse(saved);
       const modeLabel = configuration.mode === "hybrid"
-        ? "Partner Network + SKIMA Fleet"
+        ? "Partner Network + SKIMA Managed"
         : configuration.mode === "marketplace_only"
           ? "Partner Network only"
-          : "SKIMA Fleet only";
+          : "SKIMA Managed only";
       const priorityLabel = configuration.priority === "marketplace_first"
         ? "Partner Network first"
-        : "SKIMA Fleet first";
+        : "SKIMA Managed first";
       const fallbackLabel = configuration.marketplaceFirstFallbackOnly
         ? "Fleet only if Partner Network cannot serve"
         : "both eligible options can be shown";
       setNotice(
-        `Saved and verified: ${modeLabel}; SKIMA Fleet ${configuration.enabled ? "On" : "Off"}; ${priorityLabel}; ${fallbackLabel}.`,
+        `Saved and verified: ${modeLabel}; SKIMA Managed ${configuration.enabled ? "On" : "Off"}; ${priorityLabel}; ${fallbackLabel}.`,
       );
       setConfigurationReason("");
       await refresh();
@@ -453,7 +453,7 @@ export function AdminLaunchAssuranceWorkspace() {
       <PageHeader
         eyebrow="LPG · SKIMA operations"
         title="SKIMA Fulfillment Setup"
-        description="Configure the Partner Network and SKIMA Fleet as two fulfillment routes. Choose which routes are available, which one gets first chance, and when SKIMA Fleet is used as fallback."
+        description="Configure the Partner Network and SKIMA Managed as two fulfillment routes. Choose which routes are available, which one gets first chance, and when SKIMA Managed is used as fallback."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
       />
 
@@ -485,18 +485,18 @@ export function AdminLaunchAssuranceWorkspace() {
         <div className="skima-form-grid">
           <div className="skima-form-help">
             <strong>Choose which fulfillment networks can receive new orders.</strong>
-            <p>Partner Network only excludes SKIMA Fleet. SKIMA Fleet only excludes Partner Network. Both keeps both routes eligible and uses the priority and fallback rule below. These controls affect new quotes; already assigned orders continue.</p>
+            <p>Partner Network only excludes SKIMA Managed. SKIMA Managed only excludes Partner Network. Both keeps both routes eligible and uses the priority and fallback rule below. These controls affect new quotes; already assigned orders continue.</p>
           </div>
           <SelectInput label="Available fulfillment networks" value={mode} onChange={(event) => setMode(event.currentTarget.value as FulfillmentMode)} options={[
-            { label: "Both: Partner Network + SKIMA Fleet", value: "hybrid" },
+            { label: "Both: Partner Network + SKIMA Managed", value: "hybrid" },
             { label: "Partner Network only", value: "marketplace_only" },
-            { label: "SKIMA Fleet only", value: "internal_only" },
+            { label: "SKIMA Managed only", value: "internal_only" },
           ]} />
           <SelectInput label="Who gets the first chance?" value={priority} onChange={(event) => setPriority(event.currentTarget.value as FulfillmentPriority)} options={[
             { label: "Marketplace first", value: "marketplace_first" },
             { label: "SKIMA Managed Drivers first", value: "internal_first" },
           ]} />
-          <SelectInput label="SKIMA Fleet master switch" value={enabled ? "enabled" : "disabled"} onChange={(event) => setEnabled(event.currentTarget.value === "enabled")} options={[
+          <SelectInput label="SKIMA Managed master switch" value={enabled ? "enabled" : "disabled"} onChange={(event) => setEnabled(event.currentTarget.value === "enabled")} options={[
             { label: "Off", value: "disabled" },
             { label: "On", value: "enabled" },
           ]} />
@@ -505,7 +505,7 @@ export function AdminLaunchAssuranceWorkspace() {
             { label: "Show both marketplace and SKIMA options", value: "show_both" },
           ]} />
         </div>
-        <TextAreaInput label="Admin note (optional)" value={configurationReason} onChange={(event) => setConfigurationReason(event.currentTarget.value)} placeholder="Example: Partner Network first, SKIMA Fleet as fallback in Awka" />
+        <TextAreaInput label="Admin note (optional)" value={configurationReason} onChange={(event) => setConfigurationReason(event.currentTarget.value)} placeholder="Example: Partner Network first, SKIMA Managed as fallback in Awka" />
         <Button disabled={!canManageDispatch || updateConfiguration.isPending || (enabled && !ready?.ready)} onClick={() => updateConfiguration.mutate()}>
           {updateConfiguration.isPending ? "Saving…" : enabled && !ready?.ready ? "Complete setup before turning on" : "Save fulfillment settings"}
         </Button>
