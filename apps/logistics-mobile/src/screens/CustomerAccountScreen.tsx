@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ChevronRight, CircleHelp, LogOut, MailCheck, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
+import { ChevronRight, CircleHelp, Gift, LogOut, MailCheck, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
