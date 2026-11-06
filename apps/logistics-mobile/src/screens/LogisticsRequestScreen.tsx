@@ -261,9 +261,16 @@ export function LogisticsRequestScreen() {
           {fieldError ? <View style={[styles.errorBox, { backgroundColor: palette.dangerSoft }]}><AlertCircle color={palette.danger} size={16} /><Text style={[styles.errorText, { color: palette.danger }]}>{fieldError}</Text></View> : null}
 
           <View style={styles.actions}>
-            {step > 1 ? <AppButton label="Back" variant="secondary" onPress={() => { setFieldError(null); setStep((current) => current - 1); }} icon={<ArrowLeft color={palette.ink} size={16} />} /> : null}
-            {step < 4 ? <AppButton label="Continue" fullWidth={step === 1} onPress={next} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} /> :
-              <AppButton label="Publish request" fullWidth loading={createJob.isPending} onPress={() => void submit()} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />}
+            {step > 1 ? (
+              <View style={styles.actionButton}>
+                <AppButton label="Back" fullWidth variant="secondary" onPress={() => { setFieldError(null); setStep((current) => current - 1); }} icon={<ArrowLeft color={palette.ink} size={16} />} />
+              </View>
+            ) : null}
+            <View style={styles.actionButton}>
+              {step < 4
+                ? <AppButton label="Continue" fullWidth onPress={next} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
+                : <AppButton label="Publish request" fullWidth loading={createJob.isPending} disabled={!canSubmit} onPress={() => void submit()} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />}
+            </View>
           </View>
         </View>
       )}
@@ -316,5 +323,6 @@ const styles = StyleSheet.create({
   safetyText: { flex: 1, ...typography.caption, fontSize: 10, lineHeight: 16 },
   errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: spacing.md, borderRadius: radii.md },
   errorText: { ...typography.caption, flex: 1, lineHeight: 18 },
-  actions: { flexDirection: "row", gap: spacing.sm },
+  actions: { flexDirection: "row", alignItems: "stretch", gap: spacing.sm },
+  actionButton: { flex: 1, minWidth: 0 },
 });
