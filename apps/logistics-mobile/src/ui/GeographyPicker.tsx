@@ -53,39 +53,11 @@ function resolveMostSpecificGeography(matches: readonly Place[]): Place | null {
   if (!matches.length) return null;
   const maxDepth = Math.max(...matches.map((item) => hierarchyParts(item).length));
   const deepest = matches.filter((item) => hierarchyParts(item).length === maxDepth);
-  if (deepest.length === 1) return deepest[0];
 
-  // Several selectable areas can represent one city. Resolve their common
-  // parent rather than arbitrarily choosing one LGA or the country root.
-  const parentIds = new Set(deepest.map((item) => asString(item, "parent_id")).filter(Boolean));
-  if (parentIds.size === 1) {
-    const parentId = [...parentIds][0];
-    const first = deepest[0];
-    const path = hierarchyParts(first);
-    const parentName = path.at(-2) ?? asString(first, "parent_name");
-    if (parentId && parentName) {
-      return {
-        id: parentId,
-        parent_id: null,
-        canonical_name: parentName,
-        display_name: parentName,
-        geography_name: parentName,
-        hierarchy_path: path.slice(0, -1).join(" · "),
-        parent_name: path.at(-3) ?? "Nigeria",
-        country_code: asString(first, "country_code") ?? "NG",
-      };
-    }
-  }
-  const paths = deepest.map(hierarchyParts);
-  const common: string[] = [];
-  for (let index = 0; index < Math.min(...paths.map((path) => path.length)); index += 1) {
-    const part = paths[0][index];
-    if (!paths.every((path) => normalized(path[index]) === normalized(part))) break;
-    common.push(part);
-  }
-  const commonName = common.at(-1);
-  if (!commonName) return null;
-  return matches.find((item) => normalized(asString(item, "canonical_name")) === normalized(commonName)) ?? null;
+  // Only select a specific geography when the address identifies one unique
+  // deepest area. If a city spans two LGAs, ask the customer to choose the
+  // correct LGA instead of widening the order to the entire state.
+  return deepest.length === 1 ? deepest[0] : null;
 }
 
 function resolveByAddressComponents(geographies: readonly Place[], candidates: readonly string[], allowPartial = true) {
