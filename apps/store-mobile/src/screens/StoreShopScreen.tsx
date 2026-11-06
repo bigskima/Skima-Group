@@ -10,6 +10,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./StoreUI";
 import { AppButton } from "../ui/AppButton";
 import { GuideTarget } from "../onboarding/StoreGuideProvider";
+import { StorePromotionBanner } from "../ui/StorePromotionBanner";
 
 type Row=Record<string,unknown>;
 type CartLine={itemId:string;variantId:string|null;name:string;variantName:string|null;quantity:number;unitAmount:number;currencyCode:string;stock:number|null};
@@ -90,6 +91,7 @@ export function StoreShopScreen(){
  if(!store.storeModule||!settings)return <Page><State title="Store is not currently available" body="Store isn’t available right now. Please try again later."/></Page>;
  return <Page guidePage="shop" refreshControl={<RefreshControl refreshing={store.items.isRefetching||store.prices.isRefetching} onRefresh={refresh} tintColor={palette.brand}/>}>
   <GuideTarget page="shop" targetKey="store.shop.hero"><Card style={{backgroundColor:palette.brand,borderColor:palette.brand,padding:17}}><Text style={{fontSize:9,color:"rgba(255,255,255,.75)",fontWeight:"900",letterSpacing:1.2}}>SKIMA STORE</Text><Text style={{fontSize:23,color:"#fff",fontWeight:"900"}}>Shop essentials.</Text><Text style={{fontSize:11,color:"rgba(255,255,255,.85)"}}>Browse products for everyday needs.</Text><Text style={{fontSize:10,color:"#fff",marginTop:5}}>Wallet · {money(balance,currency)}</Text></Card></GuideTarget>
+  <StorePromotionBanner />
   <GuideTarget page="shop" targetKey="store.shop.categories"><View style={{gap:10}}>
   <View style={[styles.search,{borderColor:palette.border,backgroundColor:palette.surface}]}><Search size={16} color={palette.muted}/><TextInput value={search} onChangeText={setSearch} placeholder="Search products" placeholderTextColor={palette.muted} style={{flex:1,color:palette.ink,fontSize:12}}/>{search?<Pressable onPress={()=>setSearch("")}><X size={16} color={palette.muted}/></Pressable>:null}</View>
   <SectionTitle title="Shop by category" caption="Browse products from participating sellers."/>
