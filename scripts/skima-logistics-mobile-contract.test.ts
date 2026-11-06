@@ -146,9 +146,29 @@ Deno.test("Managed Driver coverage shows all enabled geographies but blocks unsa
 });
 
 Deno.test("Logistics request review actions fit the mobile viewport", () => {
-  requireText(request, "actionButton: { flex: 1, minWidth: 0 }", "review actions share constrained available width");
-  requireText(request, "alignItems: \"stretch\"", "buttons align within the action row");
+  requireText(request, 'backAction: { flexBasis: "30%", flexGrow: 0', "back action has bounded mobile width");
+  requireText(request, "primaryActionWithBack: { flex: 1, maxWidth: 230", "publish action is capped beside Back");
   requireText(request, 'disabled={!canSubmit}', "publish action respects complete request validation");
+});
+
+Deno.test("Logistics address matching chooses the most specific geography and blocks country-only requests", () => {
+  requireText(geography, "resolveMostSpecificGeography", "hierarchy-aware location resolution");
+  requireText(geography, "hierarchyParts", "canonical parent/child location hierarchy");
+  requireText(geography, "deepest.length === 1 ? deepest[0] : null", "ambiguous city aliases require a specific LGA choice");
+  requireText(geography, "if (specificMatches.length) return resolveMostSpecificGeography(specificMatches)", "ambiguous LGA matches cannot fall through to a broader state");
+  requireText(geography, "if (lgaMatches.length) return resolveMostSpecificGeography(lgaMatches)", "ambiguous LGA component matches stay unresolved");
+  requireText(geography, "geography_hierarchy_path", "selected address retains its resolved hierarchy");
+  requireNotText(geography, 'normalized(asString(item, "canonical_name")) === "nigeria"', "no silent country-root fallback for an unresolved street");
+  requireText(request, "hasServiceGeography(pickup)", "pickup cannot publish at country-only scope");
+  requireText(request, "hasServiceGeography(destination)", "destination cannot publish at country-only scope");
+  requireText(request, "geography_hierarchy_path", "request snapshot stores coverage hierarchy");
+});
+
+Deno.test("Logistics publish actions are constrained and customer order details display handling notes", () => {
+  requireText(request, 'backAction: { flexBasis: "30%", flexGrow: 0', "back button has a bounded share of the action row");
+  requireText(request, "primaryActionWithBack: { flex: 1, maxWidth: 230", "publish button has a maximum mobile width");
+  requireText(detail, "Additional instructions", "customer can read handling notes after publishing");
+  requireText(detail, 'asString(job, "instructions")', "order page reads saved instructions");
 });
 
 Deno.test("The app preserves the LPG visual standard with red brand, premium surfaces and dark/light themes", () => {

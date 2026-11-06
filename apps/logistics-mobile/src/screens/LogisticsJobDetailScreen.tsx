@@ -202,6 +202,12 @@ export function LogisticsJobDetailScreen() {
                 <Text style={[styles.jobMeta, { color: palette.muted }]}>{opportunities.length} matched {opportunities.length === 1 ? "company" : "companies"}</Text>
               </View>
               {asString(job, "description") ? <Text style={[styles.description, { color: palette.muted }]}>{asString(job, "description")}</Text> : null}
+              {asString(job, "instructions") ? (
+                <View style={[styles.additionalInstructions, { backgroundColor: palette.warningSoft }]}>
+                  <Text style={[styles.additionalInstructionsLabel, { color: palette.ink }]}>Additional instructions</Text>
+                  <Text style={[styles.description, { color: palette.ink }]}>{asString(job, "instructions")}</Text>
+                </View>
+              ) : null}
             </Card>
 
             {existingBooking ? (
@@ -521,6 +527,8 @@ const styles = StyleSheet.create({
   routeStem: { height: 10, borderLeftWidth: 1, marginLeft: 3 },
   jobMetaRow: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
   description: { ...typography.caption, lineHeight: 18, fontSize: 11 },
+  additionalInstructions: { marginTop: spacing.md, padding: spacing.md, borderRadius: radii.md, gap: 5 },
+  additionalInstructionsLabel: { ...typography.caption, fontSize: 11, fontWeight: "900" },
   section: { gap: 12 },
   companyList: { gap: 10 },
   companyCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 14, gap: 11 },

@@ -26,8 +26,10 @@ Deno.test("Coverage administration can add named service areas without map coord
   requireText(managedMigration, "'geography:'||geography.id::text", "stable service-area key for new geographies");
   requireText(managedMigration, "target_service_area_key", "Managed Driver area assignment");
   requireText(managedMigration, "'geography:'||matched_geography_id::text", "Managed price policy resolves new geography key");
-  requireText(managedAdmin, "area.hasBoundary === true", "physical Driver assignment requires mapped boundary");
-  requireText(managedAdmin, "A new location can be enabled for customer orders and pricing without a map", "clear boundary distinction for administrators");
+  requireText(managedAdmin, "const selectableAreas = serviceAreas.data ?? []", "all active named locations are selectable");
+  requireText(managedAdmin, "const availableAreas = selectableAreas.filter", "already assigned locations are excluded without hiding other areas");
+  requireText(managedAdmin, "selectedAreaCanBeAssigned = selectedArea?.hasBoundary === true", "physical Driver assignment still requires a verified map boundary");
+  requireText(managedAdmin, "All enabled locations are now visible here", "administrator sees the reason an area cannot yet be dispatched");
 });
 
 Deno.test("Managed availability and routing use the same named geography policy", async () => {
@@ -57,6 +59,23 @@ Deno.test("Logistics companies can use automatic identity approval or upload evi
   requireText(application, "uploadDocument", "manual document upload path");
   requireText(admin, "Enter at least 5 characters to enable Verify or Reject", "visible approval reason requirement");
   requireText(migration, "not public.is_platform_super_admin() and not public.has_permission('logistics.marketplace.manage', null)", "database Super Admin approval permission");
+});
+
+Deno.test("Store delivery setup follows nationwide flat-fee policy with optional geocoded origin coordinates", async () => {
+  const [workspace, migration] = await Promise.all([
+    read("apps/admin/src/features/store/StoreWorkspace.tsx"),
+    read("supabase/migrations/20261104120000_storefront_nationwide_catalog_admin.sql"),
+  ]);
+  requireText(workspace, 'api.post("/lpg/maps/geocode"', "Store dispatch origin can use the shared geocoding gateway");
+  requireText(workspace, "setDeliveryOriginLatitude(String(result.location.latitude))", "geocoded latitude is retained");
+  requireText(workspace, "setDeliveryOriginLongitude(String(result.location.longitude))", "geocoded longitude is retained");
+  requireText(workspace, "parsedOriginLatitude === null) !== (parsedOriginLongitude === null", "coordinate inputs must be supplied together when used");
+  requireText(workspace, "deliveryOriginLatitude: parsedOriginLatitude", "Store saves optional origin latitude");
+  requireText(workspace, "deliveryOriginLongitude: parsedOriginLongitude", "Store saves optional origin longitude");
+  requireText(workspace, "deliveryRadiusKm: null", "nationwide checkout is not radius-gated");
+  requireText(workspace, "Delivery radius does not restrict checkout", "admin copy explains nationwide delivery");
+  requireText(migration, "delivery_radius_km = null", "database ignores legacy radius for Store nationwide delivery");
+  requireText(migration, "Optional Store coordinates must be supplied together", "database validates optional coordinate pairs");
 });
 
 Deno.test("All four customer apps share the database-driven service catalogue", async () => {

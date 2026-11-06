@@ -481,13 +481,27 @@ function PartnerCoverageDialog(props: {
                 ]}
               />
               {form.coverageType === "ADMIN_GEOGRAPHY" ? (
-                <SelectInput
-                  label="Mapped service area"
-                  value={form.geographyId}
-                  onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })}
-                  options={[{ label: "Choose mapped service area", value: "" }, ...props.geographies.filter((area) => area.status === "active" && area.has_boundary === true).map((area) => ({ label: area.canonical_name, value: area.id }))]}
-                  required
-                />
+                <>
+                  <SelectInput
+                    label="Mapped service area"
+                    value={form.geographyId}
+                    onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })}
+                    options={[{ label: "Choose mapped service area", value: "" }, ...props.geographies.filter((area) => area.status === "active" && area.has_boundary === true).map((area) => ({ label: area.canonical_name, value: area.id }))]}
+                    required
+                  />
+                  <div className="coverage-v2__area-availability">
+                    <strong>Other active locations in the SKIMA geography catalogue</strong>
+                    <p className="skima-muted">These locations remain enabled for address and onboarding rules. A named location without a verified polygon cannot be used as a driver or station dispatch boundary yet.</p>
+                    <div className="skima-action-row" style={{ flexWrap: "wrap" }}>
+                      {props.geographies.filter((area) => area.status === "active").map((area) => (
+                        <StatusBadge key={area.id} tone={area.has_boundary ? "success" : "warning"}>
+                          {area.canonical_name} · {area.has_boundary ? "boundary verified" : "boundary needed"}
+                        </StatusBadge>
+                      ))}
+                    </div>
+                    <p className="skima-muted">To activate a driver or station in an area without a polygon now, choose “Use a distance around a point” and set the real operating centre and radius, or draw a verified custom zone. SKIMA will not dispatch against an unbounded place name alone.</p>
+                  </div>
+                </>
               ) : null}
               {form.coverageType === "RADIUS" ? (
                 <>

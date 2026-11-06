@@ -17,6 +17,10 @@ import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 
 type Place = Record<string, unknown>;
+function normalizedLocation(value: string) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
 type Category = Record<string, unknown>;
 function locationSnapshot(place: Place | null): Record<string, unknown> {
   if (!place) return {};
@@ -27,6 +31,8 @@ function locationSnapshot(place: Place | null): Record<string, unknown> {
       : {},
     coordinates: place.location && typeof place.location === "object" ? place.location : null,
     place_id: asString(place, "place_id"),
+    geography_name: asString(place, "geography_name", "canonical_name"),
+    geography_hierarchy_path: asString(place, "geography_hierarchy_path", "hierarchy_path", "parent_name"),
     source: asString(place, "location_source") ?? "geography_catalogue",
   };
 }
@@ -77,7 +83,11 @@ export function LogisticsRequestScreen() {
   const destinationName = destination ? asString(destination, "canonical_name") : null;
   const validWeight = !weight.trim() || (Number.isFinite(Number(weight)) && Number(weight) > 0);
   const phoneValid = /^\+?[0-9][0-9 ()-]{6,22}$/.test(customerPhone.trim());
-  const canContinueFromRoute = Boolean(categoryKey && pickup && destination);
+  const hasServiceGeography = (place: Place | null) => {
+    const geographyName = asString(place, "geography_name", "canonical_name");
+    return Boolean(geographyName && normalizedLocation(geographyName) !== "nigeria");
+  };
+  const canContinueFromRoute = Boolean(categoryKey && pickup && destination && hasServiceGeography(pickup) && hasServiceGeography(destination));
   const canSubmit = Boolean(
     selectedCategory && pickup && destination && title.trim().length >= 3 &&
     customerName.trim().length >= 2 && phoneValid && validWeight && !createJob.isPending
@@ -87,6 +97,11 @@ export function LogisticsRequestScreen() {
     setFieldError(null);
     if (!selectedCategory) { setStep(1); setFieldError("Choose a logistics service to continue."); return; }
     if (!pickup || !destination) { setStep(1); setFieldError("Choose both a pickup and a destination."); return; }
+    if (!hasServiceGeography(pickup) || !hasServiceGeography(destination)) {
+      setStep(1);
+      setFieldError("Choose a more specific state, LGA or town for both locations. A country-only address cannot be matched to local providers.");
+      return;
+    }
     if (title.trim().length < 3) { setStep(2); setFieldError("Add a short title for what you are moving."); return; }
     if (!validWeight) { setStep(2); setFieldError("Weight must be a positive number."); return; }
     if (customerName.trim().length < 2) { setStep(3); setFieldError("Enter the name the provider should contact."); return; }
@@ -128,7 +143,8 @@ export function LogisticsRequestScreen() {
     if (step === 1 && !canContinueFromRoute) {
       if (!categoryKey) setFieldError("Select the type of logistics service.");
       else if (!pickup) setFieldError("Select your pickup location.");
-      else setFieldError("Select your destination.");
+      else if (!destination) setFieldError("Select your destination.");
+      else setFieldError("Choose a more specific state, LGA or town for both locations. A country-only address cannot be matched to local providers.");
       return;
     }
     if (step === 2) {
@@ -262,11 +278,11 @@ export function LogisticsRequestScreen() {
 
           <View style={styles.actions}>
             {step > 1 ? (
-              <View style={styles.actionButton}>
+              <View style={[styles.actionButton, styles.backAction]}>
                 <AppButton label="Back" fullWidth variant="secondary" onPress={() => { setFieldError(null); setStep((current) => current - 1); }} icon={<ArrowLeft color={palette.ink} size={16} />} />
               </View>
             ) : null}
-            <View style={styles.actionButton}>
+            <View style={[styles.actionButton, step > 1 ? styles.primaryActionWithBack : styles.primaryActionSolo]}>
               {step < 4
                 ? <AppButton label="Continue" fullWidth onPress={next} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
                 : <AppButton label="Publish request" fullWidth loading={createJob.isPending} disabled={!canSubmit} onPress={() => void submit()} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />}
@@ -323,6 +339,9 @@ const styles = StyleSheet.create({
   safetyText: { flex: 1, ...typography.caption, fontSize: 10, lineHeight: 16 },
   errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: spacing.md, borderRadius: radii.md },
   errorText: { ...typography.caption, flex: 1, lineHeight: 18 },
-  actions: { flexDirection: "row", alignItems: "stretch", gap: spacing.sm },
-  actionButton: { flex: 1, minWidth: 0 },
+  actions: { flexDirection: "row", alignItems: "stretch", justifyContent: "flex-end", gap: spacing.sm, width: "100%" },
+  actionButton: { minWidth: 0 },
+  backAction: { flexBasis: "30%", flexGrow: 0, flexShrink: 1, maxWidth: 104 },
+  primaryActionWithBack: { flex: 1, maxWidth: 230, marginLeft: "auto" },
+  primaryActionSolo: { width: "100%", maxWidth: 280, marginLeft: "auto" },
 });
