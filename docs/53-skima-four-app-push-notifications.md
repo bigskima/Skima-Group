@@ -12,7 +12,7 @@ This implementation uses one Supabase notification queue and Expo Push for Refil
 
 ## Provider credentials still required
 
-Each app has a separate Expo project. Configure the correct EAS project ID in that app's EAS environment:
+Each app has a separate Expo project. Set its project ID in the build environment so the correct Expo project is selected:
 
 | App | EAS project ID variable | Private Firebase file secret |
 |---|---|---|
@@ -77,9 +77,9 @@ Build each app with its own EAS project and matching credentials. Do not launch 
 
 Use **Actions → SKIMA four-app Android builds → Run workflow**. Select Refill, Store, Bills, Logistics or All four, then choose `production-apk` for an installable tester APK or `production-aab` for a Google Play bundle. The workflow builds selected apps sequentially so selecting All does not start four EAS builds at once.
 
-Configure these GitHub repository **Variables** (project IDs are identifiers, not secrets):
+Configure these GitHub repository **Variables** (project IDs are identifiers, not secrets; Refill's variable is an optional override):
 
-- `SKIMA_REFILL_EAS_PROJECT_ID`
+- `SKIMA_REFILL_EAS_PROJECT_ID` (optional override; Refill already has a project ID in `app.config.ts`)
 - `SKIMA_STORE_EAS_PROJECT_ID`
 - `SKIMA_BILLS_EAS_PROJECT_ID`
 - `SKIMA_LOGISTICS_EAS_PROJECT_ID`
