@@ -99,12 +99,12 @@ const appAnalyticsColumns: readonly TableColumn<RecordValue>[] = [
   { key: "displayName", header: "App", render: (row) => <strong>{recordString(row, "displayName") ?? "—"}</strong> },
   { key: "transactionCount", header: "Transactions", render: (row) => numberValue(row, "transactionCount").toLocaleString("en-NG") },
   { key: "postedCount", header: "Posted", render: (row) => numberValue(row, "postedCount").toLocaleString("en-NG") },
-  { key: "postedAmount", header: "Posted movement", render: (row) => row.postedAmount === null ? "Restricted" : money(numberValue(row, "postedAmount"), "NGN") },
-  { key: "heldAmount", header: "Held", render: (row) => row.heldAmount === null ? "Restricted" : money(numberValue(row, "heldAmount"), "NGN") },
-  { key: "releasedAmount", header: "Released / settled", render: (row) => row.releasedAmount === null ? "Restricted" : money(numberValue(row, "releasedAmount"), "NGN") },
-  { key: "refundReversalAmount", header: "Refunds / reversals", render: (row) => row.refundReversalAmount === null ? "Restricted" : money(numberValue(row, "refundReversalAmount"), "NGN") },
-  { key: "ledgerCredits", header: "Ledger credits", render: (row) => row.ledgerCredits === null ? "Restricted" : money(numberValue(row, "ledgerCredits"), "NGN") },
-  { key: "ledgerDebits", header: "Ledger debits", render: (row) => row.ledgerDebits === null ? "Restricted" : money(numberValue(row, "ledgerDebits"), "NGN") },
+  { key: "postedAmount", header: "Posted movement", render: (row) => row.postedAmount === null ? "Restricted" : money(numberValue(row, "postedAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "heldAmount", header: "Held", render: (row) => row.heldAmount === null ? "Restricted" : money(numberValue(row, "heldAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "releasedAmount", header: "Released / settled", render: (row) => row.releasedAmount === null ? "Restricted" : money(numberValue(row, "releasedAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "refundReversalAmount", header: "Refunds / reversals", render: (row) => row.refundReversalAmount === null ? "Restricted" : money(numberValue(row, "refundReversalAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "ledgerCredits", header: "Ledger credits", render: (row) => row.ledgerCredits === null ? "Restricted" : money(numberValue(row, "ledgerCredits"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "ledgerDebits", header: "Ledger debits", render: (row) => row.ledgerDebits === null ? "Restricted" : money(numberValue(row, "ledgerDebits"), recordString(row, "currencyCode") ?? "NGN") },
 ];
 
 type Analytics = z.infer<typeof AnalyticsSchema>;
