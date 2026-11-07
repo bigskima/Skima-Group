@@ -39,7 +39,7 @@ export function BillsBrandMark({ size = 138, compact = false }: { size?: number;
   return compact ? (
     <View accessibilityLabel="SKIMA" style={[styles.compactFallback, { backgroundColor: palette.brand }]}><Text style={styles.compactInitial}>S</Text></View>
   ) : (
-    <View accessibilityLabel="SKIMA" style={styles.wordmark}><Text style={[styles.name, { color: palette.ink }]}>SKIMA</Text></View>
+    <Image accessibilityLabel="SKIMA" resizeMode="contain" source={require("../../assets/skima-splash-logo.png")} style={{ width: size, height: 40 }} />
   );
 }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
