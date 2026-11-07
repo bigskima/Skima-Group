@@ -81,6 +81,8 @@ export function StoreOrdersScreen() {
             const orderMetadata = recordValue(order.metadata);
             const reason = cancellationReason(order);
             const refundedAt = asString(orderMetadata, "store_refunded_at");
+            const noRefundRequired = asString(orderMetadata, "store_refund_status") === "not_required" ||
+              asString(orderMetadata, "store_payment_status") === "not_funded";
             return (
               <Card key={id} style={{ gap: 9 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -112,7 +114,9 @@ export function StoreOrdersScreen() {
                     <Text style={{ color: palette.ink, fontSize: 10, lineHeight: 16 }}>
                       {refundedAt
                         ? "Your refund was sent to your SKIMA Wallet on " + dateLabel(refundedAt) + "."
-                        : "Your order is cancelled. The wallet refund has not yet been marked as completed."}
+                        : noRefundRequired
+                          ? "No payment was captured from your SKIMA Wallet for this checkout, so no refund is required."
+                          : "Your order is cancelled. The wallet refund has not yet been marked as completed."}
                     </Text>
                   </View>
                 ) : canConfirm ? <ActionButton label="Confirm receipt" loading={confirmReceipt.isPending} disabled={confirmReceipt.isPending} onPress={() => confirmReceipt.mutate(id)} /> :
