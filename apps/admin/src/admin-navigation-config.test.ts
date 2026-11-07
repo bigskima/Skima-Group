@@ -52,6 +52,11 @@ describe("admin navigation access rules", () => {
     expect(canAccessAdminNavigationKey("financial-analytics", () => false)).toBe(false);
   });
 
+  it("limits social directory administration to authorized social managers", () => {
+    expect(canAccessAdminNavigationKey("social-links", (permission) => permission === "platform.social.manage")).toBe(true);
+    expect(canAccessAdminNavigationKey("social-links", () => false)).toBe(false);
+  });
+
   it("limits shared referral campaign administration to content managers", () => {
     expect(canAccessAdminNavigationKey("referrals", (permission) => permission === "platform.content.manage")).toBe(true);
     expect(canAccessAdminNavigationKey("referrals", () => false)).toBe(false);
