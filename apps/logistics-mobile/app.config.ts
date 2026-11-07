@@ -9,7 +9,7 @@ loadEnvironment({
   quiet: true,
 });
 
-const easProjectId = process.env.EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID?.trim() || process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim();
+const easProjectId = process.env.EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID?.trim();
 const googleServicesCandidate = process.env.SKIMA_LOGISTICS_GOOGLE_SERVICES_FILE?.trim() || "./google-services.json";
 const googleServicesFile = existsSync(resolve(__dirname, googleServicesCandidate)) ? googleServicesCandidate : undefined;
 
@@ -63,6 +63,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     apiGatewayUrl: process.env.EXPO_PUBLIC_API_GATEWAY_URL,
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-    ...(easProjectId ? { eas: { projectId: easProjectId } } : {})
+    ...(easProjectId ? { eas: { projectId: easProjectId } } : {}),
+    appIdentityStatus: easProjectId ? "eas_project_configured" : "eas_project_required"
   }
 });
