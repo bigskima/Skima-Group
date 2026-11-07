@@ -322,7 +322,8 @@ export function StoreManagementScreen() {
             const metadata = orderMetadata(order);
             const events = (eventsQuery.data ?? []).filter((event) => asString(event, "order_id") === id);
             const reason = eventCancellationReason(events, order);
-            const refunded = typeof metadata.store_refunded_at === "string";
+            const refunded = typeof metadata.store_refunded_at === "string" || metadata.store_refund_status === "refunded";
+            const noRefundRequired = metadata.store_refund_status === "not_required" || metadata.store_payment_status === "not_funded";
             const next = nextOrderAction(status);
             return (
               <View key={id} style={{ paddingVertical: 12, borderTopWidth: 1, borderColor: palette.border, gap: 7 }}>
@@ -339,9 +340,10 @@ export function StoreManagementScreen() {
                     <ActionButton small label="Cancel" variant="danger" disabled={processOrder.isPending} onPress={() => { setCancelOrderId(id); setCancelReasonKey("coverage_unavailable"); }} />
                   </View>
                 ) : null}
-                {status === "cancelled" && !refunded ? (
-                  <ActionButton small label="Refund to customer wallet" variant="secondary" loading={refundOrder.isPending} disabled={refundOrder.isPending} onPress={() => refundOrder.mutate(order)} />
-                ) : refunded ? <Notice tone="success" text="Refund sent to the customer's SKIMA Wallet." /> : null}
+                {status === "cancelled" && !refunded && !noRefundRequired ? (
+                  <ActionButton small label="Check / refund customer wallet" variant="secondary" loading={refundOrder.isPending} disabled={refundOrder.isPending} onPress={() => refundOrder.mutate(order)} />
+                ) : refunded ? <Notice tone="success" text="Refund sent to the customer's SKIMA Wallet." /> :
+                  noRefundRequired ? <Notice text="No payment was captured for this checkout, so no wallet refund is required." /> : null}
               </View>
             );
           }) : <State title="No Store orders yet" body="Orders placed by customers will appear here when checkout is completed." />}
