@@ -631,12 +631,88 @@ begin
 end
 $$;
 
+create or replace function public.assign_support_app_thread(target_thread_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare app_key text;
+begin
+  select app_key into app_key from public.support_threads where id=target_thread_id for update;
+  if app_key is null then raise exception using errcode='P0002',message='support conversation not found'; end if;
+  if not public.can_access_support_app(app_key,'manage') then
+    raise exception using errcode='42501',message='you cannot manage support for this app';
+  end if;
+  update public.support_threads set assigned_to=auth.uid(),status=case when status='open' then 'in_progress' else status end,updated_at=timezone('utc',now()) where id=target_thread_id;
+  return target_thread_id;
+end
+$;
+
+create or replace function public.escalate_my_support_app_thread(
+  target_thread_id uuid,
+  target_app_key text,
+  target_reason text,
+  target_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare message_id uuid;
+begin
+  if not exists(select 1 from public.support_threads where id=target_thread_id and app_key=target_app_key and requester_user_id=auth.uid() and status not in ('closed')) then
+    raise exception using errcode='42501',message='support conversation is unavailable';
+  end if;
+  insert into public.support_thread_messages(thread_id,author_user_id,author_kind,body,source,idempotency_key,metadata)
+  values(target_thread_id,auth.uid(),'requester',coalesce(nullif(btrim(target_reason),''),'Please escalate this support request.'),'skima.app.support.escalation',target_idempotency_key,'{"escalation":true}')
+  on conflict(source,idempotency_key) do update set source=excluded.source
+  returning id into message_id;
+  update public.support_threads
+  set priority='urgent',status='open',last_message_at=timezone('utc',now()),updated_at=timezone('utc',now())
+  where id=target_thread_id;
+  return message_id;
+end
+$;
+
+-- Support agents can receive live updates only for apps they are authorized to serve.
+do $
+begin
+  if not exists(select 1 from pg_policies where schemaname='public' and tablename='support_threads' and policyname='support_threads_app_agent_read') then
+    create policy support_threads_app_agent_read on public.support_threads
+      for select to authenticated
+      using (public.can_access_support_app(app_key,'read') or public.can_access_support_app(app_key,'manage'));
+  end if;
+  if not exists(select 1 from pg_policies where schemaname='public' and tablename='support_thread_messages' and policyname='support_messages_app_agent_read') then
+    create policy support_messages_app_agent_read on public.support_thread_messages
+      for select to authenticated
+      using (
+        exists(select 1 from public.support_threads t
+          where t.id=thread_id and
+            (public.can_access_support_app(t.app_key,'read') or public.can_access_support_app(t.app_key,'manage')))
+      );
+  end if;
+end $;
+
+do $
+begin
+  if exists(select 1 from pg_publication where pubname='supabase_realtime') then
+    begin alter publication supabase_realtime add table public.support_threads; exception when duplicate_object then null; end;
+    begin alter publication supabase_realtime add table public.support_thread_messages; exception when duplicate_object then null; end;
+  end if;
+end $;
+
 revoke all on function public.read_my_support_app_threads(text,integer) from public;
 revoke all on function public.reply_to_my_support_app_thread(uuid,text,text,text,text,jsonb) from public;
 revoke all on function public.append_support_message_attachment(uuid,uuid,jsonb) from public;
+revoke all on function public.assign_support_app_thread(uuid) from public;
+revoke all on function public.escalate_my_support_app_thread(uuid,text,text,text) from public;
 grant execute on function public.read_my_support_app_threads(text,integer) to authenticated;
 grant execute on function public.reply_to_my_support_app_thread(uuid,text,text,text,text,jsonb) to authenticated;
 grant execute on function public.append_support_message_attachment(uuid,uuid,jsonb) to authenticated;
+grant execute on function public.assign_support_app_thread(uuid) to authenticated;
+grant execute on function public.escalate_my_support_app_thread(uuid,text,text,text) to authenticated;
 
 revoke all on function public.can_access_support_app(text,text) from public;
 revoke all on function public.create_support_app_thread(text,text,text,text,text,text,text,text,jsonb) from public;
