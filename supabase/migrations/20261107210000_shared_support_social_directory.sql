@@ -18,6 +18,14 @@ insert into public.support_apps(app_key, display_name, is_active) values
 on conflict(app_key) do update
 set display_name=excluded.display_name, is_active=excluded.is_active, updated_at=timezone('utc',now());
 
+-- App configuration is read through scoped RPCs; direct client table access stays closed.
+alter table public.support_apps enable row level security;
+revoke all on public.support_apps from public,anon,authenticated;
+grant all on public.support_apps to service_role;
+create policy support_apps_service_role_all
+  on public.support_apps for all to service_role
+  using (true) with check (true);
+
 alter table public.support_threads add column if not exists app_key text;
 update public.support_threads
 set app_key = case
