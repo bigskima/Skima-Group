@@ -717,6 +717,13 @@ Deno.test("Booking chat shares photos, videos, audio and documents through priva
   requireText(bookingChat, 'props.bookingId + "/" + userId + "/"', "attachment object path is booking and sender scoped");
 });
 
+Deno.test("Logistics keeps the Refill-style wordmark fallback", async () => {
+  const brand = await Deno.readTextFile("apps/logistics-mobile/src/ui/BrandMark.tsx");
+  requireText(brand, "fontSize: 23", "Logistics Refill-style wordmark size");
+  requireText(brand, "letterSpacing: 1.8", "Logistics Refill-style wordmark spacing");
+  requireText(brand, "dot:", "Logistics Refill-style brand dot");
+});
+
 Deno.test("The quote and request notes can be read by both sides", () => {
   requireText(detail, "Company note", "customer can read provider quote notes before confirming");
   requireText(providerBookingDetail, "Customer request notes", "company can read the original customer request notes from the booking");
