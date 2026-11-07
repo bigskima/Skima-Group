@@ -12,4 +12,12 @@ config.resolver.extraNodeModules = {
   "lucide-react-native": path.resolve(__dirname, "node_modules/lucide-react-native"),
   "expo-image-picker": path.resolve(__dirname, "node_modules/expo-image-picker")
 };
+// Use the web-compatible React Native implementation for browser exports.
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolvedName = platform === "web" && moduleName === "react-native"
+    ? "react-native-web"
+    : moduleName;
+  return context.resolveRequest(context, resolvedName, platform);
+};
+
 module.exports = config;
