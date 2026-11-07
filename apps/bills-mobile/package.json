@@ -64,7 +64,8 @@
     "expo-web-browser": "~57.0.3"
   },
   "devDependencies": {
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "@types/react": "^19.2.18"
   },
   "description": "SKIMA Bills customer application"
 }
