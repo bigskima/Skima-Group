@@ -179,7 +179,7 @@ Deno.test("Store guided tour maps first-run steps to real Store controls", async
     [orders, "store.orders.history"], [wallet, "store.wallet.balance"], [account, "store.account.profile"],
   ]) requireText(source, target, "Store visible guide target");
   requireText(account, "GuideLaunchLink", "Store replay-tour entry");
-  requireText(app, "guide.setCurrentPage(next)", "Store tour navigation synchronization");
+  requireText(app, "guide.setCurrentPage(allowedPage)", "Store tour navigation synchronization and permission-safe routing");
   requireText(guide, "AsyncStorage.getItem", "Store per-customer tour eligibility");
   requireText(guide, "Remind me in 7 days", "Store tour snooze control");
   rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Store authentication reference footer");
