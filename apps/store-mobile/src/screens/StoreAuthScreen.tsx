@@ -78,8 +78,7 @@ export function StoreAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
         <ScrollView contentContainerStyle={styles.outer} keyboardShouldPersistTaps="handled">
           <View style={styles.shell}>
             <View style={styles.brandRow}>
-              <StoreBrandMark size={48} />
-              <View><Text style={[styles.brand,{color:palette.ink}]}>SKIMA</Text><Text style={[styles.brandSub,{color:palette.muted}]}>STORE</Text></View>
+              <StoreBrandMark size={138} />
             </View>
             <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
               <View style={[styles.accent,{backgroundColor:palette.brand}]}/>
