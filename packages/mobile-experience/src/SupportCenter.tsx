@@ -67,13 +67,25 @@ function cleanFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-70) || "attachment.jpg";
 }
 
-export function SupportCenter({ appKey, workspace, supabase, palette, canManage = false, onBack }: {
+export type SupportSafetyOption = { key: string; label: string };
+export type SupportSafetyIncidentInput = {
+  incidentType: string;
+  severity: string;
+  description: string;
+  orderReference?: string;
+  idempotencyKey: string;
+};
+
+export function SupportCenter({ appKey, workspace, supabase, palette, canManage = false, onBack, safetyIncidentTypes = [], safetySeverities = [], onSafetyIncident }: {
   appKey: string;
   workspace: string;
   supabase: SupabaseClient;
   palette: Palette;
   canManage?: boolean;
   onBack?: () => void;
+  safetyIncidentTypes?: readonly SupportSafetyOption[];
+  safetySeverities?: readonly SupportSafetyOption[];
+  onSafetyIncident?: (input: SupportSafetyIncidentInput) => Promise<unknown>;
 }) {
   const [view, setView] = useState<ViewMode>("home");
   const [teamMode, setTeamMode] = useState(false);
@@ -86,6 +98,8 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
   const [issueTypes, setIssueTypes] = useState(fallbackCategories);
   const [category, setCategory] = useState("order");
   const [priority, setPriority] = useState("normal");
+  const [safetyIncidentType, setSafetyIncidentType] = useState("");
+  const [safetySeverity, setSafetySeverity] = useState("");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [orderReference, setOrderReference] = useState("");
@@ -197,19 +211,37 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
     setBusy(true); setError("");
     try {
       const requestKey = idempotency("support-" + appKey);
+      const safetyPriority = safetySeverity === "critical" ? "urgent"
+        : safetySeverity === "high" ? "high" : "normal";
+      const requestPriority = category === "safety" ? safetyPriority : priority;
       const { data, error: createError } = await supabase.rpc("create_support_app_thread", {
         target_app_key: appKey,
         target_workspace: workspace,
         target_category: category,
         target_subject: subject.trim(),
         target_body: description.trim(),
-        target_priority: priority,
+        target_priority: requestPriority,
         target_source: "skima." + appKey + ".support",
         target_idempotency_key: requestKey,
-        target_metadata: { orderReference: orderReference.trim() || null },
+        target_metadata: {
+          orderReference: orderReference.trim() || null,
+          incidentType: category === "safety" ? safetyIncidentType || null : null,
+          severity: category === "safety" ? safetySeverity || null : null,
+        },
       });
       if (createError) throw createError;
       const threadId = String(data);
+      if (category === "safety" && onSafetyIncident && safetyIncidentType && safetySeverity) {
+        await onSafetyIncident({
+          incidentType: safetyIncidentType,
+          severity: safetySeverity,
+          description: description.trim(),
+          orderReference: orderReference.trim() || undefined,
+          idempotencyKey: requestKey + ":incident",
+        }).catch(() => {
+          setError("Your support request was saved, but the separate safety record could not be completed. SKIMA Support can still see your report.");
+        });
+      }
       if (attachment) {
         const list = await supabase.rpc("read_my_support_app_threads", { target_app_key: appKey, target_limit: 60 });
         if (list.error) throw list.error;
@@ -218,6 +250,7 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
         if (messageId) await uploadForMessage(threadId, messageId, attachment);
       }
       setSubject(""); setDescription(""); setOrderReference(""); setAttachment(null);
+      setSafetyIncidentType(""); setSafetySeverity("");
       await refresh();
       const { data: listData } = await supabase.rpc("read_my_support_app_threads", { target_app_key: appKey, target_limit: 60 });
       const found = (Array.isArray(listData) ? listData as SupportThread[] : []).find((row) => row.id === threadId);
@@ -414,16 +447,20 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
             <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Subject</Text>
             <TextInput value={subject} onChangeText={setSubject} maxLength={160} placeholder="A short title" placeholderTextColor={palette.muted} style={{ borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, borderRadius: 12, color: palette.ink, padding: 13, fontSize: 13 }} />
           </View>
-          <View style={{ gap: 6 }}>
-            <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Priority</Text>
-            <View style={{ flexDirection: "row", gap: 7 }}>
-              {priorities.map((item) => <Pressable key={item.key} onPress={() => setPriority(item.key)} style={{ flex: 1, padding: 10, alignItems: "center", borderWidth: 1, borderRadius: 11, borderColor: priority === item.key ? palette.brand : palette.border, backgroundColor: priority === item.key ? palette.brandSoft : palette.surface }}><Text style={{ color: priority === item.key ? palette.brand : palette.ink, fontSize: 10, fontWeight: "800" }}>{item.label}</Text></Pressable>)}
-            </View>
-          </View>
-          {category === "order" || category === "payment" ? (
+          {category === "safety" && appKey === "refill" ? typePicker : null}
+          {category !== "safety" || appKey !== "refill" ? (
             <View style={{ gap: 6 }}>
-              <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Order or transaction reference (optional)</Text>
-              <TextInput value={orderReference} onChangeText={setOrderReference} placeholder="Enter a reference" placeholderTextColor={palette.muted} style={{ borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, borderRadius: 12, color: palette.ink, padding: 13, fontSize: 13 }} />
+              <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Priority</Text>
+              <View style={{ flexDirection: "row", gap: 7 }}>
+                {priorities.map((item) => <Pressable key={item.key} onPress={() => setPriority(item.key)} style={{ flex: 1, padding: 10, alignItems: "center", borderWidth: 1, borderRadius: 11, borderColor: priority === item.key ? palette.brand : palette.border, backgroundColor: priority === item.key ? palette.brandSoft : palette.surface }}><Text style={{ color: priority === item.key ? palette.brand : palette.ink, fontSize: 10, fontWeight: "800" }}>{item.label}</Text></Pressable>)}
+              </View>
+            </View>
+  
+          ) : null}
+          {category === "order" || category === "payment" || (appKey === "refill" && category === "safety") ? (
+            <View style={{ gap: 6 }}>
+              <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Order reference (optional)</Text>
+              <TextInput value={orderReference} onChangeText={setOrderReference} placeholder="Enter an order ID if available" placeholderTextColor={palette.muted} style={{ borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, borderRadius: 12, color: palette.ink, padding: 13, fontSize: 13 }} />
             </View>
           ) : null}
           <View style={{ gap: 6 }}>
@@ -436,7 +473,7 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
             {attachment ? <Pressable onPress={(event) => { event.stopPropagation(); setAttachment(null); }}><X size={16} color={palette.muted} /></Pressable> : null}
           </Pressable>
           {error ? <Text accessibilityRole="alert" style={{ color: palette.danger, fontSize: 11 }}>{error}</Text> : null}
-          <Pressable disabled={busy || !subject.trim() || !description.trim()} onPress={() => void startRequest()} style={{ minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: palette.brand, opacity: busy || !subject.trim() || !description.trim() ? 0.5 : 1 }}>
+          <Pressable disabled={busy || !subject.trim() || !description.trim() || (appKey === "refill" && category === "safety" && (!safetyIncidentTypes.length || !safetySeverities.length || !safetyIncidentType || !safetySeverity))} onPress={() => void startRequest()} style={{ minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: palette.brand, opacity: busy || !subject.trim() || !description.trim() || (appKey === "refill" && category === "safety" && (!safetyIncidentTypes.length || !safetySeverities.length || !safetyIncidentType || !safetySeverity)) ? 0.5 : 1 }}>
             {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "900" }}>Send request</Text>}
           </Pressable>
         </ScrollView>
