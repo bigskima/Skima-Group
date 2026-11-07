@@ -447,7 +447,36 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
             <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Subject</Text>
             <TextInput value={subject} onChangeText={setSubject} maxLength={160} placeholder="A short title" placeholderTextColor={palette.muted} style={{ borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, borderRadius: 12, color: palette.ink, padding: 13, fontSize: 13 }} />
           </View>
-          {category === "safety" && appKey === "refill" ? typePicker : null}
+          {category === "safety" && appKey === "refill" ? (
+            <>
+              {safetyIncidentTypes.length ? (
+                <View style={{ gap: 7 }}>
+                  <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Safety issue</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                    {safetyIncidentTypes.map((item) => (
+                      <Pressable key={item.key} onPress={() => setSafetyIncidentType(item.key)} style={{ paddingVertical: 9, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: safetyIncidentType === item.key ? palette.brand : palette.border, backgroundColor: safetyIncidentType === item.key ? palette.brandSoft : palette.surface }}>
+                        <Text style={{ color: safetyIncidentType === item.key ? palette.brand : palette.ink, fontWeight: "800", fontSize: 10 }}>{item.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+              {safetySeverities.length ? (
+                <View style={{ gap: 7 }}>
+                  <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Severity</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                    {safetySeverities.map((item) => (
+                      <Pressable key={item.key} onPress={() => setSafetySeverity(item.key)} style={{ paddingVertical: 9, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: safetySeverity === item.key ? palette.brand : palette.border, backgroundColor: safetySeverity === item.key ? palette.brandSoft : palette.surface }}>
+                        <Text style={{ color: safetySeverity === item.key ? palette.brand : palette.ink, fontWeight: "800", fontSize: 10 }}>{item.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : (
+                <Text style={{ color: palette.danger, fontSize: 10 }}>Safety reporting options are unavailable. You can still send your request to SKIMA Support.</Text>
+              )}
+            </>
+          ) : null}
           {category !== "safety" || appKey !== "refill" ? (
             <View style={{ gap: 6 }}>
               <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>Priority</Text>
