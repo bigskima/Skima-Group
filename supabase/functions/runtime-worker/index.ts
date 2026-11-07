@@ -11,6 +11,27 @@ import {
 const DEFAULT_LIMIT = 25;
 const DEFAULT_WEBHOOK_TIMEOUT_MS = 5_000;
 
+function isProjectServiceRoleJwt(authorization: string, supabaseUrl: string): boolean {
+  const match = /^Bearer\s+(.+)$/i.exec(authorization);
+  const token = match?.[1]?.trim();
+  if (!token) return false;
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+
+  try {
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, "="));
+    const claims = JSON.parse(decoded) as Record<string, unknown>;
+    const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
+    return claims.iss === "supabase" &&
+      claims.role === "service_role" &&
+      claims.ref === projectRef;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (request: Request): Promise<Response> => {
   const id = requestId(request);
 
@@ -22,21 +43,29 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return jsonResponse({ ok: false, error: "method_not_allowed", requestId: id }, 405);
   }
 
-  const workerSecret = Deno.env.get("SKIMA_WORKER_SECRET")?.trim() ?? "";
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
+  if (!supabaseUrl || !serviceRoleKey) {
+    return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+  }
+
+  const workerSecret = Deno.env.get("SKIMA_WORKER_SECRET")?.trim() ?? "";
   const suppliedSecret = request.headers.get("x-skima-worker-secret")?.trim() ??
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
 
-  // Keep the dedicated worker secret when configured. The database scheduler
-  // can authenticate with the existing service-role secret stored in Vault.
-  if (!suppliedSecret || (suppliedSecret !== workerSecret && suppliedSecret !== serviceRoleKey)) {
+  // The database scheduler sends the project's legacy service-role JWT from
+  // Vault. Supabase Edge verifies the JWT before this handler runs
+  // (verify_jwt=true); confirm the verified token is specifically for this
+  // project and carries the service_role claim instead of requiring the
+  // Vault token to byte-match this function's injected environment variable.
+  const trustedServiceRoleBearer = isProjectServiceRoleJwt(
+    request.headers.get("authorization") ?? "",
+    supabaseUrl,
+  );
+  const trustedDedicatedSecret = Boolean(workerSecret) && suppliedSecret === workerSecret;
+  const trustedInjectedServiceKey = Boolean(serviceRoleKey) && suppliedSecret === serviceRoleKey;
+  if (!trustedDedicatedSecret && !trustedInjectedServiceKey && !trustedServiceRoleBearer) {
     return jsonResponse({ ok: false, error: "unauthorized", requestId: id }, 401);
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
