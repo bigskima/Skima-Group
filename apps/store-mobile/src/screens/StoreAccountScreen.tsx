@@ -1,3 +1,4 @@
+import { SocialMediaSection } from "../ui/SocialMediaSection";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -112,6 +113,7 @@ export function StoreAccountScreen({ onOpenPage }: { onOpenPage: (page: StorePag
           <ChevronRight size={16} color={palette.muted} />
         </Pressable>
       </View>
+      <SocialMediaSection supabase={session.supabase} surface="store" palette={palette} />
       {notice ? <Notice text={notice} tone={notice.includes("could not") ? "error" : "success"} /> : null}
       <ActionButton label="Sign out" variant="danger" onPress={() => setConfirmSignOut(true)} />
 
