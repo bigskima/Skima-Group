@@ -755,3 +755,11 @@ Deno.test("Location retention and inventory worker can run from the authenticate
   requireText(scheduler, "skima_service_role_key", "scheduler reads the service role from Vault");
   requireText(scheduler, "net.http_post", "scheduler invokes the worker endpoint");
 });
+
+Deno.test("Runtime worker scheduler authenticates project-bound service-role JWTs at the Edge gateway", async () => {
+  const worker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
+  requireText(worker, "isProjectServiceRoleJwt", "project service-role JWT validation");
+  requireText(worker, 'claims.role === "service_role"', "service role claim check");
+  requireText(worker, "claims.ref === projectRef", "JWT project binding");
+  requireText(worker, "claims.iss === \"supabase\"", "Supabase issuer check");
+});
