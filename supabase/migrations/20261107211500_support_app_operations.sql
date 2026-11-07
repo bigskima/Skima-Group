@@ -117,6 +117,8 @@ create trigger support_thread_first_response_tracking
 after insert on public.support_thread_messages
 for each row execute function public.track_support_first_response();
 
+drop function if exists public.read_my_support_app_threads(text,integer);
+
 create or replace function public.read_my_support_app_threads(
   target_app_key text,
   target_limit integer default 60
@@ -197,6 +199,8 @@ begin
   return saved_id;
 end
 $$;
+
+drop function if exists public.append_support_message_attachment(uuid,uuid,jsonb);
 
 create or replace function public.append_support_message_attachment(
   target_thread_id uuid,
