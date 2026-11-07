@@ -177,6 +177,7 @@ function PromotionCard({ publication, width }: {
       accessibilityRole={actionable ? "button" : undefined}
       disabled={!actionable}
       onPress={actionable ? () => {
+        if (!actionValue) return;
         if (actionType === "route") router.push(actionValue as never);
         else if (actionType === "url") void Linking.openURL(actionValue).catch(() => undefined);
       } : undefined}
