@@ -25,7 +25,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const workerSecret = Deno.env.get("SKIMA_WORKER_SECRET")?.trim() ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
   const suppliedSecret = request.headers.get("x-skima-worker-secret")?.trim() ??
-    request.headers.get("authorization")?.replace(/^Bearer\\s+/i, "").trim() ?? "";
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
 
   // Keep the dedicated worker secret when configured. The database scheduler
   // can authenticate with the existing service-role secret stored in Vault.
