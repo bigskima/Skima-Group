@@ -6,6 +6,14 @@ alter table public.customer_service_discovery_links
   add column if not exists ios_deep_link_url text,
   add column if not exists android_deep_link_enabled boolean not null default false,
   add column if not exists ios_deep_link_enabled boolean not null default false;
+  
+-- Public clients see only active services; Super Admins must also see hidden
+-- entries so a temporarily hidden app can be re-enabled from the Admin UI.
+drop policy if exists customer_service_discovery_links_super_admin_read on public.customer_service_discovery_links;
+create policy customer_service_discovery_links_super_admin_read
+on public.customer_service_discovery_links
+for select to authenticated
+using (public.is_platform_super_admin());
 
 do $$
 begin
