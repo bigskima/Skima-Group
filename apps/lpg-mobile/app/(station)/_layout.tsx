@@ -27,6 +27,7 @@ export default function Layout() {
           "roles",
           "account-tools",
           "account-settings",
+          "referrals",
           "managed-fulfillment",
           "managed-fulfillment-settings",
           "managed-fulfillment-vehicles",

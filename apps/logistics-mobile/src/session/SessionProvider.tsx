@@ -15,7 +15,7 @@ interface SessionValue {
   supabase: SupabaseClient;
   error: string | null;
   signIn(email: string, password: string): Promise<boolean>;
-  signUp(name: string, email: string, password: string): Promise<boolean>;
+  signUp(name: string, email: string, password: string, referralCode?: string): Promise<boolean>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -100,11 +100,16 @@ export function SessionProvider({ children }: PropsWithChildren) {
       await apply(data.session);
       return true;
     },
-    signUp: async (name, email, password) => {
+    signUp: async (name, email, password, referralCode) => {
       setError(null);
       const { data, error: authError } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(), password,
-        options: { data: { display_name: name.trim(), source: "skima.logistics.mobile" } },
+        options: { data: {
+          display_name: name.trim(),
+          source: "skima.logistics.mobile",
+          referral_code: referralCode?.trim().toUpperCase() || null,
+          referral_app_key: "logistics",
+        } },
       });
       if (authError) { setError(authError.message); return false; }
       if (data.session) await apply(data.session);

@@ -1,5 +1,6 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 import { config as loadEnvironment } from "dotenv";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 loadEnvironment({
@@ -8,7 +9,9 @@ loadEnvironment({
   quiet: true,
 });
 
-const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim();
+const easProjectId = process.env.EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID?.trim() || process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim();
+const googleServicesCandidate = process.env.SKIMA_LOGISTICS_GOOGLE_SERVICES_FILE?.trim() || "./google-services.json";
+const googleServicesFile = existsSync(resolve(__dirname, googleServicesCandidate)) ? googleServicesCandidate : undefined;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -30,7 +33,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: "com.skima.logistics",
-    permissions: ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"]
+    permissions: ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"],
+    ...(googleServicesFile ? { googleServicesFile } : {})
   },
   ios: {
     bundleIdentifier: "com.skima.logistics",
@@ -43,6 +47,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-router",
     "expo-secure-store",
+    ["expo-notifications", { defaultChannel: "logistics", color: "#E21D2E", enableRemoteNotifications: true }],
     "expo-font",
     ["expo-location", {
       locationWhenInUsePermission:

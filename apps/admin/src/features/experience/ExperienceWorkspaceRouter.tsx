@@ -1,8 +1,10 @@
-import { FileText, Image, Megaphone } from "lucide-react";
+import { FileText, Image, Link2, Megaphone, UsersRound } from "lucide-react";
 
 import { AdminContentWorkspace } from "../../admin-content-workspace";
 import { AdminPolicyWorkspace } from "../../admin-policy-workspace";
 import { AdminStartupBrandingWorkspace } from "../../admin-startup-branding-workspace";
+import { AdminAppLinksWorkspace } from "../../admin-app-links-workspace";
+import { AdminReferralsWorkspace } from "../../admin-referrals-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { ContentWorkspaceV2 } from "./ContentWorkspaceV2";
 import { PolicyWorkspaceV2 } from "./PolicyWorkspaceV2";
@@ -17,6 +19,8 @@ export function ExperienceWorkspaceRouter(props: {
   if (props.route === "/experience/policies") return <PolicyWorkspaceV2 />;
   if (props.route === "/experience/policies/advanced") return <AdminPolicyWorkspace />;
   if (props.route === "/experience/branding") return <AdminStartupBrandingWorkspace />;
+  if (props.route === "/experience/app-links") return <AdminAppLinksWorkspace />;
+  if (props.route === "/experience/referrals") return <AdminReferralsWorkspace />;
   return <ExperienceOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -54,6 +58,24 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           icon: Image,
           meta: "Startup experience",
           permissionKey: "branding",
+        },
+        {
+          key: "app-links",
+          title: "App downloads & quick routes",
+          description: "Manage the four app web fallbacks, store listings and optional native deep links in one shared link registry.",
+          href: "/experience/app-links",
+          icon: Link2,
+          meta: "Website and app destinations",
+          permissionKey: "content",
+        },
+        {
+          key: "referrals",
+          title: "Referrals & campaigns",
+          description: "Set shared referral campaigns, eligible apps, dates and reward definitions across all four SKIMA apps.",
+          href: "/experience/referrals",
+          icon: UsersRound,
+          meta: "Shared growth programme",
+          permissionKey: "content",
         },
       ]}
     />

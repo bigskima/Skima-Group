@@ -49,6 +49,7 @@ export default function Layout() {
           "cylinder-capacity/[id]",
           "account-tools",
           "account-settings",
+          "referrals",
         ]}
       />
     </WorkspaceGate>

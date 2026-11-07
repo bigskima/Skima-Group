@@ -1,4 +1,4 @@
-export type BillsPage = "bills" | "activity" | "wallet" | "store" | "account" | "top-up" | "withdraw" | "notifications" | "saved" | "receipt";
+export type BillsPage = "bills" | "activity" | "wallet" | "store" | "account" | "top-up" | "withdraw" | "notifications" | "saved" | "receipt" | "referrals";
 export type BillsNavigationEvent = { page: BillsPage; receiptId?: string };
 type Listener = (event: BillsNavigationEvent) => void;
 const listeners = new Set<Listener>();
@@ -31,6 +31,7 @@ export function navigateBillsRoute(route: unknown) {
     "/top-up": "top-up",
     "/withdraw": "withdraw",
     "/notifications": "notifications",
+    "/referrals": "referrals",
     "/beneficiaries": "saved",
     "/saved-billers": "saved",
   };

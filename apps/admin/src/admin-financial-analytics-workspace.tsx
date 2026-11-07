@@ -85,6 +85,28 @@ const AnalyticsSchema = z.object({
   recentLedgerEntries: z.array(RecordSchema).default([]),
 }).passthrough();
 
+const ProductAnalyticsSchema = z.object({
+  currencyCode: z.string().default("NGN"),
+  from: z.string().nullable().optional(),
+  until: z.string().nullable().optional(),
+  canReadRevenue: z.boolean().default(false),
+  byApplication: z.array(RecordSchema).default([]),
+  recentTransactions: z.array(RecordSchema).default([]),
+  disclaimer: z.string().default(""),
+}).passthrough();
+
+const appAnalyticsColumns: readonly TableColumn<RecordValue>[] = [
+  { key: "displayName", header: "App", render: (row) => <strong>{recordString(row, "displayName") ?? "—"}</strong> },
+  { key: "transactionCount", header: "Transactions", render: (row) => numberValue(row, "transactionCount").toLocaleString("en-NG") },
+  { key: "postedCount", header: "Posted", render: (row) => numberValue(row, "postedCount").toLocaleString("en-NG") },
+  { key: "postedAmount", header: "Posted movement", render: (row) => row.postedAmount === null ? "Restricted" : money(numberValue(row, "postedAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "heldAmount", header: "Held", render: (row) => row.heldAmount === null ? "Restricted" : money(numberValue(row, "heldAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "releasedAmount", header: "Released / settled", render: (row) => row.releasedAmount === null ? "Restricted" : money(numberValue(row, "releasedAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "refundReversalAmount", header: "Refunds / reversals", render: (row) => row.refundReversalAmount === null ? "Restricted" : money(numberValue(row, "refundReversalAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "ledgerCredits", header: "Ledger credits", render: (row) => row.ledgerCredits === null ? "Restricted" : money(numberValue(row, "ledgerCredits"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "ledgerDebits", header: "Ledger debits", render: (row) => row.ledgerDebits === null ? "Restricted" : money(numberValue(row, "ledgerDebits"), recordString(row, "currencyCode") ?? "NGN") },
+];
+
 type Analytics = z.infer<typeof AnalyticsSchema>;
 type FleetOrder = RecordValue;
 
@@ -382,6 +404,22 @@ export function AdminFinancialAnalyticsWorkspace() {
     return { from: from.toISOString(), until: until.toISOString() };
   }, [period]);
 
+  const appAnalytics = useQuery({
+    queryKey: ["platform-product-financial-analytics", currency, period],
+    enabled: status === "authenticated" && canRead,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_platform_product_financial_analytics", {
+        target_currency_code: currency,
+        target_from: range.from,
+        target_until: range.until,
+        target_limit: 20,
+      });
+      if (error) throw error;
+      return ProductAnalyticsSchema.parse(data);
+    },
+  });
+
   const analytics = useQuery({
     queryKey: ["platform-financial-analytics", currency, period],
     enabled: status === "authenticated" && canRead,
@@ -399,7 +437,10 @@ export function AdminFinancialAnalyticsWorkspace() {
   });
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["platform-financial-analytics"] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["platform-financial-analytics"] }),
+      queryClient.invalidateQueries({ queryKey: ["platform-product-financial-analytics"] }),
+    ]);
   };
 
   const uploadEvidence = useMutation({
@@ -610,7 +651,7 @@ export function AdminFinancialAnalyticsWorkspace() {
       <PageHeader
         eyebrow="Money · Finance control"
         title="Financial analytics"
-        description="A ledger-backed view of collections, revenue, supplier expenses, settlements, payouts and wallet activity. Totals follow the selected date window; account balances are current."
+        description="Cross-app finance across Refill, Store, Logistics and Bills, with ledger-backed collections, payments, settlements and wallet activity. Refill Fleet procurement and driver accounting remain in a clearly separate specialist section."
         actions={
           <>
             <SelectInput
@@ -658,7 +699,38 @@ export function AdminFinancialAnalyticsWorkspace() {
       <section className="sk-panel stack-md">
         <div className="sk-panel__header">
           <div>
-            <p className="admin-section-kicker">SKIMA Fleet · Customer collections</p>
+            <p className="admin-section-kicker">All four SKIMA apps</p>
+            <h2>Financial activity by app</h2>
+            <p className="skima-muted">Refill, Store, Logistics and Bills are classified from their financial source and module metadata. Posted amounts and wallet debits/credits are accounting movements, not unique customer order value. Holds, releases, refunds and transfers are shown separately.</p>
+          </div>
+          <StatusBadge tone="info">Shared ledger</StatusBadge>
+        </div>
+        {appAnalytics.isPending ? <LoadingState label="Loading cross-app ledger analysis…" /> : appAnalytics.error ? (
+          <ErrorState title="Cross-app breakdown unavailable" message={readError(appAnalytics.error)} onRetry={() => void appAnalytics.refetch()} />
+        ) : (
+          <>
+            <div className="skima-grid skima-grid--compact">
+              {appAnalytics.data?.byApplication.filter((row) => ["refill","store","logistics","bills"].includes(recordString(row,"appKey") ?? "")).map((row) => (
+                <MetricTile key={recordString(row,"appKey")} label={(recordString(row,"displayName") ?? "App") + " · posted transactions"} value={numberValue(row,"postedCount").toLocaleString("en-NG")} icon={Activity} tone="info" />
+              ))}
+            </div>
+            <DataTable
+              caption="Financial activity by SKIMA app"
+              columns={appAnalyticsColumns}
+              records={appAnalytics.data?.byApplication.filter((row) => ["refill","store","logistics","bills"].includes(recordString(row,"appKey") ?? "")) ?? []}
+              getRowKey={(row) => recordString(row,"appKey") ?? JSON.stringify(row)}
+              emptyTitle="No app transactions found"
+              emptyMessage="There are no ledger transactions in this currency and period."
+            />
+            <p className="skima-muted">{appAnalytics.data?.disclaimer}</p>
+          </>
+        )}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Refill · SKIMA Fleet · Customer collections</p>
             <h2>Money collected by SKIMA from in-app orders</h2>
             <p className="skima-muted">
               The customer payment is held in SKIMA-controlled escrow, then settled into SKIMA platform clearing, revenue and driver-liability accounts. None of these are station wallet credits. SKIMA pays the physical supplier separately by cash or bank transfer below.

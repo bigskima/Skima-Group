@@ -1,5 +1,5 @@
 import { Redirect, router } from "expo-router";
-import { Eye, EyeOff, LockKeyhole, Mail, UserRound } from "lucide-react-native";
+import { Eye, EyeOff, LockKeyhole, Mail, UserRound, Gift } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 
@@ -20,6 +20,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export default function Register() {
         displayName: name,
         email,
         password,
+        referralCode,
       });
 
       if (result.sessionStarted) {
@@ -115,6 +117,16 @@ export default function Register() {
         returnKeyType="next"
         textContentType="emailAddress"
         value={email}
+      />
+
+      <AuthTextField
+        accessibilityLabel="Referral code (optional)"
+        autoCapitalize="characters"
+        icon={<Gift color={palette.mutedStrong} size={18} strokeWidth={2.2} />}
+        label="Referral code (optional)"
+        onChangeText={(value) => { setReferralCode(value); clearFeedback(); }}
+        placeholder="Enter a code, if you have one"
+        value={referralCode}
       />
 
       <AuthTextField

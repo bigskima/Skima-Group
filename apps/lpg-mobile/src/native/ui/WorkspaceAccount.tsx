@@ -4,6 +4,7 @@ import {
   Bell,
   ChevronRight,
   CircleHelp,
+  Gift,
   LayoutGrid,
   Settings2,
   ShieldCheck,
@@ -109,6 +110,12 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
           label="Account settings"
           detail="Appearance, terms and sign out"
           onPress={() => router.push(`/(${group})/account-settings` as never)}
+        />
+        <QuickTile
+          icon={Gift}
+          label="Referrals & rewards"
+          detail="Your code, campaigns and leaderboard"
+          onPress={() => router.push(`/(${group})/referrals` as never)}
         />
         <QuickTile
           icon={CircleHelp}

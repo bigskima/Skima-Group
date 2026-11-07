@@ -30,6 +30,7 @@ interface SignUpInput {
   readonly displayName: string;
   readonly email: string;
   readonly password: string;
+  readonly referralCode?: string;
 }
 
 interface SignUpResult {
@@ -303,7 +304,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         void apply(data.session);
         return true;
       },
-      signUp: async ({ displayName, email, password }) => {
+      signUp: async ({ displayName, email, password, referralCode }) => {
         setError(null);
 
         const { data, error: authError } = await supabase.auth.signUp({
@@ -313,6 +314,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
             data: {
               display_name: displayName.trim(),
               source: "skima.lpg.mobile",
+              referral_code: referralCode?.trim().toUpperCase() || null,
+              referral_app_key: "refill",
             },
           },
         });

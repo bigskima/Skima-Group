@@ -8,6 +8,8 @@ import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotificationCe
 import { firstString, nestedRecord, recordId, type PlatformRecord } from "../api/records";
 import { invitationIdFromMessage, isStationInvitationMessage } from "../api/stationInvitations";
 import { enableNotifications } from "../notifications/useNotificationLifecycle";
+import { registerRefillPushDevice } from "../notifications/PushRegistration";
+import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -22,6 +24,7 @@ const PAGE_SIZE = 20;
 
 export function NotificationsScreen() {
   const { palette } = useAppTheme();
+  const session = useSession();
   const [selectedCategory, setSelectedCategory] = useState<NotificationCategory>("all");
   const [showRead, setShowRead] = useState(true);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -41,7 +44,8 @@ export function NotificationsScreen() {
   const enable = async () => {
     try {
       await enableNotifications();
-      setNotice("Device notifications are enabled.");
+      await registerRefillPushDevice(session.session, session.supabase);
+      setNotice("This device is enabled for SKIMA Refill notifications.");
     } catch (cause) {
       setNotice(friendlyError(cause, "Notifications could not be enabled."));
     }
