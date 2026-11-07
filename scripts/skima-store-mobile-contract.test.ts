@@ -68,6 +68,34 @@ Deno.test("Store has order history and canonical receipt confirmation", async ()
   requireText(orders, "fulfillment_method", "Store order fulfilment details");
 });
 
+Deno.test("Store app provides role-gated first-party marketplace and order operations", async () => {
+  const [app, account, management, admin] = await Promise.all([
+    read("apps/store-mobile/src/screens/StoreApp.tsx"),
+    read("apps/store-mobile/src/screens/StoreAccountScreen.tsx"),
+    read("apps/store-mobile/src/screens/StoreManagementScreen.tsx"),
+    read("apps/admin/src/features/store/StoreWorkspace.tsx"),
+  ]);
+  requireText(app, 'session.context.permissions.includes("platform.store.manage")', "Store platform manager navigation gate");
+  requireText(account, 'session.context.permissions.includes("platform.store.manage")', "Store account manager link gate");
+  requireText(management, 'session.context.permissions.includes("platform.store.manage")', "Store management screen permission gate");
+  requireText(management, 'session.context?.platformAdmin', "Store management platform-admin restriction");
+  for (const route of ["/runtime/storefront/products", "/runtime/orders/actions", "/runtime/storefront/orders/refund"]) {
+    requireText(management, route, "Store app marketplace management");
+  }
+  requireText(management, "Confirm hand-off / dispatch", "Store order fulfilment action");
+  requireText(admin, 'title="Cancel Store order"', "Existing Admin cancellation workflow remains available");
+  requireText(admin, '/runtime/storefront/products', "Existing Admin product management remains available");
+});
+
+Deno.test("Store customers see explicit cancellation reasons and wallet refund state", async () => {
+  const orders = await read("apps/store-mobile/src/screens/StoreOrdersScreen.tsx");
+  const gateway = await read("supabase/functions/api-gateway/index.ts");
+  requireText(orders, "Why SKIMA cancelled this order", "Customer-facing Store cancellation reason");
+  requireText(orders, "Your refund was sent to your SKIMA Wallet on ", "Customer-facing Store refund confirmation");
+  requireText(orders, "wallet refund has not yet been marked as completed", "Customer-facing pending refund state");
+  requireText(gateway, "events:order_events(id,event_type_key,from_status,to_status,metadata,created_at)", "Store customer orders include cancellation event reasons");
+});
+
 Deno.test("Store account, notifications and navigation are independent of Bills routing", async () => {
   const app = await read("apps/store-mobile/src/screens/StoreApp.tsx");
   const notifications = await read("apps/store-mobile/src/screens/StoreNotificationsScreen.tsx");
@@ -151,7 +179,7 @@ Deno.test("Store guided tour maps first-run steps to real Store controls", async
     [orders, "store.orders.history"], [wallet, "store.wallet.balance"], [account, "store.account.profile"],
   ]) requireText(source, target, "Store visible guide target");
   requireText(account, "GuideLaunchLink", "Store replay-tour entry");
-  requireText(app, "guide.setCurrentPage(next)", "Store tour navigation synchronization");
+  requireText(app, "guide.setCurrentPage(allowedPage)", "Store tour navigation synchronization and permission-safe routing");
   requireText(guide, "AsyncStorage.getItem", "Store per-customer tour eligibility");
   requireText(guide, "Remind me in 7 days", "Store tour snooze control");
   rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Store authentication reference footer");

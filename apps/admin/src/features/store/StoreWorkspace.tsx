@@ -42,10 +42,20 @@ const StoreOriginGeocodeSchema = z.object({
 }).passthrough();
 const MediaAssetSchema = z.union([z.string(), z.record(z.unknown())]);
 
+const storeCancellationReasons = [
+  { value: "coverage_unavailable", label: "Delivery coverage unavailable", reason: "Delivery coverage is unavailable for your location, so SKIMA cannot safely fulfil this order." },
+  { value: "item_unavailable", label: "Item unavailable", reason: "One or more items in this order are no longer available." },
+  { value: "stock_unavailable", label: "Insufficient stock", reason: "Available stock is not sufficient to complete this order." },
+  { value: "fulfilment_issue", label: "Fulfilment issue", reason: "SKIMA is unable to complete this order safely with the available fulfilment options." },
+  { value: "customer_request", label: "Customer requested cancellation", reason: "This order was cancelled following the customer's request." },
+] as const;
+
 export function StoreWorkspace(props: { readonly onNavigate: (href: string) => void }) {
   const { api, status, supabase, context } = useSessionState();
   const client = useQueryClient();
   const [settingsEditorOpen, setSettingsEditorOpen] = useState(false);
+  const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [cancelReasonCode, setCancelReasonCode] = useState<(typeof storeCancellationReasons)[number]["value"]>("coverage_unavailable");
   const [productEditorOpen, setProductEditorOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogRecord | null>(null);
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
@@ -328,13 +338,13 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   });
 
   const processOrderAction = useMutation({
-    mutationFn: (input: { orderId: string; actionKey: string; reason?: string }) =>
+    mutationFn: (input: { orderId: string; actionKey: string; reason?: string; reasonCode?: string }) =>
       api.post("/runtime/orders/actions", {
         orderId: input.orderId,
         actionKey: input.actionKey,
         reason: input.reason,
-        payload: { channel: "skima_store_admin" },
-        metadata: { moduleKey: "store" },
+        payload: { channel: "skima_store_admin", ...(input.reasonCode ? { cancellationReasonCode: input.reasonCode, customerVisibleReason: input.reason } : {}) },
+        metadata: { moduleKey: "store", ...(input.reasonCode ? { cancellationReasonCode: input.reasonCode, customerVisibleReason: input.reason } : {}) },
         source: "platform.storefront",
         idempotencyKey: createClientIdempotencyKey("admin.store.order-action", input.orderId),
       }, StoreSettingsSchema),
@@ -410,11 +420,10 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
               size="sm"
               variant="ghost"
               disabled={processOrderAction.isPending || !orderId}
-              onClick={() => processOrderAction.mutate({
-                orderId,
-                actionKey: "store.order.cancel",
-                reason: "Store cannot fulfil the customer's delivery location.",
-              })}
+              onClick={() => {
+                setCancelOrderId(orderId);
+                setCancelReasonCode("coverage_unavailable");
+              }}
             >Cancel</Button>
           ) : null}
         </div>
@@ -494,6 +503,16 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           </section>
         </>
       )}
+
+      <Dialog isOpen={Boolean(cancelOrderId)} title="Cancel Store order" onClose={() => setCancelOrderId(null)} footer={<><Button variant="ghost" onClick={() => setCancelOrderId(null)}>Keep order active</Button><Button variant="destructive" isLoading={processOrderAction.isPending} disabled={!cancelOrderId} onClick={() => {
+        const selected = storeCancellationReasons.find((reason) => reason.value === cancelReasonCode) ?? storeCancellationReasons[0];
+        if (cancelOrderId) processOrderAction.mutate({ orderId: cancelOrderId, actionKey: "store.order.cancel", reason: selected.reason, reasonCode: selected.value });
+        setCancelOrderId(null);
+      }}>Confirm cancellation</Button></>}>
+        <div className="admin-notice"><strong>This explanation is shown to the customer.</strong><p>Choose the actual reason for cancellation. The reason is recorded in the order event history and shown beside the customer's refund status.</p></div>
+        <SelectInput label="Customer-facing cancellation reason" value={cancelReasonCode} onChange={(event) => setCancelReasonCode(event.currentTarget.value as (typeof storeCancellationReasons)[number]["value"])} options={storeCancellationReasons.map((reason) => ({ label: reason.label, value: reason.value }))} />
+        <div className="admin-notice"><p>{storeCancellationReasons.find((reason) => reason.value === cancelReasonCode)?.reason}</p></div>
+      </Dialog>
 
       <Dialog isOpen={settingsEditorOpen} title="Store operating setup" onClose={() => setSettingsEditorOpen(false)} footer={<><Button variant="ghost" onClick={() => setSettingsEditorOpen(false)}>Cancel</Button><Button isLoading={saveSettings.isPending} disabled={!organizationId} onClick={() => saveSettings.mutate()}>Save and activate Store</Button></>}>
         <div className="admin-notice"><strong>First-party SKIMA Store</strong><p>The dedicated SKIMA Store organisation is preconfigured. Choose another organisation only when it has an active merchant profile; the shared order engine requires this before it can accept Store orders.</p></div>

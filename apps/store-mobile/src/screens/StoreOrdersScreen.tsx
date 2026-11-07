@@ -11,6 +11,19 @@ import { GuideTarget } from "../onboarding/StoreGuideProvider";
 import { ServiceDiscoveryModal } from "./ServiceDiscoveryModal";
 
 const ActionSchema = z.union([z.string(), z.record(z.string(), z.unknown()), z.null()]);
+const recordValue = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const cancellationReason = (order: Record<string, unknown>) => {
+  const metadata = recordValue(order.metadata);
+  const events = Array.isArray(order.events) ? order.events.map(recordValue) : [];
+  const cancelled = [...events].reverse().find((event) =>
+    asString(event, "to_status") === "cancelled" ||
+    asString(recordValue(event.metadata), "action_key") === "store.order.cancel"
+  );
+  const eventMetadata = recordValue(cancelled?.metadata);
+  return asString(eventMetadata, "customerVisibleReason", "reason") ??
+    asString(metadata, "store_cancellation_reason", "store_refund_reason");
+};
 const statusLabel = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const dateLabel = (value: string | null) => value
   ? new Date(value).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })
@@ -64,6 +77,10 @@ export function StoreOrdersScreen() {
             const currency = asString(order, "currency_code") ?? "NGN";
             const canConfirm = status === "fulfilled";
             const completed = status === "completed";
+            const cancelled = status === "cancelled";
+            const orderMetadata = recordValue(order.metadata);
+            const reason = cancellationReason(order);
+            const refundedAt = asString(orderMetadata, "store_refunded_at");
             return (
               <Card key={id} style={{ gap: 9 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -71,7 +88,7 @@ export function StoreOrdersScreen() {
                     <ReceiptText color={palette.brand} size={17} />
                     <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "900" }}>Order {id.slice(0, 8).toUpperCase()}</Text>
                   </View>
-                  <Text style={{ color: completed ? palette.success : palette.brand, fontSize: 10, fontWeight: "900" }}>{statusLabel(status)}</Text>
+                  <Text style={{ color: completed ? palette.success : cancelled ? palette.danger : palette.brand, fontSize: 10, fontWeight: "900" }}>{statusLabel(status)}</Text>
                 </View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   <Clock3 size={12} color={palette.muted} />
@@ -86,7 +103,19 @@ export function StoreOrdersScreen() {
                   <Text style={{ color: palette.muted, fontSize: 10 }}>Total</Text>
                   <Text style={{ color: palette.ink, fontSize: 12, fontWeight: "900" }}>{money(asNumber(order, "total_amount") ?? 0, currency)}</Text>
                 </View>
-                {canConfirm ? <ActionButton label="Confirm receipt" loading={confirmReceipt.isPending} disabled={confirmReceipt.isPending} onPress={() => confirmReceipt.mutate(id)} /> :
+                {cancelled ? (
+                  <View style={{ padding: 12, borderRadius: 13, borderWidth: 1, borderColor: palette.danger, backgroundColor: palette.dangerSoft, gap: 6 }}>
+                    <Text style={{ color: palette.danger, fontSize: 11, fontWeight: "900" }}>Why SKIMA cancelled this order</Text>
+                    <Text style={{ color: palette.ink, fontSize: 11, lineHeight: 17 }}>
+                      {reason ?? "SKIMA could not fulfil this order. Please contact our support team if you need more details."}
+                    </Text>
+                    <Text style={{ color: palette.ink, fontSize: 10, lineHeight: 16 }}>
+                      {refundedAt
+                        ? "Your refund was sent to your SKIMA Wallet on " + dateLabel(refundedAt) + "."
+                        : "Your order is cancelled. The wallet refund has not yet been marked as completed."}
+                    </Text>
+                  </View>
+                ) : canConfirm ? <ActionButton label="Confirm receipt" loading={confirmReceipt.isPending} disabled={confirmReceipt.isPending} onPress={() => confirmReceipt.mutate(id)} /> :
                   completed ? <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><CheckCircle2 color={palette.success} size={14} /><Text style={{ color: palette.success, fontSize: 10, fontWeight: "800" }}>Receipt confirmed · settlement completed</Text></View> :
                   <Text style={{ color: palette.muted, fontSize: 10 }}>We’ll update you as your order is prepared and delivered.</Text>}
               </Card>

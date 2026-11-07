@@ -8,15 +8,17 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { AppButton } from "../ui/AppButton";
 import { AppModal } from "../ui/AppModal";
 import { GuideLaunchLink, GuideTarget } from "../onboarding/StoreGuideProvider";
+import type { StorePage } from "../navigation/storeNavigation";
 import { Page, Card, SectionTitle, ActionButton, Field, Notice } from "./StoreUI";
 
-export function StoreAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => void }) {
+export function StoreAccountScreen({ onOpenPage }: { onOpenPage: (page: StorePage) => void }) {
   const session = useSession();
   const { palette, scheme, toggle } = useAppTheme();
   const userId = session.session?.user.id;
   const currentName = session.context?.profile?.display_name
     ?? (typeof session.session?.user.user_metadata?.display_name === "string" ? session.session.user.user_metadata.display_name : "");
   const email = session.context?.user.email ?? session.session?.user.email ?? "";
+  const canManageStore = Boolean(session.context?.platformAdmin?.status === "active" && session.context.permissions.includes("platform.store.manage"));
   const [name, setName] = useState(currentName);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -95,6 +97,7 @@ export function StoreAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
       </Card>
       <View style={{ gap: 8 }}>
         <SectionTitle title="Manage your account" />
+        {canManageStore ? <AccountLink icon={<ShieldCheck color={palette.brand} size={18} />} title="Store management" subtitle="Create products, process orders and refunds" onPress={() => onOpenPage("manage")} /> : null}
         <AccountLink icon={<WalletCards color={palette.brand} size={18} />} title="Wallet" subtitle="Funding, balances and withdrawals" onPress={() => onOpenPage("wallet")} />
         <AccountLink icon={<Bell color={palette.brand} size={18} />} title="Notifications" subtitle="Store order and account updates" onPress={() => onOpenPage("notifications")} />
         <AccountLink icon={<ShoppingBag color={palette.brand} size={18} />} title="Purchase history" subtitle="Track your Store orders and deliveries" onPress={() => onOpenPage("orders")} />

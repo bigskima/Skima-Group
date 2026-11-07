@@ -15,21 +15,21 @@ The migration provisions a dedicated first-party `SKIMA Store` operating organis
 - Draft/active state, effective price window, and real stock/availability must be respected before customer display.
 - Store merchandise must be created through the Store admin action or deliberately tagged for the Store sales channel. LPG refill, PMS, diesel, and kerosene items are not automatically exposed in Store.
 - Inventory is reserved by the shared order engine at order submission and consumed only at the Store fulfilment confirmation action. Cancellation releases the reservation.
-- Store order lifecycle is configured as a module workflow: receive, accept, prepare, ready for pickup, fulfil, complete, with cancellation and reason handling.
+- Store order lifecycle is configured as a module workflow: receive, accept, prepare, ready for pickup, fulfil, complete, with cancellation and reason handling. Cancellation events store the reason and customer-visible explanation; refunded time and wallet transaction are recorded on the order.
 - Store-specific fulfilment must not mutate LPG handoff verification, fuel dispatch, or the LPG/PMS/kerosene/diesel product toggles.
 
 ## Current branch slice
 
 - Separate Store business module, workflow, acceptance policy, first-party merchant organisation, and draft storefront setting.
 - Store settings and product creation endpoints use authenticated gateway routes and security-definer RPCs; direct client table writes remain blocked.
-- Admin workspace: Store activation/configuration, product create/publish with price, discount price and stock, Store product list, order list and workflow actions.
+- Admin workspace: Store activation/configuration, product create/publish with price, discount price and stock, Store product list, order list and workflow actions. This remains a full parallel management surface and is not removed by the Store-app workspace.\n- Store app: platform administrators with `platform.store.manage` can open the in-app Store management workspace to create/edit listings, accept and progress orders, record a customer-visible cancellation reason, and issue the existing wallet refund. The UI requires both a platform-admin session and the explicit Store permission; the backend endpoints retain their own permission checks.\n- Customer order history includes the cancellation event reason and clearly distinguishes an issued wallet refund from a refund that is still pending.
 - Customer app: Store tab, product browse/search/categories, variant selection, media rendering, persistent basket, and order request submission to the shared order engine.
 - Customer checkout in this slice records an order request. It does not yet collect a delivery address, calculate delivery charges, capture payment, or automatically dispatch a driver. Those must be completed and tested before real customer orders are enabled.
 - Product-image upload can use the existing catalogue media tooling; a dedicated Store image-upload flow remains a follow-up UI improvement.
 
 ## Delivery sequence
 
-1. Store catalog projections and explicit listing administration.
+1. Store catalogue projections and explicit listing administration in both Admin and the permission-gated Store app workspace.
 2. Customer Store browsing, search, category filtering, product details and basket.
 3. Delivery-address and delivery-eligibility capture; server-authoritative checkout, inventory reservation, payment, order lifecycle and fulfilment.
 4. Promotions/campaign rules, returns/refunds, analytics, merchandising and dedicated image upload.
