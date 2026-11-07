@@ -1,4 +1,4 @@
-import { useSegments } from "expo-router";
+import { router, useSegments } from "expo-router";
 import { SupportCenter } from "./SupportCenter";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -18,6 +18,7 @@ export function SupportScreen() {
       supabase={session.supabase}
       palette={palette}
       canManage={canManage}
+      onBack={() => router.back()}
     />
   );
 }
