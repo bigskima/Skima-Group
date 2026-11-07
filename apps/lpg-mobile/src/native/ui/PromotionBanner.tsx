@@ -5,6 +5,7 @@ import { ArrowUpRight } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -168,14 +169,17 @@ function PromotionCard({ publication, width }: {
     : typeof publication.ctaAction.target === "string"
     ? publication.ctaAction.target
     : null;
-  const actionable = actionType === "route" && Boolean(actionValue);
+  const actionable = Boolean(actionValue && ((actionType === "route" && actionValue.startsWith("/")) || (actionType === "url" && /^https:\/\//i.test(actionValue))));
   const hasArtwork = Boolean(publication.mediaUrl);
   return (
     <Pressable
       accessibilityLabel={publication.accessibilityLabel ?? publication.title ?? "Promotion"}
       accessibilityRole={actionable ? "button" : undefined}
       disabled={!actionable}
-      onPress={actionable ? () => router.push(actionValue as never) : undefined}
+      onPress={actionable ? () => {
+        if (actionType === "route") router.push(actionValue as never);
+        else if (actionType === "url") void Linking.openURL(actionValue).catch(() => undefined);
+      } : undefined}
       style={[styles.banner, { width }]}
     >
       <LinearGradient colors={["#161D19", "#392025"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
