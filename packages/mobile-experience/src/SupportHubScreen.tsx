@@ -205,7 +205,7 @@ export function SupportHubScreen({
             target_app_key: appKey,
             target_thread_id: selectedThread.id,
             target_body: reply.trim(),
-            target_source: "skima.bills.support",
+            target_source: `skima.${appKey}.support`,
             target_idempotency_key: key,
             target_metadata: { surface: `${appKey}.app` },
           });
