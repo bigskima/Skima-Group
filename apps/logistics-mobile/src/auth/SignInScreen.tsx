@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { LockKeyhole, Mail, ShieldCheck, Truck, UserRound, Gift, ArrowLeft } from "lucide-react-native";
+import { LockKeyhole, Mail, ShieldCheck, Truck, UserRound, Gift, ArrowLeft, Eye, EyeOff } from "lucide-react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -18,6 +18,7 @@ export function SignInScreen({ initialMode = "login" }: { initialMode?: AuthMode
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -83,7 +84,13 @@ export function SignInScreen({ initialMode = "login" }: { initialMode?: AuthMode
         </View>
         <View style={styles.content}>
           <View style={styles.brandRow}>
-            <BrandMark />
+            <View style={[styles.logoPlate, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <BrandMark compact />
+            </View>
+            <View style={styles.brandCopy}>
+              <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
+              <Text style={[styles.brandCaption, { color: palette.muted }]}>LOGISTICS</Text>
+            </View>
           </View>
           <View style={styles.hero}>
             <View style={[styles.heroIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={23} /></View>
@@ -109,10 +116,10 @@ export function SignInScreen({ initialMode = "login" }: { initialMode?: AuthMode
               <AppField label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" leading={<Mail color={palette.muted} size={16} />} />
             ) : null}
             {mode !== "forgot" ? (
-              <AppField label={mode === "reset" ? "New password" : "Password"} value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry autoCapitalize="none" leading={<LockKeyhole color={palette.muted} size={16} />} />
+              <AppField label={mode === "reset" ? "New password" : "Password"} value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry={!showPassword} autoCapitalize="none" leading={<LockKeyhole color={palette.muted} size={16} />} trailing={<Pressable accessibilityRole="button" accessibilityLabel={showPassword ? "Hide password" : "Show password"} hitSlop={10} onPress={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff color={palette.muted} size={18} /> : <Eye color={palette.muted} size={18} />}</Pressable>} />
             ) : null}
             {mode === "reset" ? (
-              <AppField label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Enter it again" secureTextEntry autoCapitalize="none" leading={<LockKeyhole color={palette.muted} size={16} />} />
+              <AppField label="Confirm password" value={confirm} onChangeText={setConfirm} placeholder="Enter it again" secureTextEntry={!showPassword} autoCapitalize="none" leading={<LockKeyhole color={palette.muted} size={16} />} trailing={<Pressable accessibilityRole="button" accessibilityLabel={showPassword ? "Hide password" : "Show password"} hitSlop={10} onPress={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff color={palette.muted} size={18} /> : <Eye color={palette.muted} size={18} />}</Pressable>} />
             ) : null}
             {mode === "register" ? (
               <AppField label="Referral code (optional)" value={referralCode} onChangeText={setReferralCode} placeholder="Enter a code, if you have one" autoCapitalize="characters" leading={<Gift color={palette.muted} size={16} />} optional />
@@ -149,6 +156,10 @@ const styles = StyleSheet.create({
   orbBottom: { width: 210, height: 210, bottom: 55, left: -150 },
   content: { width: "100%", maxWidth: 460, gap: 16 },
   brandRow: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  logoPlate: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 15, borderWidth: StyleSheet.hairlineWidth },
+  brandCopy: { gap: 0 },
+  brandName: { fontSize: 15, lineHeight: 18, fontWeight: "900", letterSpacing: 1.05 },
+  brandCaption: { fontSize: 9, lineHeight: 12, fontWeight: "800", letterSpacing: 1.55 },
   hero: { gap: 7, paddingTop: 2 },
   heroIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", marginBottom: 2 },
   eyebrow: { ...typography.eyebrow, fontSize: 8 },

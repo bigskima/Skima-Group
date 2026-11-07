@@ -96,7 +96,7 @@ function readString(value: unknown): string | null {
 
 const styles = StyleSheet.create({
   wrap: { width: "100%" },
-  banner: { width: "100%", aspectRatio: 16 / 7, minHeight: 172, maxHeight: 230, overflow: "hidden", borderRadius: radii.xl, padding: spacing.lg, justifyContent: "center" },
+  banner: { width: "100%", aspectRatio: 16 / 7, minHeight: 190, maxHeight: 230, overflow: "hidden", borderRadius: radii.xl, padding: spacing.lg, justifyContent: "center" },
   copy: { alignItems: "flex-start", maxWidth: 540, gap: 8 },
   eyebrow: { flexDirection: "row", alignItems: "center", gap: 6 },
   eyebrowText: { color: "rgba(255,255,255,.82)", ...typography.eyebrow, fontSize: 8, letterSpacing: 1.2 },

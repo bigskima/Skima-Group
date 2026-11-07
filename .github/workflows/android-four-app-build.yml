@@ -1,0 +1,112 @@
+name: SKIMA four-app Android builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App to build
+        required: true
+        type: choice
+        options:
+          - all
+          - refill
+          - store
+          - bills
+          - logistics
+        default: all
+      build_profile:
+        description: Android output
+        required: true
+        type: choice
+        options:
+          - production-apk
+          - production-aab
+        default: production-apk
+      clear_cache:
+        description: Clear the EAS build cache
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skima-four-app-android-${{ inputs.app }}-${{ inputs.build_profile }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.app }} (${{ inputs.build_profile }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        app: ${{ fromJSON(inputs.app == 'all' && '["lpg-mobile","store-mobile","bills-mobile","logistics-mobile"]' || inputs.app == 'refill' && '["lpg-mobile"]' || format('["{0}-mobile"]', inputs.app)) }}
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      BUILD_PROFILE: ${{ inputs.build_profile }}
+      CLEAR_CACHE: ${{ inputs.clear_cache }}
+      APP_PATH: ${{ matrix.app }}
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.SKIMA_REFILL_EAS_PROJECT_ID }}
+      EXPO_PUBLIC_STORE_EAS_PROJECT_ID: ${{ vars.SKIMA_STORE_EAS_PROJECT_ID }}
+      EXPO_PUBLIC_BILLS_EAS_PROJECT_ID: ${{ vars.SKIMA_BILLS_EAS_PROJECT_ID }}
+      EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID: ${{ vars.SKIMA_LOGISTICS_EAS_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate Expo app
+        run: |
+          npm run check
+          npx --yes expo-doctor@latest
+          npx expo config --type public > /dev/null
+
+      - name: Verify EAS credentials and app identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN" || { echo "::error::Add EXPO_TOKEN as a GitHub Actions secret."; exit 1; }
+          case "$APP_PATH" in
+            lpg-mobile)
+              # Refill has an existing project ID fallback in app.config.ts; a
+              # repository variable may override it but is not required.
+              ;;
+            store-mobile)
+              test -n "$EXPO_PUBLIC_STORE_EAS_PROJECT_ID" || { echo "::error::Set GitHub repository variable SKIMA_STORE_EAS_PROJECT_ID."; exit 1; }
+              ;;
+            bills-mobile)
+              test -n "$EXPO_PUBLIC_BILLS_EAS_PROJECT_ID" || { echo "::error::Set GitHub repository variable SKIMA_BILLS_EAS_PROJECT_ID."; exit 1; }
+              ;;
+            logistics-mobile)
+              test -n "$EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID" || { echo "::error::Set GitHub repository variable SKIMA_LOGISTICS_EAS_PROJECT_ID."; exit 1; }
+              ;;
+          esac
+
+      - name: Validate selected EAS profile
+        run: npx --yes eas-cli@latest config --platform android --profile "$BUILD_PROFILE" --non-interactive > /dev/null
+
+      - name: Build Android package
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_ARGS=(build --platform android --profile "$BUILD_PROFILE" --non-interactive --wait)
+          if [ "$CLEAR_CACHE" = "true" ]; then
+            BUILD_ARGS+=(--clear-cache)
+          fi
+          npx --yes eas-cli@latest "${BUILD_ARGS[@]}"

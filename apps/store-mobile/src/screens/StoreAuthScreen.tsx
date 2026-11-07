@@ -78,7 +78,13 @@ export function StoreAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
         <ScrollView contentContainerStyle={styles.outer} keyboardShouldPersistTaps="handled">
           <View style={styles.shell}>
             <View style={styles.brandRow}>
-              <StoreBrandMark size={138} />
+              <View style={[styles.logoPlate, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <StoreBrandMark compact />
+              </View>
+              <View style={styles.brandCopy}>
+                <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
+                <Text style={[styles.brandCaption, { color: palette.muted }]}>STORE</Text>
+              </View>
             </View>
             <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
               <View style={[styles.accent,{backgroundColor:palette.brand}]}/>
@@ -126,7 +132,9 @@ function Field(props: {label:string;value:string;onChangeText:(value:string)=>vo
 const styles=StyleSheet.create({
  root:{flex:1},fill:{flex:1},outer:{flexGrow:1,alignItems:"center",justifyContent:"center",padding:18,paddingVertical:24},
  shell:{width:"100%",maxWidth:460,gap:15},brandRow:{width:"100%",flexDirection:"row",alignItems:"center",justifyContent:"center",gap:10},
- brand:{fontSize:15,fontWeight:"900",letterSpacing:1},brandSub:{fontSize:9,fontWeight:"900",letterSpacing:1.5},
+ logoPlate:{width:44,height:44,alignItems:"center",justifyContent:"center",borderRadius:15,borderWidth:StyleSheet.hairlineWidth},
+ brandCopy:{gap:0},brandName:{fontSize:15,lineHeight:18,fontWeight:"900",letterSpacing:1.05},
+ brandCaption:{fontSize:9,lineHeight:12,fontWeight:"800",letterSpacing:1.55},
  card:{borderWidth:1,borderRadius:24,padding:18,gap:12,overflow:"hidden"},accent:{height:3,width:44,borderRadius:4,marginBottom:5},
  eyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1.1},title:{fontSize:23,fontWeight:"900",letterSpacing:-.6},subtitle:{fontSize:11,lineHeight:16},
  fields:{gap:10},input:{minHeight:48,borderRadius:13,borderWidth:1,paddingHorizontal:13,flexDirection:"row",alignItems:"center",gap:10},

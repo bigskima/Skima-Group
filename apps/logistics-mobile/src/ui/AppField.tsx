@@ -3,8 +3,8 @@ import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-na
 import { useAppTheme } from "../theme/ThemeProvider";
 import { controlHeights, radii, spacing, typography } from "../theme/tokens";
 
-export function AppField({ label, hint, error, leading, optional = false, multiline, ...props }: TextInputProps & {
-  label: string; hint?: string; error?: string | null; leading?: ReactNode; optional?: boolean;
+export function AppField({ label, hint, error, leading, trailing, optional = false, multiline, ...props }: TextInputProps & {
+  label: string; hint?: string; error?: string | null; leading?: ReactNode; trailing?: ReactNode; optional?: boolean;
 }) {
   const { palette } = useAppTheme();
   const [focused, setFocused] = useState(false);
@@ -28,6 +28,7 @@ export function AppField({ label, hint, error, leading, optional = false, multil
           accessibilityLabel={props.accessibilityLabel ?? label}
           style={[styles.input, multiline && styles.multilineInput, { color: palette.ink }, props.style]}
         />
+        {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
       </View>
       {error || hint ? <Text accessibilityRole={error ? "alert" : undefined} style={[styles.support, { color: error ? palette.danger : palette.muted }]}>{error ?? hint}</Text> : null}
     </View>
@@ -42,6 +43,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 1 },
   multilineShell: { minHeight: 104, alignItems: "flex-start", paddingVertical: 13 },
   leading: { marginRight: spacing.sm, paddingTop: 1 },
+  trailing: { marginLeft: spacing.sm, minWidth: 34, minHeight: 40, alignItems: "center", justifyContent: "center" },
   input: { flex: 1, minHeight: controlHeights.md, paddingVertical: 0, ...typography.body, fontSize: 14 },
   multilineInput: { minHeight: 74, textAlignVertical: "top", paddingTop: 0 },
   support: { ...typography.caption, fontSize: 11, lineHeight: 16, paddingHorizontal: 2 },
