@@ -143,6 +143,7 @@ const appRouteOptions: Record<string, Array<{ label: string; value: string }>> =
     { label: "Wallet", value: "/(customer)/wallet" },
     { label: "Account", value: "/(customer)/account" },
     { label: "Notifications", value: "/(customer)/notifications" },
+    { label: "Referrals & rewards", value: "/(customer)/referrals" },
   ],
   store: [
     { label: "Shop", value: "/shop" },
@@ -158,6 +159,7 @@ const appRouteOptions: Record<string, Array<{ label: string; value: string }>> =
     { label: "Wallet", value: "/wallet" },
     { label: "Account", value: "/account" },
     { label: "Notifications", value: "/notifications" },
+    { label: "Referrals & rewards", value: "/referrals" },
   ],
   logistics: [
     { label: "Customer home", value: "/(customer)" },
