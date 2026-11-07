@@ -4,13 +4,31 @@
     "strict": true,
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
-    "types": ["jest"],
+    "types": [
+      "jest"
+    ],
     "paths": {
-      "@lpg/*": ["src/*"],
-      "@skima/frontend-core": ["../../packages/frontend-core/src/index.ts"],
-      "@supabase/supabase-js": ["node_modules/@supabase/supabase-js"],
-      "zod": ["node_modules/zod"]
+      "@lpg/*": [
+        "src/*"
+      ],
+      "@skima/frontend-core": [
+        "../../packages/frontend-core/src/index.ts"
+      ],
+      "@supabase/supabase-js": [
+        "node_modules/@supabase/supabase-js"
+      ],
+      "zod": [
+        "node_modules/zod"
+      ],
+      "@skima/mobile-experience/*": [
+        "../../packages/mobile-experience/src/*"
+      ]
     }
   },
-  "include": ["app", "src/native", "expo-env.d.ts", ".expo/types/**/*.ts"]
+  "include": [
+    "app",
+    "src/native",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts"
+  ]
 }
