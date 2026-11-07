@@ -406,7 +406,8 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       const nextAction = storeOrderNextAction(catalogText(order, "status"));
       const orderId = catalogText(order, "id");
       const orderMetadata = order.metadata && typeof order.metadata === "object" ? order.metadata as Record<string, unknown> : {};
-      const refunded = typeof orderMetadata.store_refunded_at === "string";
+      const refunded = typeof orderMetadata.store_refunded_at === "string" || orderMetadata.store_refund_status === "refunded";
+      const noRefundRequired = orderMetadata.store_refund_status === "not_required" || orderMetadata.store_payment_status === "not_funded";
       return nextAction ? (
         <div className="store-workspace__order-actions">
           <Button
@@ -429,9 +430,9 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         </div>
       ) : catalogText(order, "status") === "fulfilled" ? (
         <StatusBadge tone="warning">Awaiting customer receipt</StatusBadge>
-      ) : catalogText(order, "status") === "cancelled" && !refunded ? (
-        <Button size="sm" variant="outline" disabled={refundOrder.isPending || !orderId} onClick={() => refundOrder.mutate({ orderId, reason: "Store cannot fulfil the customer's delivery location." })}>Refund wallet</Button>
-      ) : refunded ? <StatusBadge tone="success">Refunded</StatusBadge> : "—";
+      ) : catalogText(order, "status") === "cancelled" && !refunded && !noRefundRequired ? (
+        <Button size="sm" variant="outline" disabled={refundOrder.isPending || !orderId} onClick={() => refundOrder.mutate({ orderId, reason: "Store cannot fulfil the customer's delivery location." })}>Check / refund wallet</Button>
+      ) : refunded ? <StatusBadge tone="success">Refunded</StatusBadge> : noRefundRequired ? <StatusBadge tone="info">No payment captured</StatusBadge> : "—";
     } },
   ];
 

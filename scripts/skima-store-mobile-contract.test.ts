@@ -93,6 +93,9 @@ Deno.test("Store customers see explicit cancellation reasons and wallet refund s
   requireText(orders, "Why SKIMA cancelled this order", "Customer-facing Store cancellation reason");
   requireText(orders, "Your refund was sent to your SKIMA Wallet on ", "Customer-facing Store refund confirmation");
   requireText(orders, "wallet refund has not yet been marked as completed", "Customer-facing pending refund state");
+  requireText(orders, "No payment was captured from your SKIMA Wallet", "Customer-facing no-payment cancellation state");
+  requireText(gateway, "store_funding_reconciliation_required", "Store refund will not duplicate-credit a missing escrow record");
+  requireText(gateway, "store_refund_status", "Store refund records the resolved payment state");
   requireText(gateway, "events:order_events(id,event_type_key,from_status,to_status,metadata,created_at)", "Store customer orders include cancellation event reasons");
 });
 
@@ -185,4 +188,12 @@ Deno.test("Store guided tour maps first-run steps to real Store controls", async
   rejectText(auth, "Secure payments · Shared SKIMA wallet · One customer account", "Store authentication reference footer");
   rejectText(auth, "in one secure place", "Store authentication filler copy");
   rejectText(auth, "One SKIMA account across your services", "Store authentication cross-app tagline");
+});
+
+Deno.test("Store management distinguishes cancelled orders without a wallet debit from refundable orders", async () => {
+  const management = await read("apps/store-mobile/src/screens/StoreManagementScreen.tsx");
+  const admin = await read("apps/admin/src/features/store/StoreWorkspace.tsx");
+  requireText(management, 'metadata.store_refund_status === "not_required"', "Store app no-payment refund state");
+  requireText(management, "No payment was captured for this checkout", "Store app no-payment notice");
+  requireText(admin, 'orderMetadata.store_refund_status === "not_required"', "Admin no-payment refund state");
 });

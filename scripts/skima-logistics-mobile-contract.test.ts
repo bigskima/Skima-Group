@@ -730,3 +730,28 @@ Deno.test("The quote and request notes can be read by both sides", () => {
   requireText(providerOpportunities, "Customer note:", "company can read customer counteroffer notes while negotiating");
   requireText(booking, "Company quote note", "customer can read provider notes after confirming the order");
 });
+
+Deno.test("Managed Driver coverage offers secure radius coverage without removing mapped-boundary safeguards", async () => {
+  const workspace = await Deno.readTextFile("apps/admin/src/admin-managed-driver-coverage-workspace.tsx");
+  const radiusMigration = await Deno.readTextFile("supabase/migrations/20261107191000_managed_driver_radius_coverage.sql");
+  const mappedMigration = await Deno.readTextFile("supabase/migrations/20261106120000_lpg_named_geography_service_area_runtime.sql");
+  requireText(workspace, 'value: "radius"', "radius coverage selector");
+  requireText(workspace, "set_lpg_managed_driver_radius_coverage", "radius coverage RPC");
+  requireText(workspace, "selectedAreaCanBeAssigned", "mapped areas still require a boundary");
+  requireText(radiusMigration, "Only an approved Driver can receive managed coverage", "approved driver guard");
+  requireText(radiusMigration, "driver.skima_special", "SKIMA Managed programme membership guard");
+  requireText(radiusMigration, "target_radius_meters > 1000000", "radius size is bounded");
+  requireText(radiusMigration, "assignment.metadata->>'managedDriverSetup'", "radius assignment is scoped to a managed driver");
+  requireText(mappedMigration, "boundary_geometry is not null", "mapped geography remains boundary verified");
+});
+
+Deno.test("Location retention and inventory worker can run from the authenticated Vault-backed schedule", async () => {
+  const worker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
+  const scheduler = await Deno.readTextFile("supabase/migrations/20261107192000_runtime_worker_scheduler.sql");
+  requireText(worker, "suppliedSecret !== workerSecret", "dedicated worker secret remains supported");
+  requireText(worker, "suppliedSecret !== serviceRoleKey", "worker accepts authenticated service-role scheduling");
+  requireText(worker, "replace(/^Bearer\\s+/i", "Bearer credential parsing");
+  requireText(scheduler, "skima-runtime-worker", "runtime worker cron job");
+  requireText(scheduler, "skima_service_role_key", "scheduler reads the service role from Vault");
+  requireText(scheduler, "net.http_post", "scheduler invokes the worker endpoint");
+});

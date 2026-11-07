@@ -22,15 +22,18 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return jsonResponse({ ok: false, error: "method_not_allowed", requestId: id }, 405);
   }
 
-  const workerSecret = Deno.env.get("SKIMA_WORKER_SECRET");
-  const suppliedSecret = request.headers.get("x-skima-worker-secret");
+  const workerSecret = Deno.env.get("SKIMA_WORKER_SECRET")?.trim() ?? "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
+  const suppliedSecret = request.headers.get("x-skima-worker-secret")?.trim() ??
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
 
-  if (!workerSecret || suppliedSecret !== workerSecret) {
+  // Keep the dedicated worker secret when configured. The database scheduler
+  // can authenticate with the existing service-role secret stored in Vault.
+  if (!suppliedSecret || (suppliedSecret !== workerSecret && suppliedSecret !== serviceRoleKey)) {
     return jsonResponse({ ok: false, error: "unauthorized", requestId: id }, 401);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);

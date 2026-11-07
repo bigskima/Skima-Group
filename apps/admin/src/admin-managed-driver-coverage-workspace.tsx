@@ -13,6 +13,7 @@ import {
   SelectInput,
   StatusBadge,
   TextAreaInput,
+  TextInput,
 } from "@skima/ui";
 
 import { useSessionState } from "./session";
@@ -50,6 +51,11 @@ const AssignedAreaSchema = z.object({
   label: z.string(),
   isPrimary: z.boolean(),
   effectiveFrom: z.string(),
+  coverageAssignmentId: z.string().uuid().nullable().optional(),
+  coverageType: z.string().optional(),
+  centerLatitude: z.coerce.number().nullable().optional(),
+  centerLongitude: z.coerce.number().nullable().optional(),
+  radiusMeters: z.coerce.number().nullable().optional(),
 });
 const AssignedAreaListSchema = z.array(AssignedAreaSchema);
 
@@ -72,6 +78,11 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
   const [areaKey, setAreaKey] = useState("");
   const [primary, setPrimary] = useState("yes");
   const [reason, setReason] = useState("");
+  const [coverageMethod, setCoverageMethod] = useState<"mapped" | "radius">("mapped");
+  const [radiusLabel, setRadiusLabel] = useState("");
+  const [radiusLatitude, setRadiusLatitude] = useState("");
+  const [radiusLongitude, setRadiusLongitude] = useState("");
+  const [radiusKm, setRadiusKm] = useState("10");
   const [notice, setNotice] = useState<string | null>(null);
 
   const isSuperAdmin = context?.platformAdmin?.admin_kind === "super_admin";
@@ -161,14 +172,40 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
   };
 
   const updateArea = useMutation({
-    mutationFn: async ({ area, active, makePrimary }: { area: Area | z.infer<typeof AssignedAreaSchema>; active: boolean; makePrimary: boolean }) => {
+    mutationFn: async ({ area, active, makePrimary }: {
+      area: Area | z.infer<typeof AssignedAreaSchema>;
+      active: boolean;
+      makePrimary: boolean;
+    }) => {
       if (!selectedDriver) throw new Error("Choose a SKIMA Managed Driver.");
       const serviceAreaKey = "key" in area ? area.key : area.serviceAreaKey;
       const label = area.label;
+      const idempotencyKey = createClientIdempotencyKey(
+        "admin.lpg.managed-driver-area",
+        `${selectedDriver.driverProfileId}:${serviceAreaKey}:${active}:${makePrimary}`,
+      );
+      if ("coverageType" in area && area.coverageType === "RADIUS") {
+        const radiusArea = area as z.infer<typeof AssignedAreaSchema>;
+        const { data, error } = await supabase.rpc("set_lpg_managed_driver_radius_coverage", {
+          target_active: active,
+          target_center_latitude: active ? radiusArea.centerLatitude : null,
+          target_center_longitude: active ? radiusArea.centerLongitude : null,
+          target_coverage_assignment_id: radiusArea.coverageAssignmentId ?? null,
+          target_driver_profile_id: selectedDriver.driverProfileId,
+          target_idempotency_key: idempotencyKey,
+          target_metadata: { surface: "managed_driver_coverage", label },
+          target_primary: active ? makePrimary : false,
+          target_radius_meters: active ? radiusArea.radiusMeters : null,
+          target_reason: reason.trim() || `${active ? "Added" : "Removed"} ${label} ${active ? "to" : "from"} Managed Driver coverage`,
+        });
+        if (error) throw error;
+        return { data, label, active };
+      }
+
       const { data, error } = await supabase.rpc("set_lpg_managed_driver_service_area", {
         target_active: active,
         target_driver_profile_id: selectedDriver.driverProfileId,
-        target_idempotency_key: createClientIdempotencyKey("admin.lpg.managed-driver-area", `${selectedDriver.driverProfileId}:${serviceAreaKey}:${active}:${makePrimary}`),
+        target_idempotency_key: idempotencyKey,
         target_metadata: { surface: "managed_driver_coverage" },
         target_primary: active ? makePrimary : false,
         target_reason: reason.trim() || `${active ? "Added" : "Removed"} ${label} ${active ? "to" : "from"} Managed Driver coverage`,
@@ -263,37 +300,100 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
             </div>
           )) : !assignedAreas.isPending ? <p className="skima-muted">This Driver does not have an LPG service area yet.</p> : null}
 
-          <div className="skima-form-grid">
-            <SelectInput
-              label="Add service area"
-              value={areaKey}
-              onChange={(event) => setAreaKey(event.currentTarget.value)}
-              options={[
-                { label: availableAreas.length ? "Choose an enabled location" : selectableAreas.length ? "All enabled locations are already assigned" : "No enabled locations available", value: "" },
-                ...availableAreas.map((area) => ({ label: area.hasBoundary ? areaLabel(area) : `${areaLabel(area)} · Map boundary required`, value: area.key })),
-              ]}
-            />
-            <SelectInput
-              label="Area priority"
-              value={primary}
-              onChange={(event) => setPrimary(event.currentTarget.value)}
-              options={[
-                { label: "Primary service area", value: "yes" },
-                { label: "Additional service area", value: "no" },
-              ]}
-            />
-          </div>
-          {selectedArea && !selectedAreaCanBeAssigned ? <div className="sk-panel"><StatusBadge tone="warning">Map boundary required</StatusBadge><p className="skima-muted">This location is enabled in SKIMA’s geography catalogue, but it does not yet have a verified boundary. A physical Managed Driver cannot be assigned there until the boundary is verified, because live dispatch uses the customer’s GPS point to enforce the coverage area.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate("/operations/coverage")}>Open geography & coverage setup</Button></div> : null}
-          {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">All enabled locations are now visible here. Only locations with verified boundaries can be assigned to a physical Managed Driver; locations without boundaries remain available for non-driver service coverage where configured.</p> : null}
+          <SelectInput
+            label="Coverage method"
+            value={coverageMethod}
+            onChange={(event) => setCoverageMethod(event.currentTarget.value as "mapped" | "radius")}
+            options={[
+              { label: "Mapped service area", value: "mapped" },
+              { label: "Distance around a point", value: "radius" },
+            ]}
+          />
+          {coverageMethod === "mapped" ? (
+            <>
+              <div className="skima-form-grid">
+                <SelectInput
+                  label="Add service area"
+                  value={areaKey}
+                  onChange={(event) => setAreaKey(event.currentTarget.value)}
+                  options={[
+                    { label: availableAreas.length ? "Choose an enabled location" : selectableAreas.length ? "All enabled locations are already assigned" : "No enabled locations available", value: "" },
+                    ...availableAreas.map((area) => ({ label: area.hasBoundary ? areaLabel(area) : `${areaLabel(area)} · Map boundary required`, value: area.key })),
+                  ]}
+                />
+                <SelectInput
+                  label="Area priority"
+                  value={primary}
+                  onChange={(event) => setPrimary(event.currentTarget.value)}
+                  options={[
+                    { label: "Primary service area", value: "yes" },
+                    { label: "Additional service area", value: "no" },
+                  ]}
+                />
+              </div>
+              {selectedArea && !selectedAreaCanBeAssigned ? <div className="sk-panel"><StatusBadge tone="warning">Map boundary required</StatusBadge><p className="skima-muted">This location is enabled in SKIMA’s geography catalogue, but it does not yet have a verified boundary. A physical Managed Driver cannot use the mapped-area method until that boundary is verified, because dispatch uses the customer’s GPS point to enforce the mapped coverage boundary. The radius method can be used with an accurately recorded operating centre and checks the customer’s GPS point against the configured distance.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate("/operations/coverage")}>Open geography & coverage setup</Button></div> : null}
+              {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">All enabled locations are now visible here. Mapped dispatch requires a verified boundary; radius coverage is also available for an accurately recorded operating centre and still checks the customer's GPS point against its configured distance.</p> : null}
+            </>
+          ) : (
+            <>
+              <p className="skima-muted">Use the actual operating centre and radius. This works while a named geography is awaiting its verified map boundary; dispatch still checks the customer location against this radius.</p>
+              <div className="skima-form-grid">
+                <TextInput label="Coverage label" value={radiusLabel} onChange={(event) => setRadiusLabel(event.currentTarget.value)} placeholder="Example: Awka launch area" />
+                <TextInput label="Centre latitude" type="number" min="-90" max="90" step="0.000001" value={radiusLatitude} onChange={(event) => setRadiusLatitude(event.currentTarget.value)} placeholder="Latitude" />
+                <TextInput label="Centre longitude" type="number" min="-180" max="180" step="0.000001" value={radiusLongitude} onChange={(event) => setRadiusLongitude(event.currentTarget.value)} placeholder="Longitude" />
+                <TextInput label="Coverage radius (km)" type="number" min="0.1" max="1000" step="0.1" value={radiusKm} onChange={(event) => setRadiusKm(event.currentTarget.value)} />
+                <SelectInput
+                  label="Area priority"
+                  value={primary}
+                  onChange={(event) => setPrimary(event.currentTarget.value)}
+                  options={[
+                    { label: "Primary service area", value: "yes" },
+                    { label: "Additional service area", value: "no" },
+                  ]}
+                />
+              </div>
+            </>
+          )}
           <TextAreaInput label="Admin note (optional)" value={reason} onChange={(event) => setReason(event.currentTarget.value)} placeholder="Example: Awka launch coverage" />
           <Button
-            disabled={!canManageCoverage || updateArea.isPending || !areaKey || !selectedAreaCanBeAssigned}
+            disabled={
+              !canManageCoverage || updateArea.isPending ||
+              (coverageMethod === "mapped"
+                ? !areaKey || !selectedAreaCanBeAssigned
+                : !radiusLabel.trim() || !radiusLatitude.trim() || !radiusLongitude.trim() ||
+                  !Number.isFinite(Number(radiusLatitude)) || !Number.isFinite(Number(radiusLongitude)) ||
+                  Number(radiusLatitude) < -90 || Number(radiusLatitude) > 90 ||
+                  Number(radiusLongitude) < -180 || Number(radiusLongitude) > 180 ||
+                  !Number.isFinite(Number(radiusKm)) || Number(radiusKm) <= 0 || Number(radiusKm) > 1000)
+            }
             onClick={() => {
-              const area = availableAreas.find((item) => item.key === areaKey);
-              if (area?.hasBoundary) updateArea.mutate({ area, active: true, makePrimary: primary === "yes" });
+              if (coverageMethod === "mapped") {
+                const area = availableAreas.find((item) => item.key === areaKey);
+                if (area?.hasBoundary) updateArea.mutate({ area, active: true, makePrimary: primary === "yes" });
+                return;
+              }
+              const latitude = Number(radiusLatitude);
+              const longitude = Number(radiusLongitude);
+              const radiusMeters = Number(radiusKm) * 1000;
+              const label = radiusLabel.trim();
+              updateArea.mutate({
+                area: {
+                  serviceAreaKey: `radius:${latitude}:${longitude}:${radiusMeters}:${label.toLowerCase()}`,
+                  label,
+                  isPrimary: false,
+                  effectiveFrom: new Date().toISOString(),
+                  coverageAssignmentId: null,
+                  coverageType: "RADIUS",
+                  centerLatitude: latitude,
+                  centerLongitude: longitude,
+                  radiusMeters,
+                },
+                active: true,
+                makePrimary: primary === "yes",
+              });
             }}
           >
-            {updateArea.isPending ? "Saving…" : "Add service area"}
+            {updateArea.isPending ? "Saving…" : coverageMethod === "radius" ? "Add radius coverage" : "Add mapped coverage"}
           </Button>
           {updateArea.error ? <ErrorState error={updateArea.error} /> : null}
           {!canManageCoverage ? <p className="skima-muted">You can review coverage, but only an administrator with coverage-management access can change it.</p> : null}
