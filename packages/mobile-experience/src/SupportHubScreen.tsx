@@ -73,6 +73,7 @@ export function SupportHubScreen({
   palette: any;
   appKey: "refill" | "logistics" | "store" | "bills";
   workspace?: string;
+  onBack?: () => void;
 }) {
   const canRead = permissions.includes("platform.support.read")
     || permissions.includes("platform.support.manage")
@@ -107,7 +108,7 @@ export function SupportHubScreen({
   const refresh = useCallback(async () => {
     if (!userId) return;
     setError("");
-    const own = await supabase.rpc("read_my_support_threads", { target_app_key: appKey, target_limit: 60 });
+    const own = await supabase.rpc("read_my_support_threads", { target_app_key: appKey.toLowerCase(), target_limit: 60 });
     if (own.error) throw own.error;
     setMyThreads((own.data ?? []) as SupportThread[]);
     if (canRead || canManage) {
@@ -121,7 +122,7 @@ export function SupportHubScreen({
     } else {
       setTeamThreads([]);
     }
-  }, [canManage, canRead, supabase, userId]);
+  }, [appKey, canManage, canRead, supabase, userId]);
 
   useEffect(() => {
     let alive = true;
@@ -146,7 +147,7 @@ export function SupportHubScreen({
       alive = false;
       void supabase.removeChannel(channel);
     };
-  }, [refresh, supabase, userId]);
+  }, [appKey, refresh, supabase, userId, workspace]);
 
   const openThread = (thread: SupportThread, fromTeam = false) => {
     setSelectedId(thread.id);
@@ -202,7 +203,7 @@ export function SupportHubScreen({
             target_metadata: { surface: `${appKey}.app.support` },
           })
         : await supabase.rpc("reply_to_my_support_app_thread", {
-            target_app_key: appKey,
+            target_app_key: appKey.toLowerCase(),
             target_thread_id: selectedThread.id,
             target_body: reply.trim(),
             target_source: `skima.${appKey}.support`,
@@ -222,6 +223,7 @@ export function SupportHubScreen({
 
   const back = () => {
     setError("");
+    if (screen === "home") { onBack?.(); return; }
     setScreen("home");
     setSelectedId(null);
   };
@@ -231,7 +233,7 @@ export function SupportHubScreen({
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
       <View style={[styles.header, { backgroundColor: palette.surface, borderBottomColor: palette.border }]}>
-        {screen !== "home" ? (
+        {screen !== "home" || onBack ? (
           <Pressable onPress={back} accessibilityRole="button" style={[styles.back, { backgroundColor: palette.surfaceSubtle }]}>
             <ArrowLeft color={palette.ink} size={19} />
           </Pressable>
