@@ -619,6 +619,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
     'appKey', app_keys.app_key,
     'displayName', app_keys.display_name,
+    'currencyCode', selected_currency,
     'transactionCount', coalesce(transaction_totals.transaction_count,0),
     'postedCount', coalesce(transaction_totals.posted_count,0),
     'postedAmount', case when actor_can_read_revenue then coalesce(transaction_totals.posted_amount,0) else null end,
