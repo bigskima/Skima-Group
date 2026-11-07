@@ -15,7 +15,7 @@ export function navigateStoreRoute(route: unknown) {
     "": "shop", "/": "shop", "/store": "shop", "/shop": "shop",
     "/orders": "orders", "/store/orders": "orders", "/wallet": "wallet",
     "/account": "account", "/top-up": "top-up", "/withdraw": "withdraw",
-    "/notifications": "notifications",
+    "/notifications": "notifications", "/support": "support",
     "/referrals": "referrals",
     "/support": "support",
     "/manage": "manage", "/store/manage": "manage",
