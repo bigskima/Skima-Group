@@ -151,6 +151,9 @@
     "20261103143948_logistics_safe_replacement_handoff.sql",
     "20261103143956_logistics_incident_and_dispute_protection.sql",
     "20261103144006_logistics_cargo_recovery_dispatch.sql",
-    "20261103224827_logistics_earnings_withdrawal_and_driver_payment_controls.sql"
+    "20261103224827_logistics_earnings_withdrawal_and_driver_payment_controls.sql",
+    "20261107190000_store_delivery_eta_repair.sql",
+    "20261107191000_managed_driver_radius_coverage.sql",
+    "20261107192000_runtime_worker_scheduler.sql"
   ]
 }
