@@ -245,6 +245,107 @@ language sql
 stable
 security definer
 set search_path=public,pg_temp
+as $
+  select t.id,t.workspace,t.category,t.priority,t.subject,t.status,t.last_message_at,t.created_at,
+    coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',m.id,'authorKind',m.author_kind,'body',m.body,
+        'createdAt',m.created_at,'attachments',m.attachments
+      ) order by m.created_at)
+      from public.support_thread_messages m
+      where m.thread_id=t.id and not m.is_internal
+    ),'[]'::jsonb)
+  from public.support_threads t
+  where t.requester_user_id=auth.uid()
+  order by t.last_message_at desc
+  limit least(greatest(target_limit,1),100)
+$;
+
+-- App users see only conversations belonging to the app they are currently using.
+create or replace function public.read_my_support_threads(
+  target_app_key text,
+  target_limit integer default 50
+)
+returns table(
+  id uuid, workspace text, category text, priority text, subject text,
+  status text, last_message_at timestamptz, created_at timestamptz, messages jsonb
+)
+language sql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+  select t.id,t.workspace,t.category,t.priority,t.subject,t.status,t.last_message_at,t.created_at,
+    coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',m.id,'authorKind',m.author_kind,'body',m.body,
+        'createdAt',m.created_at,'attachments',m.attachments
+      ) order by m.created_at)
+      from public.support_thread_messages m
+      where m.thread_id=t.id and not m.is_internal
+    ),'[]'::jsonb)
+  from public.support_threads t
+  where t.requester_user_id=auth.uid() and t.app_key=target_app_key
+  order by t.last_message_at desc
+  limit least(greatest(target_limit,1),100)
+$;
+
+create or replace function public.reply_to_my_support_app_thread(
+  target_app_key text,
+  target_thread_id uuid,
+  target_body text,
+  target_source text default 'skima.mobile.support',
+  target_idempotency_key text default null,
+  target_metadata jsonb default '{}'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare
+  message_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception using errcode='42501',message='authentication required';
+  end if;
+  if coalesce(btrim(target_body),'')='' or char_length(btrim(target_body))>4000 then
+    raise exception using errcode='22023',message='reply must contain between 1 and 4000 characters';
+  end if;
+  if not exists(
+    select 1 from public.support_threads
+    where id=target_thread_id and app_key=target_app_key
+      and requester_user_id=auth.uid() and status not in ('closed')
+  ) then
+    raise exception using errcode='42501',message='support conversation is unavailable';
+  end if;
+  if coalesce(btrim(target_idempotency_key),'')='' then
+    raise exception using errcode='22023',message='idempotency key is required';
+  end if;
+  insert into public.support_thread_messages(
+    thread_id,author_user_id,author_kind,body,source,idempotency_key,metadata
+  ) values (
+    target_thread_id,auth.uid(),'requester',btrim(target_body),target_source,
+    target_idempotency_key,coalesce(target_metadata,'{}'::jsonb)
+  )
+  on conflict(source,idempotency_key) do update set source=excluded.source
+  returning id into message_id;
+  update public.support_threads
+  set status='open',last_message_at=timezone('utc',now()),updated_at=timezone('utc',now())
+  where id=target_thread_id;
+  return message_id;
+end
+$;
+
+create or replace function public.read_my_support_threads(target_limit integer default 50)
+returns table(
+  id uuid, workspace text, category text, priority text, subject text,
+  status text, last_message_at timestamptz, created_at timestamptz, messages jsonb
+)
+language sql
+stable
+security definer
+set search_path=public,pg_temp
 as $$
   select t.id,t.workspace,t.category,t.priority,t.subject,t.status,t.last_message_at,t.created_at,
     coalesce((
@@ -725,12 +826,28 @@ revoke all on function public.upsert_social_profile(uuid,text,text,text,text,tex
 
 grant execute on function public.can_access_support_app(text,text) to authenticated;
 grant execute on function public.create_support_app_thread(text,text,text,text,text,text,text,text,jsonb) to authenticated;
+grant execute on function public.read_my_support_threads(text,integer) to authenticated;
+grant execute on function public.reply_to_my_support_app_thread(text,uuid,text,text,text,jsonb) to authenticated;
+
 grant execute on function public.read_support_app_queue(text,text,integer) to authenticated;
 grant execute on function public.respond_to_support_app_thread(uuid,text,text,boolean,text,jsonb) to authenticated;
 grant execute on function public.upsert_support_app(text,text,boolean) to authenticated;
 grant execute on function public.read_active_social_accounts(text) to anon,authenticated;
 grant execute on function public.upsert_social_platform(text,text,text,text) to authenticated;
 grant execute on function public.upsert_social_profile(uuid,text,text,text,text,text[],integer,boolean) to authenticated;
+
+-- Enable table change streams for active support conversations when the standard publication exists.
+do $
+begin
+  if exists(select 1 from pg_publication where pubname='supabase_realtime') then
+    if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='support_threads') then
+      alter publication supabase_realtime add table public.support_threads;
+    end if;
+    if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='support_thread_messages') then
+      alter publication supabase_realtime add table public.support_thread_messages;
+    end if;
+  end if;
+end $;
 
 -- Private attachment storage. Paths are <uploader user id>/<thread id>/<file name>.
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
