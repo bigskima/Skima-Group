@@ -13,9 +13,11 @@ import { BillsNotificationsScreen } from "./BillsNotificationsScreen";
 import { BillsBeneficiariesScreen } from "./BillsBeneficiariesScreen";
 import { BillsReceiptScreen } from "./BillsReceiptScreen";
 import { BillsReferralsScreen } from "./BillsReferralsScreen";
+import { SupportCenter } from "../ui/SupportCenter";
+import { useSession } from "../session/SessionProvider";
 import { useBillsGuide } from "../onboarding/BillsGuideProvider";
 
-type Page = "bills" | "activity" | "wallet" | "store" | "account" | "top-up" | "withdraw" | "notifications" | "saved" | "receipt" | "referrals";
+type Page = "bills" | "activity" | "wallet" | "store" | "account" | "top-up" | "withdraw" | "notifications" | "saved" | "receipt" | "referrals" | "support";
 const tabs = [
   { key: "bills", label: "Bills", icon: BookOpen },
   { key: "activity", label: "Activity", icon: History },
@@ -27,6 +29,9 @@ const tabs = [
 export function BillsApp() {
   const { palette } = useAppTheme();
   const guide = useBillsGuide();
+  const session = useSession();
+  const supportPermissions = session.context?.permissions ?? [];
+  const canManageSupport = supportPermissions.includes("platform.support.manage") || supportPermissions.includes("platform.support.manage.bills");
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
   const [page, setPage] = useState<Page>("bills");
@@ -55,7 +60,7 @@ export function BillsApp() {
     : page === "top-up" ? "Add funds"
     : page === "withdraw" ? "Withdraw funds"
     : page === "notifications" ? "Notifications"
-    : page === "saved" ? "Saved billers" : page === "referrals" ? "Referrals & rewards" : "Receipt";
+    : page === "saved" ? "Saved billers" : page === "referrals" ? "Referrals & rewards" : page === "support" ? "Help & Support" : "Receipt";
 
   const navigationItem = (tab: typeof tabs[number], variant: "side" | "bottom") => {
     const Icon = tab.icon;
@@ -143,6 +148,7 @@ export function BillsApp() {
             {page === "saved" ? <BillsBeneficiariesScreen onOpenPage={open} /> : null}
             {page === "receipt" && receiptId ? <BillsReceiptScreen id={receiptId} /> : null}
             {page === "referrals" ? <BillsReferralsScreen /> : null}
+            {page === "support" ? <SupportCenter appKey="bills" workspace="customer" supabase={session.supabase} palette={palette} canManage={canManageSupport} /> : null}
           </View>
 
           {!desktop && isTab ? (
