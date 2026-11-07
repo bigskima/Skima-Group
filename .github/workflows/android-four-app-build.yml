@@ -84,7 +84,8 @@ jobs:
           test -n "$EXPO_TOKEN" || { echo "::error::Add EXPO_TOKEN as a GitHub Actions secret."; exit 1; }
           case "$APP_PATH" in
             lpg-mobile)
-              test -n "$EXPO_PUBLIC_EAS_PROJECT_ID" || { echo "::error::Set GitHub repository variable SKIMA_REFILL_EAS_PROJECT_ID (or retain the configured Refill project ID in app.config.ts)."; exit 1; }
+              # Refill has an existing project ID fallback in app.config.ts; a
+              # repository variable may override it but is not required.
               ;;
             store-mobile)
               test -n "$EXPO_PUBLIC_STORE_EAS_PROJECT_ID" || { echo "::error::Set GitHub repository variable SKIMA_STORE_EAS_PROJECT_ID."; exit 1; }
