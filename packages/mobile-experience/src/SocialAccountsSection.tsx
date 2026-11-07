@@ -50,7 +50,7 @@ export function SocialAccountsSection({
   useEffect(() => {
     let alive = true;
     void supabase.rpc("read_active_social_accounts", { target_surface: surface })
-      .then(({ data, error }) => {
+      .then(({ data, error }: { data: unknown; error: unknown }) => {
         if (!alive) return;
         if (error) {
           setAccounts([]);
