@@ -49,7 +49,7 @@ language plpgsql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 begin
   if not (public.can_access_support_app(target_app_key,'read')
        or public.can_access_support_app(target_app_key,'manage')) then
@@ -87,7 +87,7 @@ begin
     t.last_message_at desc
   limit least(greatest(target_limit,1),300);
 end
-$;
+$$;
 
 revoke all on function public.read_support_app_queue(text,text,integer) from public,anon;
 grant execute on function public.read_support_app_queue(text,text,integer) to authenticated;
