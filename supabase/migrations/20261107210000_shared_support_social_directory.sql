@@ -64,6 +64,16 @@ end $$;
 create index if not exists support_threads_app_queue_idx
   on public.support_threads(app_key, status, priority, last_message_at desc);
 
+-- Replace the legacy requester policy: internal agent notes must never be visible to customers.
+drop policy if exists support_thread_messages_requester_read on public.support_thread_messages;
+create policy support_thread_messages_requester_read on public.support_thread_messages
+  for select to authenticated
+  using (
+    not is_internal
+    and exists(select 1 from public.support_threads t
+      where t.id=thread_id and t.requester_user_id=auth.uid())
+  );
+
 -- Permit scoped support agents to receive live conversation updates through Realtime.
 grant select on public.support_threads, public.support_thread_messages to authenticated;
 
