@@ -174,6 +174,9 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Preferences</Text>
+        <PressableRow icon={<CircleHelp color={palette.brand} size={19} />}
+          title="Help & Support" subtitle="Get help and track your requests" action="Open"
+          onPress={() => router.push((workspace === "customer" ? "/(customer)/support" : "/(provider)/support") as never)} />
         <PressableRow icon={<Gift color={palette.brand} size={19} />}
           title="Referrals & rewards" subtitle="Your code, campaigns and leaderboard" action="Open"
           onPress={() => router.push((workspace === "customer" ? "/(customer)/referrals" : "/(provider)/referrals") as never)} />
