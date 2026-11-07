@@ -580,24 +580,27 @@ function PublicationDialog(props: {
           ) : null}
 
           {step === "audience" ? (
-            <AdminFormSection title="Choose the audience" description="Use common audiences here. Geographic and technical targeting stays under Advanced targeting.">
+            <AdminFormSection title="Choose the audience" description="Choose the app and audience for this campaign. Geographic targeting stays under Advanced targeting.">
+              <SelectInput
+                label="Which SKIMA app should show this?"
+                value={form.moduleKey || "all"}
+                options={[
+                  { label: "All four SKIMA apps", value: "all" },
+                  { label: "SKIMA Refill", value: "lpg" },
+                  { label: "SKIMA Store", value: "store" },
+                  { label: "SKIMA Logistics", value: "logistics" },
+                  { label: "SKIMA Bills", value: "bills" },
+                ]}
+                onChange={(event) => setForm({ ...form, moduleKey: event.currentTarget.value, ctaTarget: "" })}
+              />
               <SelectInput label="Who should see this?" value={form.audienceKeys} options={audienceOptionsForForm} onChange={(event) => setForm({ ...form, audienceKeys: event.currentTarget.value })} />
+              {form.placementKey === "mobile.home.promotion" ? (
+                <p className="skima-muted">This is a secondary home banner. The app’s main action and service content remain in their normal positions.</p>
+              ) : null}
               <details className="content-v2__advanced">
                 <summary>Advanced targeting</summary>
                 <div className="skima-form-grid">
                   <TextInput label="Audience keys" helperText="Comma separated only when a custom audience is required." value={form.audienceKeys} onChange={(event) => setForm({ ...form, audienceKeys: event.currentTarget.value })} />
-                  <SelectInput
-                    label="Show in which app?"
-                    value={form.moduleKey || "all"}
-                    options={[
-                      { label: "All four SKIMA apps", value: "all" },
-                      { label: "SKIMA Refill", value: "lpg" },
-                      { label: "SKIMA Store", value: "store" },
-                      { label: "SKIMA Logistics", value: "logistics" },
-                      { label: "SKIMA Bills", value: "bills" },
-                    ]}
-                    onChange={(event) => setForm({ ...form, moduleKey: event.currentTarget.value, ctaTarget: "" })}
-                  />
                   <TextInput label="Countries" helperText="Comma separated ISO codes." value={form.countryCodes} onChange={(event) => setForm({ ...form, countryCodes: event.currentTarget.value })} />
                   <TextInput label="Regions" value={form.regions} onChange={(event) => setForm({ ...form, regions: event.currentTarget.value })} />
                   <TextInput label="Cities" value={form.cities} onChange={(event) => setForm({ ...form, cities: event.currentTarget.value })} />
