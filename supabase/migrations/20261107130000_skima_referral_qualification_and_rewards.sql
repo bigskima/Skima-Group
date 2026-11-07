@@ -42,16 +42,54 @@ begin
     return new;
   end if;
 
-  -- Different SKIMA modules populate different actor fields. Resolve the
-  -- actual customer consistently without treating a provider wallet movement
-  -- as a customer's qualifying purchase.
-  actor := new.actor_user_id;
+  -- Resolve the referred customer, not the operator who may have initiated a settlement.
   actor_text := coalesce(
     nullif(new.metadata->>'customer_user_id',''),
     nullif(new.metadata->>'requester_user_id',''),
     nullif(new.metadata->>'user_id','')
   );
-  if actor is null and actor_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+  if actor_text is not null then
+    begin
+      actor := actor_text::uuid;
+    exception when invalid_text_representation then
+      actor := null;
+    end;
+  end if;
+
+  if actor is null and new.subject_id is not null then
+    if new.subject_type ilike '%order%' then
+      select requester_user_id into actor
+      from public.order_records where id = new.subject_id;
+    elsif new.subject_type ilike '%service_request%' then
+      select requester_user_id into actor
+      from public.service_requests where id = new.subject_id;
+    end if;
+  end if;
+
+  -- Some LPG settlement releases use the LPG order id as subject_id and have
+  -- no actor. The original hold stores the actual customer and order link.
+  lpg_order_id := coalesce(nullif(new.metadata->>'lpg_order_id',''), new.subject_id::text);
+  if actor is null
+    and lpg_order_id is not null
+    and (new.subject_type ilike '%lpg_refill_order%' or new.metadata->>'bounded_context' = 'lpg') then
+    select hold_tx.metadata->>'customer_user_id' into actor_text
+    from public.financial_transactions hold_tx
+    where hold_tx.metadata->>'lpg_order_id' = lpg_order_id
+      and coalesce(hold_tx.metadata->>'customer_user_id','') <> ''
+    order by hold_tx.created_at asc
+    limit 1;
+    if actor_text is not null then
+      begin
+        actor := actor_text::uuid;
+      exception when invalid_text_representation then
+        actor := null;
+      end;
+    end if;
+  end if;
+
+  -- Last resort for modules that use actor_user_id as the customer field.
+  if actor is null then actor := new.actor_user_id; end if;
+  if actor is null then return new; end if;
 
   app_value := case
     when new.source ilike 'skima.store.%'
