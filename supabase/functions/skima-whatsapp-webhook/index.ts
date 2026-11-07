@@ -300,7 +300,10 @@ async function handleLinkedMessage(
   if (["cancel", "restart"].includes(normalized)) {
     return plan("Cancelled the current step. No new order was created by that command.\n\n" + MENU, "menu");
   }
-  if (["6", "notifications", "order notifications", "enable notifications", "enable order updates"].includes(normalized)) {
+  if (
+    (stage === "menu" && normalized === "6") ||
+    ["notifications", "order notifications", "enable notifications", "enable order updates"].includes(normalized)
+  ) {
     const preference = await db.rpc("set_skima_whatsapp_order_notifications", {
       target_whatsapp_wa_id: whatsappWaId,
       target_opt_in: true,
@@ -889,6 +892,49 @@ async function dispatchOrderStatusNotifications(request: Request): Promise<Respo
           .eq("status", "processing");
       }
       deadLettered += 1;
+      continue;
+    }
+
+    // Consent can be withdrawn after a batch is claimed. Recheck before every provider call.
+    const consentResult = await db.from("skima_whatsapp_contacts")
+      .select("id")
+      .eq("whatsapp_wa_id", recipient)
+      .eq("link_status", "linked")
+      .eq("order_status_notifications_opt_in", true)
+      .maybeSingle();
+    if (consentResult.error) {
+      const retry = attempt < 8;
+      const delayMinutes = Math.min(360, Math.max(1, 2 ** Math.min(attempt, 8)));
+      const saved = await db.from("skima_whatsapp_order_notifications")
+        .update({
+          status: retry ? "queued" : "failed",
+          next_attempt_at: new Date(Date.now() + delayMinutes * 60_000).toISOString(),
+          locked_at: null,
+          last_error_code: "notification_consent_check_failed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", notificationId)
+        .eq("status", "processing");
+      if (saved.error) {
+        console.error(JSON.stringify({ event: "whatsapp_outbox_consent_check_failure_not_recorded", notificationId }));
+      }
+      if (retry) queuedForRetry += 1;
+      else deadLettered += 1;
+      continue;
+    }
+    if (!consentResult.data) {
+      const saved = await db.from("skima_whatsapp_order_notifications")
+        .update({
+          status: "cancelled",
+          locked_at: null,
+          last_error_code: "customer_opted_out",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", notificationId)
+        .eq("status", "processing");
+      if (saved.error) {
+        console.error(JSON.stringify({ event: "whatsapp_outbox_optout_cancel_failed", notificationId }));
+      }
       continue;
     }
 
