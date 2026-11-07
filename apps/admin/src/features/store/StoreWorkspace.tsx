@@ -504,7 +504,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         </>
       )}
 
-      <Dialog isOpen={Boolean(cancelOrderId)} title="Cancel Store order" onClose={() => setCancelOrderId(null)} footer={<><Button variant="ghost" onClick={() => setCancelOrderId(null)}>Keep order active</Button><Button variant="danger" isLoading={processOrderAction.isPending} disabled={!cancelOrderId} onClick={() => {
+      <Dialog isOpen={Boolean(cancelOrderId)} title="Cancel Store order" onClose={() => setCancelOrderId(null)} footer={<><Button variant="ghost" onClick={() => setCancelOrderId(null)}>Keep order active</Button><Button variant="destructive" isLoading={processOrderAction.isPending} disabled={!cancelOrderId} onClick={() => {
         const selected = storeCancellationReasons.find((reason) => reason.value === cancelReasonCode) ?? storeCancellationReasons[0];
         if (cancelOrderId) processOrderAction.mutate({ orderId: cancelOrderId, actionKey: "store.order.cancel", reason: selected.reason, reasonCode: selected.value });
         setCancelOrderId(null);
