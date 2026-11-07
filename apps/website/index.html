@@ -167,7 +167,7 @@ const toggle=document.querySelector('.toggle'),nav=document.querySelector('.navl
  const root=document.getElementById("skima-social-links");
  if(!root)return;
  const endpoint="https://npgladvhpidkgpyzdwxf.supabase.co/rest/v1/rpc/read_active_social_accounts";
- const anon="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXAiLCJyZWYiOiJucGdsYWR2aHBpZGdrcHl6ZHd4ZiIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzg0NzQ3NTQwLCJleHAiOjIxMDAzMjM1NDB9.Nw-MLj09hHYwRJaSN9SWuG1n7k2SQericvkf3nUSUiQ";
+ const anon="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wZ2xhZHZocGlka2dweXpkd3hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3NDc1NDAsImV4cCI6MjEwMDMyMzU0MH0.Nw-MLj09hHYwRJaSN9SWuG1n7k2SQericvkf3nUSUiQ";
  const safeUrl=value=>{try{const url=new URL(value);return url.protocol==="https:"?url.href:""}catch{return ""}};
  const icons={
   twitter:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.9 2H22l-6.78 7.75L23.2 22h-6.25l-4.9-7.37L5.6 22H2.46l7.25-8.29L1.9 2h6.4l4.43 6.77L18.9 2Zm-1.1 18h1.73L7.36 3.88H5.5L17.8 20Z"/></svg>',
