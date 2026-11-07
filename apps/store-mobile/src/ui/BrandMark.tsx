@@ -39,7 +39,10 @@ export function StoreBrandMark({ size = 138, compact = false }: { size?: number;
   return compact ? (
     <View accessibilityLabel="SKIMA" style={[styles.compactFallback, { backgroundColor: palette.brand }]}><Text style={styles.compactInitial}>S</Text></View>
   ) : (
-    <Image accessibilityLabel="SKIMA" resizeMode="contain" source={require("../../assets/skima-splash-logo.png")} style={{ width: size, height: 40 }} />
+    <View accessibilityLabel="SKIMA" style={styles.wordmark}>
+      <Text style={[styles.name, { color: palette.ink }]}>SKIMA</Text>
+      <View style={styles.dot} />
+    </View>
   );
 }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
@@ -48,6 +51,7 @@ const styles = StyleSheet.create({
   compactImage: { width: 44, height: 44 },
   compactFallback: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   compactInitial: { color: "#FFFFFF", fontSize: 22, fontWeight: "900" },
-  wordmark: { width: 138, height: 40, justifyContent: "center" },
-  name: { fontSize: 22, fontWeight: "900", letterSpacing: 1.4 },
+  wordmark: { minHeight: 30, flexDirection: "row", alignItems: "flex-end", gap: 3, width: 138, height: 40 },
+  dot: { width: 6, height: 6, marginBottom: 4, borderRadius: 3, backgroundColor: "#E21D2E" },
+  name: { fontSize: 23, lineHeight: 27, fontWeight: "900", letterSpacing: 1.8 },
 });
