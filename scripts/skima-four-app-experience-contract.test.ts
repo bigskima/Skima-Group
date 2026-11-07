@@ -31,6 +31,12 @@ Deno.test("all four home promotion banners keep a consistent secondary footprint
     assertStringIncludes(banner, "190");
     assertStringIncludes(banner, "mobile.home.promotion");
   }
+  const [storeApp, billsApp] = await Promise.all([
+    read("apps/store-mobile/src/screens/StoreApp.tsx"),
+    read("apps/bills-mobile/src/screens/BillsApp.tsx"),
+  ]);
+  assertStringIncludes(storeApp, "StoreBrandMark compact");
+  assertStringIncludes(billsApp, "BillsBrandMark compact");
   const admin = await read("apps/admin/src/features/experience/ContentWorkspaceV2.tsx");
   assertStringIncludes(admin, "Which SKIMA app should show this?");
   assertStringIncludes(admin, "routeOptionsForApp");
