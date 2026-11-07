@@ -111,8 +111,10 @@ Deno.test("Bills uses the existing SKIMA brand artwork and updates the canonical
   const auth = await read("apps/bills-mobile/src/screens/BillsAuthScreen.tsx");
   const app = await read("apps/bills-mobile/src/screens/BillsApp.tsx");
   const account = await read("apps/bills-mobile/src/screens/BillsAccountScreen.tsx");
-  requireText(brand, 'require("../../assets/skima-splash-logo.png")', "Bills brand mark");
+  requireText(brand, "styles.wordmark", "Bills shared SKIMA wordmark fallback");
+  requireText(brand, "styles.dot", "Bills shared SKIMA red-dot brand mark");
   requireText(auth, "BillsBrandMark", "Bills authentication brand");
+  requireText(auth, "logoPlate", "Bills compact authentication logo plate");
   requireText(app, "BillsBrandMark", "Bills app navigation brand");
   requireText(account, '.from("profiles")', "Bills profile editing");
   requireText(account, '.update({ display_name: nextName })', "Bills canonical profile update");
