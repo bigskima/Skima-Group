@@ -14,7 +14,7 @@ function rows(value: unknown): Row[] {
   return Array.isArray(value) ? value.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
 }
 
-export function ReferralsScreen() {
+export function BillsReferralsScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
   const [saving, setSaving] = useState(false);
