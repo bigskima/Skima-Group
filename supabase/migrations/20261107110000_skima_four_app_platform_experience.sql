@@ -259,7 +259,7 @@ language plpgsql
 volatile
 security definer
 set search_path = public
-as $
+as $$
 declare
   actor uuid := auth.uid();
   code_value text;
