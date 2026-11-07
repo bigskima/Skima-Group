@@ -72,3 +72,18 @@ Permission is requested only when the customer enables notifications in that app
 - production-aab: Android App Bundle for Google Play submission.
 
 Build each app with its own EAS project and matching credentials. Do not launch a build until that app's project ID, package and provider credentials are configured.
+
+### Four-app GitHub Actions workflow
+
+Use **Actions → SKIMA four-app Android builds → Run workflow**. Select Refill, Store, Bills, Logistics or All four, then choose `production-apk` for an installable tester APK or `production-aab` for a Google Play bundle. The workflow builds selected apps sequentially so selecting All does not start four EAS builds at once.
+
+Configure these GitHub repository **Variables** (project IDs are identifiers, not secrets):
+
+- `SKIMA_REFILL_EAS_PROJECT_ID`
+- `SKIMA_STORE_EAS_PROJECT_ID`
+- `SKIMA_BILLS_EAS_PROJECT_ID`
+- `SKIMA_LOGISTICS_EAS_PROJECT_ID`
+
+Configure the GitHub Actions **Secret** `EXPO_TOKEN` with an Expo access token. Separately, configure each app's EAS production environment with its matching `SKIMA_<APP>_GOOGLE_SERVICES_JSON_BASE64` secret and Firebase FCM service-account credentials. The workflow does not fabricate or embed provider credentials, and it will fail validation when an app's EAS project identifier is missing. It does not run automatically on pushes; an administrator must start it manually.
+
+For iOS push, upload the app-specific APNs authentication key to each corresponding Expo project and confirm the production Bundle Identifier matches the Apple app registration. The shared notification client and dispatcher do not replace those provider-side signing credentials.
