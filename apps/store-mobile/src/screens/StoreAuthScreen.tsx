@@ -83,7 +83,7 @@ export function StoreAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
               </View>
               <View style={styles.brandCopy}>
                 <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
-                <Text style={[styles.brandCaption, { color: palette.muted }]}>{app}</Text>
+                <Text style={[styles.brandCaption, { color: palette.muted }]}>STORE</Text>
               </View>
             </View>
             <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
