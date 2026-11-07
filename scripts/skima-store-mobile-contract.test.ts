@@ -189,3 +189,11 @@ Deno.test("Store guided tour maps first-run steps to real Store controls", async
   rejectText(auth, "in one secure place", "Store authentication filler copy");
   rejectText(auth, "One SKIMA account across your services", "Store authentication cross-app tagline");
 });
+
+Deno.test("Store management distinguishes cancelled orders without a wallet debit from refundable orders", async () => {
+  const management = await read("apps/store-mobile/src/screens/StoreManagementScreen.tsx");
+  const admin = await read("apps/admin/src/features/store/StoreWorkspace.tsx");
+  requireText(management, 'metadata.store_refund_status === "not_required"', "Store app no-payment refund state");
+  requireText(management, "No payment was captured for this checkout", "Store app no-payment notice");
+  requireText(admin, 'orderMetadata.store_refund_status === "not_required"', "Admin no-payment refund state");
+});
