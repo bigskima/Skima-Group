@@ -14,9 +14,6 @@
       "zod": [
         "node_modules/zod"
       ],
-      "react": [
-        "node_modules/react"
-      ],
       "react-native": [
         "node_modules/react-native"
       ],
