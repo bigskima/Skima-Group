@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.110.9";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.110.9";
 
 const EXPO_SEND_URL = "https://exp.host/--/api/v2/push/send";
 const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
@@ -147,7 +147,7 @@ Deno.serve(async (request: Request) => {
 });
 
 async function processReceipts(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any>,
   accessToken: string | undefined,
 ): Promise<{ checked: number; invalidTokens: number }> {
   const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
