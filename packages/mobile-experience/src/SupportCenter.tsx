@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Alert, Image, Pressable, ScrollView, Text,
+  ActivityIndicator, Alert, Pressable, ScrollView, Text,
   TextInput, View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  ArrowLeft, AlertTriangle, CheckCircle2, ChevronRight, Clock3,
-  Inbox, MessageCircle, Paperclip, RefreshCw, Send, ShieldCheck,
-  UserRound, Users, X,
+  ArrowLeft, AlertTriangle, ChevronRight, Inbox, MessageCircle,
+  Paperclip, RefreshCw, Send, ShieldCheck, X,
 } from "lucide-react-native";
 
 type SupportMessage = {
@@ -29,6 +28,7 @@ type SupportThread = {
   last_message_at?: string;
   created_at?: string;
   assigned_to?: string | null;
+  requester_name?: string | null;
   messages?: SupportMessage[];
 };
 type Palette = {
@@ -37,7 +37,7 @@ type Palette = {
   danger: string; dangerSoft: string; success: string; successSoft: string;
 };
 type ViewMode = "home" | "new" | "thread";
-const categories = [
+const fallbackCategories = [
   { key: "order", label: "Order or service" },
   { key: "payment", label: "Payment or wallet" },
   { key: "account", label: "Account or sign-in" },
@@ -76,6 +76,7 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [issueTypes, setIssueTypes] = useState(fallbackCategories);
   const [category, setCategory] = useState("order");
   const [priority, setPriority] = useState("normal");
   const [subject, setSubject] = useState("");
@@ -93,11 +94,11 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
     if (queryError) throw queryError;
     const result = Array.isArray(data) ? data as SupportThread[] : [];
     setThreads(result);
-    if (activeThread) {
+    if (!teamMode && activeThread) {
       const latest = result.find((entry) => entry.id === activeThread.id);
       if (latest) setActiveThread(latest);
     }
-  }, [supabase, appKey, activeThread?.id]);
+  }, [supabase, appKey, activeThread?.id, teamMode]);
 
   const readTeam = useCallback(async () => {
     if (!canManage) return;
@@ -105,12 +106,25 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
       target_app_key: appKey, target_status: null, target_limit: 150,
     });
     if (queryError) throw queryError;
-    setTeamThreads(Array.isArray(data) ? data as SupportThread[] : []);
-  }, [supabase, appKey, canManage]);
+    const result = Array.isArray(data) ? data as SupportThread[] : [];
+    setTeamThreads(result);
+    if (teamMode && activeThread) {
+      const latest = result.find((entry) => entry.id === activeThread.id);
+      if (latest) setActiveThread(latest);
+    }
+  }, [supabase, appKey, canManage, activeThread?.id, teamMode]);
 
   const refresh = useCallback(async () => {
     setError("");
     try {
+      const categoryResult = await supabase.rpc("read_support_app_categories", { target_app_key: appKey });
+      if (!categoryResult.error && Array.isArray(categoryResult.data) && categoryResult.data.length) {
+        const nextCategories = categoryResult.data.map((item: { category_key: string; display_name: string }) => ({
+          key: item.category_key, label: item.display_name,
+        }));
+        setIssueTypes(nextCategories);
+        if (!nextCategories.some((item) => item.key === category)) setCategory(nextCategories[0].key);
+      }
       await readThreads();
       if (canManage) await readTeam();
     } catch (cause) {
@@ -118,7 +132,7 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
     } finally {
       setLoading(false);
     }
-  }, [readThreads, readTeam, canManage]);
+  }, [readThreads, readTeam, canManage, supabase, appKey, category]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -357,6 +371,7 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
                 <Text numberOfLines={1} style={{ color: palette.ink, fontWeight: "900", fontSize: 12, flex: 1 }}>{thread.subject || "Support request"}</Text>
                 <Text style={{ color: statusColor(thread.status), fontWeight: "800", fontSize: 9 }}>{labelStatus(thread.status)}</Text>
               </View>
+              {teamMode && thread.requester_name ? <Text style={{ color: palette.muted, fontSize: 10 }}>{thread.requester_name}</Text> : null}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ color: palette.muted, fontSize: 10 }}>{(thread.category || "general").replace(/_/g, " ")} · {labelStatus(thread.priority)}</Text>
                 <ChevronRight size={15} color={palette.muted} />
@@ -375,8 +390,8 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
           <View style={{ gap: 7 }}>
             <Text style={{ color: palette.ink, fontSize: 11, fontWeight: "800" }}>What do you need help with?</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-              {categories.map((item) => (
-                <Pressable key={item.key} onPress={() => setCategory(item.key)} style={{ paddingVertical: 9, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: category === item.key ? palette.brand : palette.border, backgroundColor: category === item.key ? palette.brandSoft : palette.surface }}>
+              {issueTypes.map((item) => (
+                <Pressable key={item.key} onPress={() => { setCategory(item.key); if (item.key === "safety") setPriority("urgent"); }} style={{ paddingVertical: 9, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: category === item.key ? palette.brand : palette.border, backgroundColor: category === item.key ? palette.brandSoft : palette.surface }}>
                   <Text style={{ color: category === item.key ? palette.brand : palette.ink, fontWeight: "800", fontSize: 10 }}>{item.label}</Text>
                 </Pressable>
               ))}
