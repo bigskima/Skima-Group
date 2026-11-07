@@ -49,7 +49,7 @@ export function StoreApp() {
       <View style={desktop ? styles.desktopShell : styles.mobileShell}>
         {desktop ? <View style={[styles.sidebar, { backgroundColor: palette.surface, borderRightColor: palette.border }]}>
           <View style={styles.sidebarBrand}>
-            <StoreBrandMark size={44} />
+            <StoreBrandMark compact />
             <View><Text style={[styles.brand, { color: palette.ink }]}>SKIMA <Text style={{ color: palette.brand }}>STORE</Text></Text><Text style={[styles.pageTitle, { color: palette.muted }]}>Everyday shopping</Text></View>
           </View>
           <View style={styles.sideNav}>{tabs.map((tab) => navigationItem(tab, "side"))}</View>
@@ -63,7 +63,7 @@ export function StoreApp() {
           <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}>
             <View style={styles.identity}>
               {!isTab ? <Pressable onPress={() => setPage("shop")} style={[styles.back, { backgroundColor: palette.brandSoft }]}><ArrowLeft color={palette.brand} size={18} /></Pressable> :
-                !desktop ? <StoreBrandMark size={40} /> : null}
+                !desktop ? <StoreBrandMark compact /> : null}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[styles.brand, { color: palette.ink }]}>{desktop ? title : <><Text style={{ color: palette.ink }}>SKIMA </Text><Text style={{ color: palette.brand }}>STORE</Text></>}</Text>
                 <Text style={[styles.pageTitle, { color: palette.muted }]}>{desktop ? "Customer workspace" : title}</Text>
