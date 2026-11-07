@@ -132,6 +132,14 @@ create index if not exists support_thread_events_thread_idx
 
 alter table public.support_app_categories enable row level security;
 alter table public.support_thread_events enable row level security;
+
+-- App clients receive no direct table access; service_role is restricted to server-side operations.
+create policy support_app_categories_service_role_all
+  on public.support_app_categories for all to service_role
+  using (true) with check (true);
+create policy support_thread_events_service_role_all
+  on public.support_thread_events for all to service_role
+  using (true) with check (true);
 revoke all on public.support_app_categories,public.support_thread_events from public,anon,authenticated;
 grant all on public.support_app_categories,public.support_thread_events to service_role;
 
