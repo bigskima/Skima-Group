@@ -11,6 +11,7 @@ import { StoreAccountScreen } from "./StoreAccountScreen";
 import { StoreNotificationsScreen } from "./StoreNotificationsScreen";
 import { StoreReferralsScreen } from "./StoreReferralsScreen";
 import { StoreManagementScreen } from "./StoreManagementScreen";
+import { SupportHubScreen } from "./SupportHubScreen";
 import { useSession } from "../session/SessionProvider";
 import { useStoreGuide } from "../onboarding/StoreGuideProvider";
 import { SupportCenter } from "../ui/SupportCenter";
@@ -95,6 +96,7 @@ export function StoreApp() {
             {page === "notifications" ? <StoreNotificationsScreen /> : null}
             {page === "referrals" ? <StoreReferralsScreen /> : null}
             {page === "manage" && canManageStore ? <StoreManagementScreen /> : null}
+            {page === "support" ? <SupportHubScreen onBack={() => open("account")} /> : null}
             {page === "support" ? <SupportCenter appKey="store" workspace="customer" supabase={session.supabase} palette={palette} canManage={canManageSupport} /> : null}
           </View>
           {!desktop && isTab ? <View style={[styles.tabs, { backgroundColor: palette.surface, borderTopColor: palette.border }]}>{tabs.map((tab) => navigationItem(tab, "bottom"))}</View> : null}
