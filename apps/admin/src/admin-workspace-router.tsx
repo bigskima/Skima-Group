@@ -3,6 +3,8 @@ import { AdminAiWorkspace } from "./admin-ai-workspace";
 import { AdminApplicationsWorkspace } from "./admin-applications-workspace";
 import { AdminCompanyWorkspace } from "./admin-company-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
+import { AdminFinancialAnalyticsWorkspace } from "./admin-financial-analytics-workspace";
+import { AdminReferralsWorkspace } from "./admin-referrals-workspace";
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "./admin-delivery-pricing-workspace";
 import { AdminDriverParticipationWorkspace } from "./admin-driver-participation-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";
@@ -39,6 +41,7 @@ export function AdminWorkspaceRouter(props: {
   if (props.route === "/company") return <AdminCompanyWorkspace />;
   if (props.route === "/access") return <AdminAccessWorkspace />;
   if (props.route === "/content") return <AdminContentWorkspace />;
+  if (props.route === "/referrals") return <AdminReferralsWorkspace />;
   if (props.route === "/branding") return <AdminStartupBrandingWorkspace />;
   if (props.route === "/governance") return <AdminResourceConsole config={governanceConsoleConfig} />;
   if (props.route === "/applications") return <AdminApplicationsWorkspace />;
@@ -60,6 +63,7 @@ export function AdminWorkspaceRouter(props: {
   if (props.route === "/support") return <AdminSupportWorkspace />;
   if (props.route === "/utility-billing") return <AdminUtilityBillingWorkspace />;
   if (props.route === "/finance") return <AdminResourceConsole config={financeConsoleConfig} />;
+  if (props.route === "/financial-analytics") return <AdminFinancialAnalyticsWorkspace />;
   if (props.route === "/ai") return <AdminAiWorkspace />;
   if (props.route === "/catalog") return <AdminResourceConsole config={catalogConsoleConfig} />;
   if (props.route === "/providers") return <AdminResourceConsole config={integrationConsoleConfig} />;

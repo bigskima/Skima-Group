@@ -84,7 +84,6 @@ export function SignInScreen({ initialMode = "login" }: { initialMode?: AuthMode
         <View style={styles.content}>
           <View style={styles.brandRow}>
             <BrandMark />
-            <Text style={[styles.product, { color: palette.muted }]}>LOGISTICS</Text>
           </View>
           <View style={styles.hero}>
             <View style={[styles.heroIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={23} /></View>
@@ -148,13 +147,12 @@ const styles = StyleSheet.create({
   orb: { position: "absolute", borderRadius: 200, opacity: 0.58 },
   orbTop: { width: 290, height: 290, top: -175, right: -125 },
   orbBottom: { width: 210, height: 210, bottom: 55, left: -150 },
-  content: { width: "100%", maxWidth: 460, gap: 21 },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 11 },
-  product: { ...typography.eyebrow, fontSize: 9, letterSpacing: 1.3 },
+  content: { width: "100%", maxWidth: 460, gap: 16 },
+  brandRow: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center" },
   hero: { gap: 7, paddingTop: 2 },
   heroIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", marginBottom: 2 },
   eyebrow: { ...typography.eyebrow, fontSize: 8 },
-  heroTitle: { ...typography.display, fontSize: 31, lineHeight: 36, letterSpacing: -0.9 },
+  heroTitle: { ...typography.display, fontSize: 27, lineHeight: 32, letterSpacing: -0.7 },
   subtitle: { ...typography.body, fontSize: 12, lineHeight: 18, maxWidth: 340 },
   form: { gap: 13, padding: 18, borderWidth: 1, borderRadius: 23 },
   back: { flexDirection: "row", alignItems: "center", gap: 6 },

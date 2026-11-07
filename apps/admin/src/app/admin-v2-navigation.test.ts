@@ -265,11 +265,13 @@ describe("SKIMA Admin V2 navigation", () => {
     ]);
   });
 
-  it("splits Experience into content, policies and app branding", () => {
+  it("splits Experience into content, policies, branding, app links and referrals", () => {
     const items: NavigationItem[] = [
       { key: "content", label: "Brand & Content", href: "/content", icon: "content" },
       { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies" },
       { key: "branding", label: "App Branding", href: "/branding", icon: "branding" },
+      { key: "app-links", label: "App downloads & quick routes", href: "/experience/app-links", icon: "content" },
+      { key: "referrals", label: "Referrals & campaigns", href: "/experience/referrals", icon: "content" },
     ].map(toAdminV2NavigationItem);
 
     expect(getAdminWorkspaceNavigation("experience", items).map((item) => item.href)).toEqual([
@@ -277,7 +279,12 @@ describe("SKIMA Admin V2 navigation", () => {
       "/experience/content",
       "/experience/policies",
       "/experience/branding",
+      "/experience/app-links",
+      "/experience/referrals",
     ]);
+    expect(resolveAdminPath("/money/analytics")).toBe("/money/analytics");
+    expect(resolveAdminPath("/experience/app-links")).toBe("/experience/app-links");
+    expect(resolveAdminPath("/experience/referrals")).toBe("/experience/referrals");
   });
 
   it("splits Platform into access, configuration, integrations and system health", () => {

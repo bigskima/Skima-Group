@@ -47,6 +47,16 @@ describe("admin navigation access rules", () => {
     expect(canAccessAdminNavigationKey("store", () => false)).toBe(false);
   });
 
+  it("exposes financial analytics to platform finance readers", () => {
+    expect(canAccessAdminNavigationKey("financial-analytics", (permission) => permission === "platform.financial.read")).toBe(true);
+    expect(canAccessAdminNavigationKey("financial-analytics", () => false)).toBe(false);
+  });
+
+  it("limits shared referral campaign administration to content managers", () => {
+    expect(canAccessAdminNavigationKey("referrals", (permission) => permission === "platform.content.manage")).toBe(true);
+    expect(canAccessAdminNavigationKey("referrals", () => false)).toBe(false);
+  });
+
   it("fails closed for unknown navigation keys", () => {
     expect(getAdminNavigationPermissionRule("unknown").known).toBe(false);
     expect(canAccessAdminNavigationKey("unknown", () => true)).toBe(false);
