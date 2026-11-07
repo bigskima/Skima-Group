@@ -121,7 +121,7 @@ const toggle=document.querySelector('.toggle'),nav=document.querySelector('.navl
   const description=document.createElement("p");description.textContent=row.description||descriptions[row.service_key]||"Everyday services, made simpler.";
   const actions=document.createElement("div");actions.className="app-download-card__actions";
   const primary=document.createElement("button");primary.type="button";primary.className="app-download-card__button";
-  primary.textContent="Download / open";
+  primary.textContent="Download app";
   primary.addEventListener("click",()=>openRow(row));
   const web=document.createElement("a");web.className="app-download-card__button secondary";web.textContent="Open web app";web.href=safeHttps(row.web_url)||"#";
   if(web.href!=="#"){web.target="_blank";web.rel="noopener"}
