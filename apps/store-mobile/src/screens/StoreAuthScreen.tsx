@@ -67,7 +67,7 @@ export function StoreAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
     } finally { setPending(false); }
   };
 
-  const title = mode==="login"?"Sign in":mode==="register"?"Create account":mode==="forgot"?"Reset password":"Set a new password";
+  const title = mode==="login"?"Welcome to SKIMA Store":mode==="register"?"Create account":mode==="forgot"?"Reset password":"Set a new password";
   const subtitle = mode==="login"?"Shop from trusted sellers.":mode==="register"?"Get started in a minute.":mode==="forgot"?"We’ll send a secure reset link.":"Use at least 8 characters.";
   const canSubmit = mode==="register"?Boolean(name.trim()&&email.trim()&&password.length>=8):mode==="forgot"?Boolean(email.trim()):mode==="reset"?Boolean(password.length>=8&&confirm):Boolean(email.trim()&&password);
 
