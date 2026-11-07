@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
-import {
-  Camera, Facebook, Globe, Instagram, Linkedin, MessageCircle, Music2,
-  Pin, PlayCircle, Send, Youtube,
-} from "lucide-react-native";
+import { Camera, Globe, MessageCircle, Music2, PlayCircle } from "lucide-react-native";
 
 type SocialAccount = {
   id: string;
@@ -27,10 +24,10 @@ type SocialPalette = {
 };
 
 const iconMap = {
-  instagram: Instagram,
-  facebook: Facebook,
-  youtube: Youtube,
-  linkedin: Linkedin,
+  instagram: Camera,
+  facebook: MessageCircle,
+  youtube: PlayCircle,
+  linkedin: Globe,
   tiktok: Music2,
   music: Music2,
   globe: Globe,
