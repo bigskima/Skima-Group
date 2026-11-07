@@ -1,4 +1,4 @@
-import { FileText, Image, Link2, Megaphone, UsersRound } from "lucide-react";
+import { FileText, Image, Link2, Megaphone, Share2, UsersRound } from "lucide-react";
 
 import { AdminContentWorkspace } from "../../admin-content-workspace";
 import { AdminPolicyWorkspace } from "../../admin-policy-workspace";
@@ -7,6 +7,7 @@ import { AdminAppLinksWorkspace } from "../../admin-app-links-workspace";
 import { AdminReferralsWorkspace } from "../../admin-referrals-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { ContentWorkspaceV2 } from "./ContentWorkspaceV2";
+import { SocialDirectoryWorkspace } from "./SocialDirectoryWorkspace";
 import { PolicyWorkspaceV2 } from "./PolicyWorkspaceV2";
 
 export function ExperienceWorkspaceRouter(props: {
@@ -21,6 +22,7 @@ export function ExperienceWorkspaceRouter(props: {
   if (props.route === "/experience/branding") return <AdminStartupBrandingWorkspace />;
   if (props.route === "/experience/app-links") return <AdminAppLinksWorkspace />;
   if (props.route === "/experience/referrals") return <AdminReferralsWorkspace />;
+  if (props.route === "/experience/social-links") return <SocialDirectoryWorkspace />;
   return <ExperienceOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -67,6 +69,15 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           icon: Link2,
           meta: "Website and app destinations",
           permissionKey: "content",
+        },
+        {
+          key: "social-links",
+          title: "Social media",
+          description: "Add official profiles, set their icons and choose which SKIMA apps and website display them.",
+          href: "/experience/social-links",
+          icon: Share2,
+          meta: "Official social channels",
+          permissionKey: "social-links",
         },
         {
           key: "referrals",
