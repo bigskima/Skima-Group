@@ -40,6 +40,7 @@ export function ProviderTabs() {
       <Tabs.Screen name="workspace" options={{ title: "Workspace", tabBarIcon: ({ color, size }) => <LayoutGrid color={String(color)} size={size} /> }} />
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <Settings2 color={String(color)} size={size} /> }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="support" options={{ href: null }} />
       <Tabs.Screen name="referrals" options={{ href: null }} />
       <Tabs.Screen name="finance" options={{ href: null }} />
       <Tabs.Screen name="services" options={{ href: null }} />
