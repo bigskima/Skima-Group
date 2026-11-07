@@ -23,6 +23,7 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingBag,
+  Share2,
   Sparkles,
   Truck,
   UsersRound,
@@ -99,6 +100,7 @@ const navIconMap = {
   providers: PlugZap,
   system: ServerCog,
   support: LifeBuoy,
+  social: Share2,
   billing: BadgeDollarSign,
   guide: BookOpen,
 } as const;
