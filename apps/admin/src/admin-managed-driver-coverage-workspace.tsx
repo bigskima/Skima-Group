@@ -332,7 +332,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
                 />
               </div>
               {selectedArea && !selectedAreaCanBeAssigned ? <div className="sk-panel"><StatusBadge tone="warning">Map boundary required</StatusBadge><p className="skima-muted">This location is enabled in SKIMA’s geography catalogue, but it does not yet have a verified boundary. A physical Managed Driver cannot use the mapped-area method until that boundary is verified, because dispatch uses the customer’s GPS point to enforce the mapped coverage boundary. The radius method can be used with an accurately recorded operating centre and checks the customer’s GPS point against the configured distance.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate("/operations/coverage")}>Open geography & coverage setup</Button></div> : null}
-              {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">All enabled locations are visible. Mapped dispatch requires a verified boundary; radius coverage is available for an accurately recorded operating centre.</p> : null}
+              {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">All enabled locations are now visible here. Mapped dispatch requires a verified boundary; radius coverage is also available for an accurately recorded operating centre and still checks the customer's GPS point against its configured distance.</p> : null}
             </>
           ) : (
             <>
