@@ -13,6 +13,7 @@ import { StoreReferralsScreen } from "./StoreReferralsScreen";
 import { StoreManagementScreen } from "./StoreManagementScreen";
 import { useSession } from "../session/SessionProvider";
 import { useStoreGuide } from "../onboarding/StoreGuideProvider";
+import { SupportCenter } from "../ui/SupportCenter";
 
 const tabs = [
   { key: "shop", label: "Shop", icon: ShoppingBag },
@@ -26,6 +27,8 @@ export function StoreApp() {
   const guide = useStoreGuide();
   const session = useSession();
   const canManageStore = Boolean(session.context?.platformAdmin?.status === "active" && session.context.permissions.includes("platform.store.manage"));
+  const supportPermissions = session.context?.permissions ?? [];
+  const canManageSupport = supportPermissions.includes("platform.support.manage") || supportPermissions.includes("platform.support.manage.store");
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
   const [page, setPage] = useState<StorePage>("shop");
@@ -37,7 +40,7 @@ export function StoreApp() {
   useEffect(() => subscribeStoreNavigation((event) => open(event.page)), [open]);
   const title = page === "shop" ? "Shop SKIMA" : page === "orders" ? "Your orders" :
     page === "wallet" ? "SKIMA Wallet" : page === "account" ? "Account" :
-    page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : page === "referrals" ? "Referrals & rewards" : page === "manage" ? "Store management" : "Notifications";
+    page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : page === "referrals" ? "Referrals & rewards" : page === "manage" ? "Store management" : page === "support" ? "Help & Support" : "Notifications";
   const isTab = tabs.some((tab) => tab.key === page);
   const navigationItem = (tab: typeof tabs[number], variant: "side" | "bottom") => {
     const Icon = tab.icon;
@@ -92,6 +95,7 @@ export function StoreApp() {
             {page === "notifications" ? <StoreNotificationsScreen /> : null}
             {page === "referrals" ? <StoreReferralsScreen /> : null}
             {page === "manage" && canManageStore ? <StoreManagementScreen /> : null}
+            {page === "support" ? <SupportCenter appKey="store" workspace="customer" supabase={session.supabase} palette={palette} canManage={canManageSupport} /> : null}
           </View>
           {!desktop && isTab ? <View style={[styles.tabs, { backgroundColor: palette.surface, borderTopColor: palette.border }]}>{tabs.map((tab) => navigationItem(tab, "bottom"))}</View> : null}
         </View>
