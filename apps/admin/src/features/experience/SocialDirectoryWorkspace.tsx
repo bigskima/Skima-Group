@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Globe, Link2, Plus, RefreshCcw, Share2 } from "lucide-react";
+import { Globe, Plus, RefreshCcw, Share2 } from "lucide-react";
 import { z } from "zod";
 
 import {
@@ -198,7 +198,7 @@ export function SocialDirectoryWorkspace() {
       render: (row) => row.profile_id ? (
         <div className="skima-table-actions">
           <Button size="sm" variant="outline" onClick={() => editRow(row)}>Edit</Button>
-          <Button size="sm" variant="ghost" onClick={() => setActive.mutate(row)} isLoading={setActive.isPending}>
+          <Button size="sm" variant="outline" onClick={() => setActive.mutate(row)} isLoading={setActive.isPending}>
             {row.is_active ? "Hide" : "Show"}
           </Button>
         </div>
