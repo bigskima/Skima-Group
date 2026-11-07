@@ -25,6 +25,7 @@ export const foundationNavigation: readonly NavigationItem[] = [
   { key: "revenue", label: "Money & Revenue", href: "/revenue", icon: "revenue", requiredPermissions: ["platform.revenue.read"] },
   { key: "ai", label: "SKIMA Intelligence", href: "/ai", icon: "ai", requiredPermissions: ["platform.ai.read"] },
   { key: "content", label: "Brand & Content", href: "/content", icon: "content", requiredPermissions: ["platform.content.read"] },
+  { key: "app-links", label: "App downloads & quick routes", href: "/experience/app-links", icon: "content", requiredPermissions: ["platform.content.manage"] },
   { key: "referrals", label: "Referrals & Campaigns", href: "/referrals", icon: "content", requiredPermissions: ["platform.content.manage"] },
   { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies", requiredPermissions: ["platform.policy.read"] },
   { key: "branding", label: "App Branding", href: "/branding", icon: "branding", requiredPermissions: ["platform.configuration.read"] },
