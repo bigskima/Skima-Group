@@ -60,12 +60,13 @@ function cleanFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-70) || "attachment.jpg";
 }
 
-export function SupportCenter({ appKey, workspace, supabase, palette, canManage = false }: {
+export function SupportCenter({ appKey, workspace, supabase, palette, canManage = false, onBack }: {
   appKey: string;
   workspace: string;
   supabase: SupabaseClient;
   palette: Palette;
   canManage?: boolean;
+  onBack?: () => void;
 }) {
   const [view, setView] = useState<ViewMode>("home");
   const [teamMode, setTeamMode] = useState(false);
@@ -292,9 +293,12 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
       {view === "home" ? (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 34 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ color: palette.ink, fontSize: 21, fontWeight: "900" }}>Help & Support</Text>
-              <Text style={{ color: palette.muted, fontSize: 11 }}>{appKey === "refill" ? "Refill" : "SKIMA " + appKey} support</Text>
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+              {onBack ? <Pressable onPress={onBack} accessibilityRole="button" style={{ padding: 7, borderRadius: 10, backgroundColor: palette.surface }}><ArrowLeft size={18} color={palette.ink} /></Pressable> : null}
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ color: palette.ink, fontSize: 21, fontWeight: "900" }}>Help & Support</Text>
+                <Text style={{ color: palette.muted, fontSize: 11 }}>{appKey === "refill" ? "Refill" : "SKIMA " + appKey} support</Text>
+              </View>
             </View>
             <Pressable onPress={() => void refresh()} accessibilityRole="button" style={{ padding: 10 }}>
               <RefreshCw size={18} color={palette.muted} />
