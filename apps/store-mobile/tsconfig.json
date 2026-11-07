@@ -5,10 +5,24 @@
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
     "paths": {
-      "@skima/frontend-core": ["../../packages/frontend-core/src/index.ts"],
-      "@supabase/supabase-js": ["node_modules/@supabase/supabase-js"],
-      "zod": ["node_modules/zod"]
+      "@skima/frontend-core": [
+        "../../packages/frontend-core/src/index.ts"
+      ],
+      "@supabase/supabase-js": [
+        "node_modules/@supabase/supabase-js"
+      ],
+      "zod": [
+        "node_modules/zod"
+      ],
+      "@skima/mobile-experience/*": [
+        "../../packages/mobile-experience/src/*"
+      ]
     }
   },
-  "include": ["app", "src", "expo-env.d.ts", ".expo/types/**/*.ts"]
+  "include": [
+    "app",
+    "src",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts"
+  ]
 }
