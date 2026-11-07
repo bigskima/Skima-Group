@@ -125,7 +125,7 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
           onPress={() => router.push(`/(${group})/support` as never)}
         />
       </View>
-      <SocialMediaSection supabase={session.supabase} surface={group} palette={theme.palette} />
+      <SocialMediaSection supabase={session.supabase} surface="refill" palette={theme.palette} />
     </Screen>
   );
 }
