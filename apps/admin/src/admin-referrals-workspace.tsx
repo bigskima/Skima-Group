@@ -21,7 +21,7 @@ const CampaignSchema = z.object({
   referred_reward: z.record(z.unknown()),
   terms: z.string().nullable(),
   maximum_referrals_per_user: z.number().nullable(),
-  qualification_rules: z.record(z.unknown()).default({event:"first_payment_or_delivery",minimum_amount:0}),
+  qualification_rules: z.record(z.unknown()).default({ event: "first_payment_or_delivery", minimum_amount: 0, currency_code: "NGN" }),
   created_at: z.string(),
 }).passthrough();
 const CampaignArraySchema = z.array(CampaignSchema);
@@ -116,7 +116,7 @@ export function AdminReferralsWorkspace() {
     retry:false,
     queryFn:async()=>{
       const {data,error}=await supabase.from("referral_campaigns")
-        .select("id,campaign_key,display_name,description,status,target_app_keys,starts_at,ends_at,priority,referrer_reward,referred_reward,terms,maximum_referrals_per_user,created_at")
+        .select("id,campaign_key,display_name,description,status,target_app_keys,starts_at,ends_at,priority,referrer_reward,referred_reward,terms,maximum_referrals_per_user,qualification_rules,created_at")
         .order("priority",{ascending:true}).order("created_at",{ascending:false});
       if(error) throw error;
       return CampaignArraySchema.parse(data??[]);
@@ -179,6 +179,7 @@ export function AdminReferralsWorkspace() {
         referred_reward:readReward(form.referred_reward,"New customer reward"),
         terms:form.terms.trim()||null,
         maximum_referrals_per_user:max,
+        qualification_rules:{event:form.qualification_event,minimum_amount:minimumAmount,currency_code:"NGN"},
         updated_by:context?.user.id??null,
         updated_at:new Date().toISOString(),
         ...(editingId?{}:{created_by:context?.user.id??null}),
