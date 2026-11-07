@@ -105,6 +105,32 @@ where r.key in ('platform.super_admin','platform.support_admin','platform.operat
   )
 on conflict(role_id,permission_id) do nothing;
 
+-- Dedicated admin roles keep support queues isolated by app.
+select public.configure_platform_admin_role(
+  'platform.support.refill','Refill Support Agent',
+  'Handles customer, driver and station support inside SKIMA Refill.',
+  array['platform.support.read.refill','platform.support.manage.refill'],
+  '{"system_template":true,"support_app":"refill"}'::jsonb,'active'
+);
+select public.configure_platform_admin_role(
+  'platform.support.logistics','Logistics Support Agent',
+  'Handles customer and provider support inside SKIMA Logistics.',
+  array['platform.support.read.logistics','platform.support.manage.logistics'],
+  '{"system_template":true,"support_app":"logistics"}'::jsonb,'active'
+);
+select public.configure_platform_admin_role(
+  'platform.support.store','Store Support Agent',
+  'Handles customer and merchant support inside SKIMA Store.',
+  array['platform.support.read.store','platform.support.manage.store'],
+  '{"system_template":true,"support_app":"store"}'::jsonb,'active'
+);
+select public.configure_platform_admin_role(
+  'platform.support.bills','Bills Support Agent',
+  'Handles customer and bill-payment support inside SKIMA Bills.',
+  array['platform.support.read.bills','platform.support.manage.bills'],
+  '{"system_template":true,"support_app":"bills"}'::jsonb,'active'
+);
+
 create or replace function public.can_access_support_app(target_app_key text,target_action text default 'read')
 returns boolean
 language sql stable security definer
@@ -114,7 +140,6 @@ as $$
     and exists(select 1 from public.support_apps a where a.app_key=target_app_key and a.is_active)
     and (
       public.is_platform_super_admin()
-      or public.has_permission('platform.support.' || target_action,null)
       or public.has_permission('platform.support.' || target_action || '.' || target_app_key,null)
     )
 $$;
