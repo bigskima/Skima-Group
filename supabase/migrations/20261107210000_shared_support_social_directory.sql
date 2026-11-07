@@ -64,6 +64,41 @@ end $$;
 create index if not exists support_threads_app_queue_idx
   on public.support_threads(app_key, status, priority, last_message_at desc);
 
+-- Permit scoped support agents to receive live conversation updates through Realtime.
+grant select on public.support_threads, public.support_thread_messages to authenticated;
+
+do $
+begin
+  if not exists(select 1 from pg_policies where schemaname='public' and tablename='support_threads' and policyname='support_threads_app_agent_read') then
+    create policy support_threads_app_agent_read on public.support_threads
+      for select to authenticated
+      using (public.can_access_support_app(app_key,'read') or public.can_access_support_app(app_key,'manage'));
+  end if;
+  if not exists(select 1 from pg_policies where schemaname='public' and tablename='support_thread_messages' and policyname='support_thread_messages_app_agent_read') then
+    create policy support_thread_messages_app_agent_read on public.support_thread_messages
+      for select to authenticated
+      using (
+        exists(select 1 from public.support_threads t
+          where t.id=thread_id
+            and (public.can_access_support_app(t.app_key,'read') or public.can_access_support_app(t.app_key,'manage')))
+        or exists(select 1 from public.support_threads t
+          where t.id=thread_id and t.requester_user_id=auth.uid() and not is_internal)
+      );
+  end if;
+end $;
+
+do $
+begin
+  if exists(select 1 from pg_publication where pubname='supabase_realtime') then
+    if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='support_threads') then
+      alter publication supabase_realtime add table public.support_threads;
+    end if;
+    if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='support_thread_messages') then
+      alter publication supabase_realtime add table public.support_thread_messages;
+    end if;
+  end if;
+end $;
+
 -- App-scoped permissions allow a support team to operate from its own app.
 -- Existing global support permissions remain valid for centrally authorized teams.
 insert into public.permissions(key, description, risk_level, metadata)
