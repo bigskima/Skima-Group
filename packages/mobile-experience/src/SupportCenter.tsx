@@ -29,6 +29,13 @@ type SupportThread = {
   created_at?: string;
   assigned_to?: string | null;
   requester_name?: string | null;
+  first_response_due_at?: string | null;
+  resolution_due_at?: string | null;
+  first_response_at?: string | null;
+  is_sla_breached?: boolean;
+  escalation_level?: number;
+  escalation_reason?: string | null;
+  escalated_at?: string | null;
   messages?: SupportMessage[];
 };
 type Palette = {
@@ -372,6 +379,12 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
                 <Text style={{ color: statusColor(thread.status), fontWeight: "800", fontSize: 9 }}>{labelStatus(thread.status)}</Text>
               </View>
               {teamMode && thread.requester_name ? <Text style={{ color: palette.muted, fontSize: 10 }}>{thread.requester_name}</Text> : null}
+              {teamMode && thread.is_sla_breached ? (
+                <Text style={{ color: palette.danger, fontSize: 9, fontWeight: "900" }}>SLA overdue</Text>
+              ) : null}
+              {teamMode && thread.escalation_level ? (
+                <Text style={{ color: palette.danger, fontSize: 9, fontWeight: "800" }}>Escalated · Level {thread.escalation_level}</Text>
+              ) : null}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ color: palette.muted, fontSize: 10 }}>{(thread.category || "general").replace(/_/g, " ")} · {labelStatus(thread.priority)}</Text>
                 <ChevronRight size={15} color={palette.muted} />
