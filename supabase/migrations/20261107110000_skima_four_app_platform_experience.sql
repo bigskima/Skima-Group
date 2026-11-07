@@ -452,6 +452,16 @@ begin
     raise exception 'valid app, platform, Expo push token, installation id and permission are required';
   end if;
 
+  -- Expo tokens can move to a new account after sign-out on a shared device,
+  -- and a token can rotate after reinstall. Keep one active owner per app/token.
+  delete from public.push_device_registrations registration
+  where registration.app_key = target_app_key
+    and registration.expo_push_token = target_expo_push_token
+    and (
+      registration.user_id <> actor
+      or registration.installation_id <> target_installation_id
+    );
+
   insert into public.push_device_registrations (
     user_id, app_key, platform, expo_push_token, expo_project_id,
     installation_id, permission_status, app_version, device_name, is_active, last_seen_at
