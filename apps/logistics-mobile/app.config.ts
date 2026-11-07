@@ -9,7 +9,7 @@ loadEnvironment({
   quiet: true,
 });
 
-const easProjectId = process.env.EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID?.trim();
+const easProjectId = process.env.EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID?.trim() || process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim();
 const googleServicesCandidate = process.env.SKIMA_LOGISTICS_GOOGLE_SERVICES_FILE?.trim() || "./google-services.json";
 const googleServicesFile = existsSync(resolve(__dirname, googleServicesCandidate)) ? googleServicesCandidate : undefined;
 
