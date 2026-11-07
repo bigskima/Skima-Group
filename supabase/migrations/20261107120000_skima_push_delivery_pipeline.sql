@@ -18,7 +18,7 @@ declare
   body_value text;
   data_value jsonb;
 begin
-  if new.channel <> 'push' or new.status = 'cancelled'
+  if new.channel not in ('push','in_app') or new.status = 'cancelled'
     or new.recipient_entity_type <> 'user'
     or new.recipient_entity_id is null then
     return new;
@@ -28,7 +28,21 @@ begin
     new.payload->>'app_key',
     new.payload->>'appKey',
     new.payload->>'module_key',
-    new.payload->>'moduleKey'
+    new.payload->>'moduleKey',
+    new.payload->>'storefront_module',
+    case when lower(coalesce(new.payload->>'channel','')) = 'skima_store' then 'store' end,
+    case
+      when new.payload->>'purpose' ilike 'lpg.%'
+        or new.source ilike '%lpg%' then 'refill'
+      when new.payload->>'purpose' ilike 'store.%'
+        or new.source ilike '%store%' then 'store'
+      when new.payload->>'purpose' ilike 'logistics.%'
+        or new.source ilike '%logistics%' then 'logistics'
+      when new.payload->>'purpose' ilike 'bills.%'
+        or new.payload->>'purpose' ilike 'utility.%'
+        or new.source ilike '%bills%'
+        or new.source ilike '%utility%' then 'bills'
+    end
   ));
   if app_value in ('lpg','refill') then app_value := 'refill'; end if;
   if app_value not in ('refill','store','logistics','bills') then
