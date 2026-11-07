@@ -111,7 +111,7 @@ Deno.serve(async (request: Request) => {
         const retryAfterSeconds = Math.min(3600, 15 * (2 ** Math.max(0, row.attempts - 1)));
         const terminal = invalidToken || row.attempts >= MAX_ATTEMPTS;
         const { error } = await supabase.from("push_notification_outbox").update({
-          status: terminal ? "failed" : "queued",
+          status: invalidToken ? "receipt_error" : row.attempts >= MAX_ATTEMPTS ? "failed" : "queued",
           next_attempt_at: new Date(Date.now() + retryAfterSeconds * 1000).toISOString(),
           provider_response: ticket,
           updated_at: now,
