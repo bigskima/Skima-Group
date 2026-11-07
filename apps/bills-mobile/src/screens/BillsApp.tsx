@@ -13,6 +13,7 @@ import { BillsNotificationsScreen } from "./BillsNotificationsScreen";
 import { BillsBeneficiariesScreen } from "./BillsBeneficiariesScreen";
 import { BillsReceiptScreen } from "./BillsReceiptScreen";
 import { BillsReferralsScreen } from "./BillsReferralsScreen";
+import { SupportHubScreen } from "./SupportHubScreen";
 import { SupportCenter } from "../ui/SupportCenter";
 import { useSession } from "../session/SessionProvider";
 import { useBillsGuide } from "../onboarding/BillsGuideProvider";
@@ -148,6 +149,7 @@ export function BillsApp() {
             {page === "saved" ? <BillsBeneficiariesScreen onOpenPage={open} /> : null}
             {page === "receipt" && receiptId ? <BillsReceiptScreen id={receiptId} /> : null}
             {page === "referrals" ? <BillsReferralsScreen /> : null}
+            {page === "support" ? <SupportHubScreen onBack={() => open("account")} /> : null}
             {page === "support" ? <SupportCenter appKey="bills" workspace="customer" supabase={session.supabase} palette={palette} canManage={canManageSupport} /> : null}
           </View>
 
