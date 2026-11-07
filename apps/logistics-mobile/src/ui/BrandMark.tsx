@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { typography } from "../theme/tokens";
 
 type LogoRecord = { url: string; label: string };
 
@@ -64,9 +63,9 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       <Text style={styles.compactInitial}>S</Text>
     </View>
   ) : (
-    <View accessibilityLabel="SKIMA Logistics" style={styles.wordmark}>
+    <View accessibilityLabel="SKIMA" style={styles.wordmark}>
       <Text style={[styles.name, { color: palette.ink }]}>SKIMA</Text>
-      <Text style={[styles.product, { color: palette.muted }]}>LOGISTICS</Text>
+      <View style={styles.dot} />
     </View>
   );
 }
@@ -83,7 +82,7 @@ const styles = StyleSheet.create({
   compactImage: { width: 44, height: 44 },
   compactFallback: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   compactInitial: { color: "#FFFFFF", fontSize: 22, fontWeight: "900" },
-  wordmark: { alignItems: "flex-start", gap: 0 },
-  name: { ...typography.sectionTitle, fontSize: 18, letterSpacing: 1.1, lineHeight: 20 },
-  product: { ...typography.eyebrow, fontSize: 8, letterSpacing: 1.35 },
+  wordmark: { minHeight: 30, flexDirection: "row", alignItems: "flex-end", gap: 3, width: 138, height: 40 },
+  name: { fontSize: 23, lineHeight: 27, fontWeight: "900", letterSpacing: 1.8, color: undefined },
+  dot: { width: 6, height: 6, marginBottom: 4, borderRadius: 3, backgroundColor: "#E21D2E" },
 });
