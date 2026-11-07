@@ -1,4 +1,4 @@
-import { assert, assertStringIncludes } from "jsr:@std/assert@1.0.18";
+import { assertStringIncludes } from "jsr:@std/assert@1.0.18";
 
 const read = (path: string) => Deno.readTextFile(path);
 
