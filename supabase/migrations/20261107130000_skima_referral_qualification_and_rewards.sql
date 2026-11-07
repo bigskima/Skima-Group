@@ -173,15 +173,8 @@ for select to authenticated using (
 );
 
 drop policy if exists referral_reward_entries_admin_update on public.referral_reward_entries;
-create policy referral_reward_entries_admin_update on public.referral_reward_entries
-for update to authenticated using (
-  public.is_platform_super_admin()
-  or public.has_permission('platform.content.manage', null)
-) with check (
-  public.is_platform_super_admin()
-  or public.has_permission('platform.content.manage', null)
-);
-grant select, update on public.referral_reward_entries to authenticated;
+revoke update on public.referral_reward_entries from anon, authenticated;
+grant select on public.referral_reward_entries to authenticated;
 
 create or replace function public.review_skima_referral_reward(
   target_reward_entry_id uuid,
