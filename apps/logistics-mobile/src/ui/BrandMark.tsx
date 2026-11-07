@@ -18,7 +18,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("read_published_product_content", {
         target_placement_keys: placements,
-        target_module_key: "logistics_network",
+        target_module_key: "logistics",
         target_audience_key: "public",
         target_country_code: null,
         target_region: null,
