@@ -25,7 +25,7 @@
       ],
       "expo-image-picker": [
         "node_modules/expo-image-picker"
-      ],,
+      ],
       "@skima/mobile-experience/*": [
         "../../packages/mobile-experience/src/*"
       ]
