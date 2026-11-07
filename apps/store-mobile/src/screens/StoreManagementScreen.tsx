@@ -154,7 +154,8 @@ export function StoreManagementScreen() {
     setProductId(id);
     setProductName(asString(item, "display_name", "name") ?? "");
     setDescription(asString(item, "description") ?? "");
-    setCategoryName(asString(item, "category_name") ?? "General");
+    const category = (store.categories.data ?? []).find((entry) => asString(entry, "id") === asString(item, "category_id"));
+    setCategoryName(asString(category, "display_name") ?? "General");
     setPrice(String(asNumber(priceRow, "amount") ?? ""));
     setCompareAtPrice(String(asNumber(priceRow, "compare_at_amount") ?? ""));
     setStock(String(asNumber(stockRow, "stock_quantity") ?? 0));
