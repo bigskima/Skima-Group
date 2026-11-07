@@ -741,7 +741,7 @@ Deno.test("Managed Driver coverage offers secure radius coverage without removin
   requireText(radiusMigration, "Only an approved Driver can receive managed coverage", "approved driver guard");
   requireText(radiusMigration, "driver.skima_special", "SKIMA Managed programme membership guard");
   requireText(radiusMigration, "target_radius_meters > 1000000", "radius size is bounded");
-  requireText(radiusMigration, "coverage.metadata->>'managedDriverSetup'", "radius assignment is scoped to a managed driver");
+  requireText(radiusMigration, "assignment.metadata->>'managedDriverSetup'", "radius assignment is scoped to a managed driver");
   requireText(mappedMigration, "boundary_geometry is not null", "mapped geography remains boundary verified");
 });
 
