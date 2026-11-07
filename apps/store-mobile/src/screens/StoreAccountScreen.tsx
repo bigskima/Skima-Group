@@ -18,7 +18,7 @@ export function StoreAccountScreen({ onOpenPage }: { onOpenPage: (page: StorePag
   const currentName = session.context?.profile?.display_name
     ?? (typeof session.session?.user.user_metadata?.display_name === "string" ? session.session.user.user_metadata.display_name : "");
   const email = session.context?.user.email ?? session.session?.user.email ?? "";
-  const canManageStore = Boolean(session.context?.platformAdmin && session.context.permissions.includes("platform.store.manage"));
+  const canManageStore = Boolean(session.context?.platformAdmin?.status === "active" && session.context.permissions.includes("platform.store.manage"));
   const [name, setName] = useState(currentName);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
