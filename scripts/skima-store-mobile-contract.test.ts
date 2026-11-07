@@ -109,6 +109,13 @@ Deno.test("Store authentication screen displays Store branding instead of Bills 
   rejectText(auth, ">BILLS</Text>", "Store login brand label");
 });
 
+Deno.test("Store brand fallback matches the Refill wordmark layout", async () => {
+  const brand = await read("apps/store-mobile/src/ui/BrandMark.tsx");
+  requireText(brand, "wordmarkText", "Store Refill-style wordmark");
+  requireText(brand, "wordmarkDot", "Store Refill-style brand dot");
+  requireText(brand, "resizeMode", "Store remote logo uses contain layout");
+});
+
 
 Deno.test("Store auth startup ignores a stale getSession snapshot after a newer auth event", async () => {
   const session = await read("apps/store-mobile/src/session/SessionProvider.tsx");
