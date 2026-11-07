@@ -93,6 +93,9 @@ Deno.test("Store customers see explicit cancellation reasons and wallet refund s
   requireText(orders, "Why SKIMA cancelled this order", "Customer-facing Store cancellation reason");
   requireText(orders, "Your refund was sent to your SKIMA Wallet on ", "Customer-facing Store refund confirmation");
   requireText(orders, "wallet refund has not yet been marked as completed", "Customer-facing pending refund state");
+  requireText(orders, "No payment was captured from your SKIMA Wallet", "Customer-facing no-payment cancellation state");
+  requireText(gateway, "store_funding_reconciliation_required", "Store refund will not duplicate-credit a missing escrow record");
+  requireText(gateway, "store_refund_status", "Store refund records the resolved payment state");
   requireText(gateway, "events:order_events(id,event_type_key,from_status,to_status,metadata,created_at)", "Store customer orders include cancellation event reasons");
 });
 
