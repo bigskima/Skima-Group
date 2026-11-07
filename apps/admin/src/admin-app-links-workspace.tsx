@@ -107,7 +107,7 @@ export function AdminAppLinksWorkspace() {
         .from("customer_service_discovery_links")
         .update({
           display_name: value.display_name.trim(),
-          description: value.description.trim() || null,
+          description: value.description.trim(),
           web_url: value.web_url.trim(),
           android_store_url: value.android_store_url.trim() || null,
           ios_store_url: value.ios_store_url.trim() || null,
