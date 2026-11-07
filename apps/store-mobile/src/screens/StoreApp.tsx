@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Bell, Package, ShoppingBag, UserRound, WalletCards } from "lucide-react-native";
+import { ArrowLeft, Bell, Package, Settings2, ShoppingBag, UserRound, WalletCards } from "lucide-react-native";
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { StoreBrandMark } from "../ui/BrandMark";
@@ -10,6 +10,8 @@ import { StoreWalletScreen, StoreTopUpScreen, StoreWithdrawScreen } from "./Stor
 import { StoreAccountScreen } from "./StoreAccountScreen";
 import { StoreNotificationsScreen } from "./StoreNotificationsScreen";
 import { StoreReferralsScreen } from "./StoreReferralsScreen";
+import { StoreManagementScreen } from "./StoreManagementScreen";
+import { useSession } from "../session/SessionProvider";
 import { useStoreGuide } from "../onboarding/StoreGuideProvider";
 
 const tabs = [
@@ -22,17 +24,20 @@ const tabs = [
 export function StoreApp() {
   const { palette } = useAppTheme();
   const guide = useStoreGuide();
+  const session = useSession();
+  const canManageStore = Boolean(session.context?.platformAdmin && session.context.permissions.includes("platform.store.manage"));
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
   const [page, setPage] = useState<StorePage>("shop");
   const open = useCallback((next: StorePage) => {
-    setPage(next);
-    guide.setCurrentPage(next);
-  }, [guide.setCurrentPage]);
+    const allowedPage = next === "manage" && !canManageStore ? "shop" : next;
+    setPage(allowedPage);
+    guide.setCurrentPage(allowedPage);
+  }, [guide.setCurrentPage, canManageStore]);
   useEffect(() => subscribeStoreNavigation((event) => open(event.page)), [open]);
   const title = page === "shop" ? "Shop SKIMA" : page === "orders" ? "Your orders" :
     page === "wallet" ? "SKIMA Wallet" : page === "account" ? "Account" :
-    page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : page === "referrals" ? "Referrals & rewards" : "Notifications";
+    page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : page === "referrals" ? "Referrals & rewards" : page === "manage" ? "Store management" : "Notifications";
   const isTab = tabs.some((tab) => tab.key === page);
   const navigationItem = (tab: typeof tabs[number], variant: "side" | "bottom") => {
     const Icon = tab.icon;
@@ -52,7 +57,12 @@ export function StoreApp() {
             <StoreBrandMark size={44} />
             <View><Text style={[styles.brand, { color: palette.ink }]}>SKIMA <Text style={{ color: palette.brand }}>STORE</Text></Text><Text style={[styles.pageTitle, { color: palette.muted }]}>Everyday shopping</Text></View>
           </View>
-          <View style={styles.sideNav}>{tabs.map((tab) => navigationItem(tab, "side"))}</View>
+          <View style={styles.sideNav}>{tabs.map((tab) => navigationItem(tab, "side"))}
+            {canManageStore ? <Pressable onPress={() => open("manage")} accessibilityRole="button" accessibilityState={{ selected: page === "manage" }} style={[styles.sideItem, { backgroundColor: page === "manage" ? palette.brandSoft : "transparent" }]}>
+              <Settings2 color={page === "manage" ? palette.brand : palette.muted} size={19} />
+              <Text style={{ fontSize: 12, fontWeight: page === "manage" ? "900" : "700", color: page === "manage" ? palette.brand : palette.muted }}>Store management</Text>
+            </Pressable> : null}
+          </View>
           <View style={{ flex: 1 }} />
           <Pressable onPress={() => open("notifications")} style={[styles.sideItem, { backgroundColor: page === "notifications" ? palette.brandSoft : "transparent" }]}>
             <Bell color={page === "notifications" ? palette.brand : palette.muted} size={18} />
@@ -81,6 +91,7 @@ export function StoreApp() {
             {page === "withdraw" ? <StoreWithdrawScreen onBack={() => setPage("wallet")} /> : null}
             {page === "notifications" ? <StoreNotificationsScreen /> : null}
             {page === "referrals" ? <StoreReferralsScreen /> : null}
+            {page === "manage" && canManageStore ? <StoreManagementScreen /> : null}
           </View>
           {!desktop && isTab ? <View style={[styles.tabs, { backgroundColor: palette.surface, borderTopColor: palette.border }]}>{tabs.map((tab) => navigationItem(tab, "bottom"))}</View> : null}
         </View>
