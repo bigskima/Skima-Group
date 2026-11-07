@@ -16,6 +16,82 @@ alter table public.support_threads
   add column if not exists escalation_reason text,
   add column if not exists escalated_at timestamptz;
 
+drop function if exists public.read_support_app_queue(text,text,integer);
+
+create function public.read_support_app_queue(
+  target_app_key text,
+  target_status text default null,
+  target_limit integer default 100
+)
+returns table(
+  id uuid,
+  requester_user_id uuid,
+  requester_name text,
+  app_key text,
+  workspace text,
+  category text,
+  priority text,
+  subject text,
+  status text,
+  assigned_to uuid,
+  last_message_at timestamptz,
+  created_at timestamptz,
+  first_response_due_at timestamptz,
+  resolution_due_at timestamptz,
+  first_response_at timestamptz,
+  is_sla_breached boolean,
+  escalation_level integer,
+  escalation_reason text,
+  escalated_at timestamptz,
+  messages jsonb
+)
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+begin
+  if not (public.can_access_support_app(target_app_key,'read')
+       or public.can_access_support_app(target_app_key,'manage')) then
+    raise exception using errcode='42501',message='support access is not available for this app';
+  end if;
+
+  return query
+  select
+    t.id,t.requester_user_id,p.display_name,t.app_key,t.workspace,t.category,t.priority,
+    t.subject,t.status,t.assigned_to,t.last_message_at,t.created_at,
+    t.first_response_due_at,t.resolution_due_at,t.first_response_at,
+    (
+      (t.first_response_at is null and now()>t.first_response_due_at)
+      or (t.status not in ('resolved','closed') and now()>t.resolution_due_at)
+    ) as is_sla_breached,
+    t.escalation_level,t.escalation_reason,t.escalated_at,
+    coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',m.id,
+        'authorKind',m.author_kind,
+        'body',m.body,
+        'createdAt',m.created_at,
+        'isInternal',m.is_internal,
+        'attachments',m.attachments
+      ) order by m.created_at)
+      from public.support_thread_messages m
+      where m.thread_id=t.id
+    ),'[]'::jsonb)
+  from public.support_threads t
+  join public.profiles p on p.id=t.requester_user_id
+  where t.app_key=target_app_key
+    and (target_status is null or t.status=target_status)
+  order by
+    case t.priority when 'urgent' then 1 when 'high' then 2 when 'normal' then 3 else 4 end,
+    t.last_message_at desc
+  limit least(greatest(target_limit,1),300);
+end
+$;
+
+revoke all on function public.read_support_app_queue(text,text,integer) from public,anon;
+grant execute on function public.read_support_app_queue(text,text,integer) to authenticated;
+
 create table if not exists public.support_app_categories (
   id uuid primary key default gen_random_uuid(),
   app_key text not null references public.support_apps(app_key) on update cascade on delete cascade,
