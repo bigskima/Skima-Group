@@ -579,6 +579,20 @@ export function AdminContentWorkspace() {
 
   const savePublication = useMutation({
     mutationFn: async () => {
+      const actionType = publicationForm.ctaType.trim();
+      const actionTarget = publicationForm.ctaTarget.trim();
+      if (actionType === "route") {
+        if (!publicationForm.moduleKey || !routeOptionsForModule(publicationForm.moduleKey).some((option) => option.value && option.value === actionTarget)) {
+          throw new Error("Choose a SKIMA app and a recognised in-app destination.");
+        }
+      } else if (actionType === "url") {
+        if (!/^https:\/\//i.test(actionTarget)) {
+          throw new Error("Enter a valid HTTPS custom link.");
+        }
+      } else if (actionType !== "") {
+        throw new Error("Choose no action, an in-app screen or an external link.");
+      }
+
       await ensurePresetPlacement({
         api,
         existingPlacements: placements,
@@ -621,6 +635,7 @@ export function AdminContentWorkspace() {
       setFormError(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-content"] });
     },
+    onError: (error) => setFormError(readError(error)),
   });
 
   const uploadMedia = useMutation({
@@ -1297,9 +1312,8 @@ const publicationStatusOptions = [
 
 const ctaOptions = [
   { label: "No action", value: "" },
-  { label: "Open route", value: "route" },
-  { label: "Open URL", value: "url" },
-  { label: "Open application", value: "application" },
+  { label: "Open in-app screen", value: "route" },
+  { label: "Open external / custom link", value: "url" },
 ] as const;
 
 const publicationAppOptions = [
