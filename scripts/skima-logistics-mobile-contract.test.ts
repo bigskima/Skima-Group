@@ -109,7 +109,7 @@ Deno.test("Expo APK profiles have the production Supabase and gateway configurat
       throw new Error(profile + " must use the shared Supabase API gateway");
     }
   }
-  requireText(appConfig, "EXPO_PUBLIC_EAS_PROJECT_ID", "optional EAS project link");
+  requireText(appConfig, "EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID", "dedicated Logistics EAS project link");
   requireText(appConfig, "projectId: easProjectId", "EAS project identifier wiring");
 });
 
