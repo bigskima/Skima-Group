@@ -97,7 +97,7 @@ Store and Bills must receive distinct Android package names and iOS bundle ident
 
 Use a distinct EAS project ID for each standalone product app. The Expo project ID is used to associate an Expo push token with the correct project. Resolve it from app configuration (for example ``Constants.expoConfig?.extra?.eas?.projectId`` with the EAS config fallback), not from one shared hardcoded literal.
 
-The repository currently has a common ``EXPO_PUBLIC_EAS_PROJECT_ID`` environment variable, while Refill also has an existing fallback ID. During implementation, reconcile this with per-app EAS identity so Refill, Logistics, Store and Bills each resolve their own configured project ID. Never request all product tokens under one shared app identity.
+Refill uses its existing ``EXPO_PUBLIC_EAS_PROJECT_ID`` configuration. Store, Logistics and Bills each require their own ``EXPO_PUBLIC_STORE_EAS_PROJECT_ID``, ``EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID`` and ``EXPO_PUBLIC_BILLS_EAS_PROJECT_ID`` values in the matching EAS production environment. Do not use a shared project ID as a fallback between products; that would associate device tokens with the wrong app identity.
 
 An EAS project ID is not a Firebase or Apple secret. It is a public project identifier; credentials remain protected in EAS.
 
