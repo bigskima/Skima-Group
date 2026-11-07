@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import "./social-directory-workspace.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Globe, Plus, RefreshCcw, Share2 } from "lucide-react";
 import { z } from "zod";
@@ -196,7 +197,7 @@ export function SocialDirectoryWorkspace() {
       key: "actions",
       header: "",
       render: (row) => row.profile_id ? (
-        <div className="skima-table-actions">
+        <div className="social-directory__table-actions">
           <Button size="sm" variant="outline" onClick={() => editRow(row)}>Edit</Button>
           <Button size="sm" variant="outline" onClick={() => setActive.mutate(row)} isLoading={setActive.isPending}>
             {row.is_active ? "Hide" : "Show"}
@@ -207,7 +208,7 @@ export function SocialDirectoryWorkspace() {
   ];
 
   return (
-    <div className="skima-workspace">
+    <div className="social-directory">
       <PageHeader
         eyebrow="Customer experience"
         title="Social media"
@@ -219,8 +220,8 @@ export function SocialDirectoryWorkspace() {
         <MetricTile label="Visible profiles" value={activeCount} icon={Share2} />
       </section>
 
-      <section className="skima-panel">
-        <div className="skima-panel__header">
+      <section className="social-directory__panel">
+        <div className="social-directory__panel-header">
           <div><h2>{editingId ? "Edit social profile" : "Add a social profile"}</h2><p>Register a platform and connect its official SKIMA account.</p></div>
         </div>
         <div className="skima-form-grid">
@@ -236,11 +237,11 @@ export function SocialDirectoryWorkspace() {
         </div>
         {formError ? <div className="admin-notice is-error" role="alert">{formError}</div> : null}
         {notice ? <div className="admin-notice" role="status">{notice}</div> : null}
-        <div className="skima-form-actions">
+        <div className="social-directory__actions">
           <Button icon={Plus} isLoading={saveProfile.isPending} onClick={() => saveProfile.mutate({ ...form, profileId: editingId })}>Save profile</Button>
           {editingId ? <Button variant="outline" onClick={() => { setForm(EMPTY_FORM); setEditingId(null); setFormError(""); }}>Cancel</Button> : null}
         </div>
-        <p className="admin-field-hint">Display locations: all, website, refill, logistics, store, bills, customer, driver or station. Use a custom HTTPS icon URL for a platform without a built-in symbol.</p>
+        <p className="social-directory__hint">Display locations: all, website, refill, logistics, store, bills, customer, driver or station. Use a custom HTTPS icon URL for a platform without a built-in symbol.</p>
       </section>
 
       {directory.isLoading ? <LoadingState label="Loading social profiles" /> : directory.error ? (
