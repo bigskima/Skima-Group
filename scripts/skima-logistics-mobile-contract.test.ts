@@ -766,3 +766,14 @@ Deno.test("Runtime worker scheduler authenticates project-bound service-role JWT
   requireText(worker, "claims.ref === projectRef", "JWT project binding");
   requireText(worker, "claims.iss === \"supabase\"", "Supabase issuer check");
 });
+
+Deno.test("Notification status event idempotency is safe under concurrent worker retries", async () => {
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20261107195000_notification_status_event_idempotency_concurrency.sql",
+  );
+  requireText(migration, "from public.notification_messages message", "notification parent row is read");
+  requireText(migration, "for update;", "notification status transitions serialize on the parent row");
+  requireText(migration, "Recheck after acquiring the row lock", "event idempotency is rechecked after waiting");
+  requireText(migration, "on conflict (notification_message_id, idempotency_key) do nothing", "duplicate event retries do not abort worker batches");
+  requireText(migration, "different notification status details", "same idempotency key cannot silently change event content");
+});
