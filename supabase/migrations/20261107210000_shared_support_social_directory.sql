@@ -137,9 +137,11 @@ language sql stable security definer
 set search_path=public,pg_temp
 as $$
   select auth.uid() is not null
+    and target_action in ('read','manage')
     and exists(select 1 from public.support_apps a where a.app_key=target_app_key and a.is_active)
     and (
       public.is_platform_super_admin()
+      or public.has_permission('platform.support.' || target_action,null)
       or public.has_permission('platform.support.' || target_action || '.' || target_app_key,null)
     )
 $$;
