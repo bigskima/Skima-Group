@@ -25,7 +25,7 @@ export function StoreApp() {
   const { palette } = useAppTheme();
   const guide = useStoreGuide();
   const session = useSession();
-  const canManageStore = Boolean(session.context?.platformAdmin && session.context.permissions.includes("platform.store.manage"));
+  const canManageStore = Boolean(session.context?.platformAdmin?.status === "active" && session.context.permissions.includes("platform.store.manage"));
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
   const [page, setPage] = useState<StorePage>("shop");
