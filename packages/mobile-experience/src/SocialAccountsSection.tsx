@@ -1,12 +1,8 @@
 import { useEffect, useState } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import {
-  Facebook,
-  Globe,
-  Instagram,
-  Linkedin,
-  Music2,
-  Youtube,
+  Camera, Facebook, Globe, Instagram, Linkedin, MessageCircle, Music2,
+  Pin, PlayCircle, Send, Youtube,
 } from "lucide-react-native";
 
 type SocialAccount = {
@@ -46,7 +42,7 @@ export function SocialAccountsSection({
   palette,
   title = "Follow SKIMA",
 }: {
-  supabase: { rpc: (name: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> };
+  supabase: any;
   surface: string;
   palette: SocialPalette;
   title?: string;
