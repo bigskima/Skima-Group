@@ -37,6 +37,17 @@ section{scroll-margin-top:90px}.section{padding:92px 0}.center{text-align:center
 @media(max-width:1020px){.apps-download__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:740px){.apps-download{padding:60px 0}.apps-download__grid{grid-template-columns:1fr}.app-download-card{min-height:0}.app-download-card p{min-height:0}}
 
+
+.footer-social-strip{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:23px 0;border-top:1px solid #ffffff18;border-bottom:1px solid #ffffff18}
+.footer-social-copy strong{display:block;color:#fff;font:800 13px var(--display)}
+.footer-social-copy small{display:block;margin-top:4px;color:#ffffff88;font-size:11px}
+.footer-social-links{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
+.footer-social-link{display:inline-flex;align-items:center;gap:9px;min-height:40px;padding:8px 13px;border:1px solid #ffffff27;border-radius:12px;background:#ffffff09;color:#fff;font-size:11px;font-weight:800;transition:.2s}
+.footer-social-link:hover{border-color:#e10600;background:#e1060025;transform:translateY(-2px)}
+.footer-social-link img,.footer-social-link svg{width:18px;height:18px;object-fit:contain;flex:none}
+.footer-social-link img{border-radius:4px}
+.footer-social-empty{color:#ffffff88;font-size:11px}
+@media(max-width:640px){.footer-social-strip{align-items:flex-start;flex-direction:column}.footer-social-links{width:100%}.footer-social-link{flex:1 1 130px;justify-content:center}}
 </style>
 </head>
 <body>
@@ -64,7 +75,7 @@ section{scroll-margin-top:90px}.section{padding:92px 0}.center{text-align:center
 
 <section class="closing"><div class="wrap closing-inner"><div><span class="kicker">Discover what is possible</span><h2>Let's make everyday services <span>work better.</span></h2><p>Explore the SKIMA services and find the experience that fits your needs.</p></div><a class="btn light" href="#services">Explore SKIMA <span>↗</span></a></div></section>
 </main>
-<footer class="footer"><div class="wrap footer-grid"><div class="footer-brand"><a class="brand" href="#top"><img src="/assets/skima-mark.svg" alt=""><span style="color:#fff">SKIMA</span></a><p>Everyday services, connected.</p><small>Built for people, homes and businesses.</small></div><div class="footer-col"><h3>Services</h3><a href="https://refills.skima.online/" target="_blank" rel="noopener">SKIMA Refill</a><a href="https://logistics.skima.online/" target="_blank" rel="noopener">SKIMA Logistics</a><a href="https://bills.skima.online/" target="_blank" rel="noopener">SKIMA Bills</a><a href="https://store.skima.online/" target="_blank" rel="noopener">SKIMA Store</a></div><div class="footer-col"><h3>Discover</h3><a href="#how">How it works</a><a href="#businesses">For businesses</a><a href="#about">About SKIMA</a><a href="#help">FAQs</a></div><div class="footer-col"><h3>Get started</h3><a href="#services">Explore services</a><a href="#partner-types">Partner opportunities</a><a href="#help">Help and information</a></div></div><div class="wrap footer-bottom"><span>© <span id="year">2026</span> SKIMA. All rights reserved.</span><span>Everyday services, made simpler.</span></div></footer>
+<footer class="footer"><div class="wrap footer-grid"><div class="footer-brand"><a class="brand" href="#top"><img src="/assets/skima-mark.svg" alt=""><span style="color:#fff">SKIMA</span></a><p>Everyday services, connected.</p><small>Built for people, homes and businesses.</small></div><div class="footer-col"><h3>Services</h3><a href="https://refills.skima.online/" target="_blank" rel="noopener">SKIMA Refill</a><a href="https://logistics.skima.online/" target="_blank" rel="noopener">SKIMA Logistics</a><a href="https://bills.skima.online/" target="_blank" rel="noopener">SKIMA Bills</a><a href="https://store.skima.online/" target="_blank" rel="noopener">SKIMA Store</a></div><div class="footer-col"><h3>Discover</h3><a href="#how">How it works</a><a href="#businesses">For businesses</a><a href="#about">About SKIMA</a><a href="#help">FAQs</a></div><div class="footer-col"><h3>Get started</h3><a href="#services">Explore services</a><a href="#partner-types">Partner opportunities</a><a href="#help">Help and information</a></div></div><div class="wrap footer-social-strip"><div class="footer-social-copy"><strong>Connect with SKIMA</strong><small>Follow our official channels for updates and announcements.</small></div><div class="footer-social-links" id="skima-social-links" aria-live="polite"><span class="footer-social-empty">Loading social channels…</span></div></div><div class="wrap footer-bottom"><span>© <span id="year">2026</span> SKIMA. All rights reserved.</span><span>Everyday services, made simpler.</span></div></footer>
 <script>
 const toggle=document.querySelector('.toggle'),nav=document.querySelector('.navlinks');if(toggle&&nav){toggle.addEventListener('click',()=>{const open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));toggle.setAttribute('aria-label',open?'Open navigation':'Close navigation');nav.classList.toggle('open',!open);document.body.style.overflow=open?'':'hidden'});nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-label','Open navigation');nav.classList.remove('open');document.body.style.overflow=''}))}document.querySelector('#year').textContent=String(new Date().getFullYear());const links=[...document.querySelectorAll('.navlinks a')];const targets=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);if('IntersectionObserver'in window){const io=new IntersectionObserver(entries=>entries.forEach(e=>{if(!e.isIntersecting)return;links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+e.target.id))}),{rootMargin:'-35% 0px -55% 0px'});targets.forEach(s=>io.observe(s))}
 </script>
@@ -151,4 +162,39 @@ const toggle=document.querySelector('.toggle'),nav=document.querySelector('.navl
 })();
 </script>
 
+<script>
+(function(){
+ const root=document.getElementById("skima-social-links");
+ if(!root)return;
+ const endpoint="https://npgladvhpidkgpyzdwxf.supabase.co/rest/v1/rpc/read_active_social_accounts";
+ const anon="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wZ2xhZHZocGlka2dweXpkd3hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3NDc1NDAsImV4cCI6MjEwMDMyMzU0MH0.Nw-MLj09hHYwRJaSN9SWuG1n7k2SQericvkf3nUSUiQ";
+ const safeUrl=value=>{try{const url=new URL(value);return url.protocol==="https:"?url.href:""}catch{return ""}};
+ const icons={
+  twitter:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.9 2H22l-6.78 7.75L23.2 22h-6.25l-4.9-7.37L5.6 22H2.46l7.25-8.29L1.9 2h6.4l4.43 6.77L18.9 2Zm-1.1 18h1.73L7.36 3.88H5.5L17.8 20Z"/></svg>',
+  'music-2':'<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M9 18V5l12-2v13M9 8l12-2M5.5 21A3.5 3.5 0 1 1 5.5 14a3.5 3.5 0 0 1 0 7Zm12-2A3.5 3.5 0 1 1 17.5 12a3.5 3.5 0 0 1 0 7Z"/></svg>',
+  instagram:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></svg>',
+  facebook:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13.5 21v-8h2.7l.4-3.1h-3.1V8c0-.9.3-1.5 1.6-1.5h1.7V3.7c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v1.8H7v3.1h2.8v8h3.7Z"/></svg>',
+  youtube:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M23 7.1a3 3 0 0 0-2.1-2.2C19 4.4 12 4.4 12 4.4s-7 0-8.9.5A3 3 0 0 0 1 7.1 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.9 3 3 0 0 0 2.1 2.2c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.2 31 31 0 0 0 .5-4.9 31 31 0 0 0-.5-4.9ZM9.7 15.5v-7l6 3.5-6 3.5Z"/></svg>',
+  linkedin:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M5.2 3a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4ZM3.4 9h3.6v12H3.4zM9 9h3.4v1.6h.1A3.7 3.7 0 0 1 15.8 8.8c3.7 0 4.4 2.4 4.4 5.5V21h-3.6v-6c0-1.4 0-3.2-2-3.2s-2.3 1.5-2.3 3.1V21H9z"/></svg>'
+ };
+ function render(rows){
+  const nodes=rows.map(row=>{
+   const url=safeUrl(row.profile_url);if(!url)return null;
+   const item=document.createElement("a");item.className="footer-social-link";item.href=url;item.target="_blank";item.rel="noopener noreferrer";
+   const iconUrl=safeUrl(row.icon_url);if(iconUrl){const img=document.createElement("img");img.src=iconUrl;img.alt="";img.loading="lazy";item.append(img)}else{item.insertAdjacentHTML("afterbegin",icons[row.icon_key]||'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>')}
+   const label=document.createElement("span");label.textContent=row.handle||row.platform_name||row.display_name||"Social profile";item.append(label);return item;
+  }).filter(Boolean);
+  root.replaceChildren(...nodes);
+  if(!nodes.length){const msg=document.createElement("span");msg.className="footer-social-empty";msg.textContent="Our social channels will appear here.";root.append(msg)}
+ }
+ async function load(){
+  try{
+   const response=await fetch(endpoint,{method:"POST",headers:{apikey:anon,Authorization:"Bearer "+anon,"Content-Type":"application/json"},body:JSON.stringify({target_surface:"website"})});
+   if(!response.ok)throw new Error("Social links unavailable");
+   const rows=await response.json();render(Array.isArray(rows)?rows:[]);
+  }catch(error){console.warn("SKIMA social directory unavailable",error);render([])}
+ }
+ void load();
+})();
+</script>
 </body></html>

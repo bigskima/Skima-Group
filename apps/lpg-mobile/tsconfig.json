@@ -4,13 +4,46 @@
     "strict": true,
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
-    "types": ["jest"],
+    "types": [
+      "jest"
+    ],
     "paths": {
-      "@lpg/*": ["src/*"],
-      "@skima/frontend-core": ["../../packages/frontend-core/src/index.ts"],
-      "@supabase/supabase-js": ["node_modules/@supabase/supabase-js"],
-      "zod": ["node_modules/zod"]
+      "@lpg/*": [
+        "src/*"
+      ],
+      "@skima/frontend-core": [
+        "../../packages/frontend-core/src/index.ts"
+      ],
+      "@supabase/supabase-js": [
+        "node_modules/@supabase/supabase-js"
+      ],
+      "zod": [
+        "node_modules/zod"
+      ],
+      "react-native": [
+        "node_modules/react-native"
+      ],
+      "lucide-react-native": [
+        "node_modules/lucide-react-native"
+      ],
+      "expo-image-picker": [
+        "node_modules/expo-image-picker"
+      ],
+      "@skima/mobile-experience/*": [
+        "../../packages/mobile-experience/src/*"
+      ],
+      "react": [
+        "node_modules/@types/react/index.d.ts"
+      ],
+      "react/*": [
+        "node_modules/@types/react/*"
+      ]
     }
   },
-  "include": ["app", "src/native", "expo-env.d.ts", ".expo/types/**/*.ts"]
+  "include": [
+    "app",
+    "src/native",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts"
+  ]
 }

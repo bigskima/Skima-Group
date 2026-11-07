@@ -13,6 +13,24 @@
       ],
       "zod": [
         "./node_modules/zod"
+      ],
+      "react-native": [
+        "node_modules/react-native"
+      ],
+      "lucide-react-native": [
+        "node_modules/lucide-react-native"
+      ],
+      "expo-image-picker": [
+        "node_modules/expo-image-picker"
+      ],
+      "@skima/mobile-experience/*": [
+        "../../packages/mobile-experience/src/*"
+      ],
+      "react": [
+        "node_modules/@types/react/index.d.ts"
+      ],
+      "react/*": [
+        "node_modules/@types/react/*"
       ]
     }
   },

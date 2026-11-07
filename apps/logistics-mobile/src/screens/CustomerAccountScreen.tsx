@@ -1,3 +1,4 @@
+import { SocialMediaSection } from "../ui/SocialMediaSection";
 import { router } from "expo-router";
 import { ChevronRight, CircleHelp, Gift, LogOut, MailCheck, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -17,7 +18,7 @@ import { Screen } from "../ui/Screen";
 
 export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: "customer" | "provider" | "driver" }) {
   const { palette, scheme, toggle } = useAppTheme();
-  const { api, context, session, signOut } = useSession();
+  const { api, context, session, signOut, supabase } = useSession();
   const client = useQueryClient();
   const [invitationNotice, setInvitationNotice] = useState<string | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
@@ -173,6 +174,9 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Preferences</Text>
+        <PressableRow icon={<CircleHelp color={palette.brand} size={19} />}
+          title="Help & Support" subtitle="Get help and track your requests" action="Open"
+          onPress={() => router.push((workspace === "customer" ? "/(customer)/support" : "/(provider)/support") as never)} />
         <PressableRow icon={<Gift color={palette.brand} size={19} />}
           title="Referrals & rewards" subtitle="Your code, campaigns and leaderboard" action="Open"
           onPress={() => router.push((workspace === "customer" ? "/(customer)/referrals" : "/(provider)/referrals") as never)} />
@@ -181,6 +185,7 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
         
       </View>
 
+      <SocialMediaSection supabase={supabase} surface="logistics" palette={palette} />
       <Card variant="subtle" padding="lg">
         <View style={styles.securityRow}><ShieldCheck color={palette.success} size={18} /><Text style={[styles.securityTitle, { color: palette.ink }]}>Your information is protected</Text></View>
         <Text style={[styles.securityCopy, { color: palette.muted }]}>Your booking and payment details are only shown to the people involved in your bookings and authorised support staff.</Text>

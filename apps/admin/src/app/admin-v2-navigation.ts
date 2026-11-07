@@ -56,6 +56,7 @@ const screenRoutes: Readonly<Record<string, string>> = {
   branding: "/experience/branding",
   "app-links": "/experience/app-links",
   referrals: "/experience/referrals",
+  "social-links": "/experience/social-links",
   access: "/platform/people-access",
   governance: "/platform/configuration",
   providers: "/platform/integrations",
@@ -150,7 +151,7 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     description: "Brand, content, policies and customer-facing presentation.",
     basePath: "/experience",
     icon: "experience",
-    screenKeys: ["content", "policies", "branding", "app-links", "referrals"],
+    screenKeys: ["content", "policies", "branding", "app-links", "referrals", "social-links"],
   },
   {
     key: "platform",
@@ -293,6 +294,7 @@ const experienceScreenLabels: Readonly<Record<string, string>> = {
   "/experience/branding": "App branding",
   "/experience/app-links": "App downloads & quick routes",
   "/experience/referrals": "Referrals & campaigns",
+  "/experience/social-links": "Social media",
 };
 
 const platformScreenLabels: Readonly<Record<string, string>> = {
@@ -649,7 +651,7 @@ function buildIntelligenceWorkspaceNavigation(items: readonly NavigationItem[]):
 }
 
 function buildExperienceWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
-  const orderedKeys = ["content", "policies", "branding", "app-links", "referrals"] as const;
+  const orderedKeys = ["content", "policies", "branding", "app-links", "referrals", "social-links"] as const;
   const visibleItems = orderedKeys
     .map((key) => items.find((item) => item.key === key))
     .filter((item): item is NavigationItem => Boolean(item));

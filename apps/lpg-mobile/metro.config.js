@@ -11,7 +11,18 @@ config.resolver.extraNodeModules = {
   "@skima/frontend-core": path.resolve(workspaceRoot, "packages/frontend-core/src/index.ts"),
   "@lpg": path.resolve(projectRoot, "src"),
   "@supabase/supabase-js": path.resolve(projectRoot, "node_modules/@supabase/supabase-js"),
-  "zod": path.resolve(projectRoot, "node_modules/zod")
+  "zod": path.resolve(projectRoot, "node_modules/zod"),
+  "react": path.resolve(projectRoot, "node_modules/react"),
+  "lucide-react-native": path.resolve(projectRoot, "node_modules/lucide-react-native"),
+  "expo-image-picker": path.resolve(projectRoot, "node_modules/expo-image-picker")
+};
+
+// Use the web-compatible React Native implementation for browser exports.
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolvedName = platform === "web" && moduleName === "react-native"
+    ? "react-native-web"
+    : moduleName;
+  return context.resolveRequest(context, resolvedName, platform);
 };
 
 module.exports = config;

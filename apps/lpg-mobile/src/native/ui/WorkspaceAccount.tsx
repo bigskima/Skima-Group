@@ -1,3 +1,4 @@
+import { SocialMediaSection } from "./SocialMediaSection";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -119,11 +120,12 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
         />
         <QuickTile
           icon={CircleHelp}
-          label="Safety & support"
-          detail="Get help or report an issue"
+          label="Help & Support"
+          detail="Chat with SKIMA or report a problem"
           onPress={() => router.push(`/(${group})/support` as never)}
         />
       </View>
+      <SocialMediaSection supabase={session.supabase} surface="refill" palette={theme.palette} />
     </Screen>
   );
 }

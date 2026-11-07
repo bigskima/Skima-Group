@@ -11,6 +11,7 @@ import { StoreAccountScreen } from "./StoreAccountScreen";
 import { StoreNotificationsScreen } from "./StoreNotificationsScreen";
 import { StoreReferralsScreen } from "./StoreReferralsScreen";
 import { StoreManagementScreen } from "./StoreManagementScreen";
+import { SupportHubScreen } from "./SupportHubScreen";
 import { useSession } from "../session/SessionProvider";
 import { useStoreGuide } from "../onboarding/StoreGuideProvider";
 
@@ -37,7 +38,7 @@ export function StoreApp() {
   useEffect(() => subscribeStoreNavigation((event) => open(event.page)), [open]);
   const title = page === "shop" ? "Shop SKIMA" : page === "orders" ? "Your orders" :
     page === "wallet" ? "SKIMA Wallet" : page === "account" ? "Account" :
-    page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : page === "referrals" ? "Referrals & rewards" : page === "manage" ? "Store management" : "Notifications";
+    page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : page === "referrals" ? "Referrals & rewards" : page === "manage" ? "Store management" : page === "support" ? "Help & Support" : "Notifications";
   const isTab = tabs.some((tab) => tab.key === page);
   const navigationItem = (tab: typeof tabs[number], variant: "side" | "bottom") => {
     const Icon = tab.icon;
@@ -92,6 +93,7 @@ export function StoreApp() {
             {page === "notifications" ? <StoreNotificationsScreen /> : null}
             {page === "referrals" ? <StoreReferralsScreen /> : null}
             {page === "manage" && canManageStore ? <StoreManagementScreen /> : null}
+            {page === "support" ? <SupportHubScreen onBack={() => open("account")} /> : null}
           </View>
           {!desktop && isTab ? <View style={[styles.tabs, { backgroundColor: palette.surface, borderTopColor: palette.border }]}>{tabs.map((tab) => navigationItem(tab, "bottom"))}</View> : null}
         </View>

@@ -1,2 +1,2 @@
-import { SupportScreen } from "../../src/native/ui/SupportScreen";
-export default function Support() { return <SupportScreen />; }
+import { SupportRouteScreen } from "../../src/native/ui/SupportRouteScreen";
+export default function Support() { return <SupportRouteScreen workspace="driver" />; }
