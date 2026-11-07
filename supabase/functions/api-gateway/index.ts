@@ -3987,16 +3987,99 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if (order.status !== "cancelled") {
       return jsonResponse({ ok: false, error: "store_order_must_be_cancelled", message: "Cancel the Store order before issuing its wallet refund.", requestId: id }, 409);
     }
+
     const existingMetadata = optionalRecord(order.metadata) ?? {};
-    if (typeof existingMetadata.store_refunded_at === "string") {
+    if (existingMetadata.store_refund_status === "not_required") {
+      return jsonResponse({ ok: true, data: { orderId, status: "not_funded", paymentStatus: "not_funded", noRefundRequired: true, alreadyResolved: true }, requestId: id });
+    }
+    if (typeof existingMetadata.store_refunded_at === "string" ||
+      existingMetadata.store_refund_status === "refunded") {
       return jsonResponse({ ok: true, data: { orderId, status: "refunded", alreadyRefunded: true, transactionId: existingMetadata.store_refund_transaction_id ?? null }, requestId: id });
     }
 
+    if (!order.service_request_id) {
+      return jsonResponse({ ok: false, error: "store_service_request_missing", message: "The cancelled Store order has no linked payment request. Finance review is required before changing its wallet balance.", requestId: id }, 409);
+    }
     const requestResult = await serviceClient.from("service_requests")
       .select("id,escrow_hold_id").eq("id", order.service_request_id).maybeSingle();
     if (requestResult.error) return databaseError(requestResult.error, id);
-    const holdId = optionalString(requestResult.data?.escrow_hold_id);
-    if (!holdId) return jsonResponse({ ok: false, error: "store_escrow_hold_missing", message: "This Store order has no linked escrow hold to refund.", requestId: id }, 409);
+    if (!requestResult.data) {
+      return jsonResponse({ ok: false, error: "store_service_request_missing", message: "The Store payment request could not be found. Finance review is required before changing the customer's wallet balance.", requestId: id }, 409);
+    }
+
+    let holdId = optionalString(requestResult.data.escrow_hold_id);
+    if (!holdId) {
+      // Recover a hold by its immutable service-request subject before deciding
+      // that checkout was never funded. Never create a replacement hold here.
+      const subjectHold = await serviceClient.from("escrow_holds")
+        .select("id,status,source_transaction_id")
+        .eq("subject_type", "service_request")
+        .eq("subject_id", order.service_request_id)
+        .eq("status", "held")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (subjectHold.error) return databaseError(subjectHold.error, id);
+      holdId = optionalString(subjectHold.data?.id);
+
+      if (!holdId) {
+        const fundingTransaction = await serviceClient.from("financial_transactions")
+          .select("id,transaction_type,status,total_amount")
+          .eq("subject_type", "service_request")
+          .eq("subject_id", order.service_request_id)
+          .eq("transaction_type", "hold")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (fundingTransaction.error) return databaseError(fundingTransaction.error, id);
+
+        if (fundingTransaction.data) {
+          const linkedHold = await serviceClient.from("escrow_holds")
+            .select("id,status")
+            .eq("source_transaction_id", fundingTransaction.data.id)
+            .maybeSingle();
+          if (linkedHold.error) return databaseError(linkedHold.error, id);
+          holdId = optionalString(linkedHold.data?.id);
+          if (!holdId) {
+            return jsonResponse({
+              ok: false,
+              error: "store_funding_reconciliation_required",
+              message: "A customer payment hold exists, but its escrow record is missing. The order has been protected from an automatic duplicate refund and needs finance reconciliation.",
+              requestId: id,
+            }, 409);
+          }
+        } else {
+          // fund_order_from_wallet creates the hold transaction, escrow hold,
+          // and service-request link atomically. No hold transaction means
+          // there was no customer debit to refund.
+          const checkedAt = new Date().toISOString();
+          const savedNoPaymentState = await serviceClient.from("order_records").update({
+            metadata: {
+              ...existingMetadata,
+              store_payment_status: "not_funded",
+              store_refund_status: "not_required",
+              store_refund_checked_at: checkedAt,
+              store_refund_reason: reason,
+            },
+            updated_at: checkedAt,
+          }).eq("id", orderId);
+          if (savedNoPaymentState.error) return databaseError(savedNoPaymentState.error, id);
+          return jsonResponse({
+            ok: true,
+            data: { orderId, status: "not_funded", paymentStatus: "not_funded", noRefundRequired: true, transactionId: null },
+            requestId: id,
+          });
+        }
+      }
+    }
+
+    if (requestResult.data.escrow_hold_id !== holdId) {
+      const linkedRequest = await serviceClient.from("service_requests")
+        .update({ escrow_hold_id: holdId, updated_at: new Date().toISOString() })
+        .eq("id", order.service_request_id)
+        .is("escrow_hold_id", null);
+      if (linkedRequest.error) return databaseError(linkedRequest.error, id);
+    }
 
     const walletResult = await serviceClient.from("wallet_accounts")
       .select("id").eq("wallet_type", "customer").eq("owner_entity_type", "user")
@@ -4014,14 +4097,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     });
     if (refundResult.error) return databaseError(refundResult.error, id);
     const transactionId = typeof refundResult.data === "string" ? refundResult.data : null;
+    const refundedAt = new Date().toISOString();
     const savedMetadata = await serviceClient.from("order_records").update({
       metadata: {
         ...existingMetadata,
-        store_refunded_at: new Date().toISOString(),
+        escrow_hold_id: holdId,
+        store_payment_status: "reserved",
+        store_refund_status: "refunded",
+        store_refunded_at: refundedAt,
         store_refund_transaction_id: transactionId,
         store_refund_reason: reason,
       },
-      updated_at: new Date().toISOString(),
+      updated_at: refundedAt,
     }).eq("id", orderId);
     if (savedMetadata.error) return databaseError(savedMetadata.error, id);
     return jsonResponse({ ok: true, data: { orderId, status: "refunded", transactionId }, requestId: id });
