@@ -125,7 +125,7 @@ function Field(props: {label:string;value:string;onChangeText:(value:string)=>vo
 
 const styles=StyleSheet.create({
  root:{flex:1},fill:{flex:1},outer:{flexGrow:1,alignItems:"center",justifyContent:"center",padding:18,paddingVertical:24},
- shell:{width:"100%",maxWidth:460,gap:15},brandRow:{flexDirection:"row",alignItems:"center",gap:10},
+ shell:{width:"100%",maxWidth:460,gap:15},brandRow:{width:"100%",flexDirection:"row",alignItems:"center",justifyContent:"center",gap:10},
  brand:{fontSize:15,fontWeight:"900",letterSpacing:1},brandSub:{fontSize:9,fontWeight:"900",letterSpacing:1.5},
  card:{borderWidth:1,borderRadius:24,padding:18,gap:12,overflow:"hidden"},accent:{height:3,width:44,borderRadius:4,marginBottom:5},
  eyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1.1},title:{fontSize:23,fontWeight:"900",letterSpacing:-.6},subtitle:{fontSize:11,lineHeight:16},
