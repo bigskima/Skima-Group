@@ -340,7 +340,199 @@ end
 $$;
 
 create table if not exists public.social_platform_catalog (
-  platform_key text primary key check (platform_key ~ '^[a-z][a-z0-9_-]{1,31}$'),
+  platform_key text primary key check (platform_key ~ '^[a-z][a-z0-9_-]{0,31},
+  display_name text not null,
+  icon_key text not null default 'globe',
+  icon_url text null check (icon_url is null or icon_url ~ '^https://'),
+  created_at timestamptz not null default timezone('utc',now()),
+  updated_at timestamptz not null default timezone('utc',now())
+);
+
+create table if not exists public.social_profiles (
+  id uuid primary key default gen_random_uuid(),
+  platform_key text not null references public.social_platform_catalog(platform_key) on update cascade,
+  display_name text not null,
+  handle text null,
+  profile_url text not null check (profile_url ~ '^https://'),
+  target_surfaces text[] not null default array['all']::text[],
+  sort_order integer not null default 100,
+  is_active boolean not null default true,
+  created_at timestamptz not null default timezone('utc',now()),
+  updated_at timestamptz not null default timezone('utc',now()),
+  constraint social_profiles_surfaces_not_empty check (cardinality(target_surfaces)>0)
+);
+
+create index if not exists social_profiles_active_surface_idx
+  on public.social_profiles(is_active,sort_order)
+  where is_active;
+
+alter table public.social_platform_catalog enable row level security;
+alter table public.social_profiles enable row level security;
+revoke all on public.social_platform_catalog,public.social_profiles from public,anon,authenticated;
+grant select on public.social_platform_catalog,public.social_profiles to anon,authenticated;
+
+insert into public.social_platform_catalog(platform_key,display_name,icon_key)
+values ('x','X','twitter'),('tiktok','TikTok','music-2')
+on conflict(platform_key) do update set display_name=excluded.display_name,icon_key=excluded.icon_key,updated_at=timezone('utc',now());
+
+insert into public.social_profiles(platform_key,display_name,handle,profile_url,target_surfaces,sort_order,is_active)
+values
+  ('x','SKIMA on X','@skimagroup','https://x.com/skimagroup',array['all']::text[],10,true),
+  ('tiktok','SKIMA on TikTok','@skimagroup','https://www.tiktok.com/@skimagroup',array['all']::text[],20,true)
+on conflict do nothing;
+
+create or replace function public.read_active_social_accounts(target_surface text default 'all')
+returns table(
+  id uuid, platform_key text, platform_name text, icon_key text, icon_url text,
+  display_name text, handle text, profile_url text, target_surfaces text[], sort_order integer
+)
+language sql
+stable
+security definer
+set search_path=public,pg_temp
+as $$
+  select p.id,p.platform_key,c.display_name,c.icon_key,c.icon_url,
+    p.display_name,p.handle,p.profile_url,p.target_surfaces,p.sort_order
+  from public.social_profiles p
+  join public.social_platform_catalog c on c.platform_key=p.platform_key
+  where p.is_active
+    and (target_surface='all' or 'all'=any(p.target_surfaces) or target_surface=any(p.target_surfaces))
+  order by p.sort_order,c.display_name,p.display_name
+$$;
+
+create or replace function public.upsert_social_platform(
+  target_platform_key text,
+  target_display_name text,
+  target_icon_key text default 'globe',
+  target_icon_url text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+begin
+  if not (public.is_platform_super_admin() or public.has_permission('platform.social.manage',null)) then
+    raise exception using errcode='42501',message='social profile management permission required';
+  end if;
+  if coalesce(btrim(target_platform_key),'') !~ '^[a-z][a-z0-9_-]{1,31}$'
+     or coalesce(btrim(target_display_name),'')='' then
+    raise exception using errcode='22023',message='a valid platform key and name are required';
+  end if;
+  insert into public.social_platform_catalog(platform_key,display_name,icon_key,icon_url)
+  values(lower(btrim(target_platform_key)),btrim(target_display_name),coalesce(nullif(btrim(target_icon_key),''),'globe'),nullif(btrim(target_icon_url),''))
+  on conflict(platform_key) do update set display_name=excluded.display_name,icon_key=excluded.icon_key,icon_url=excluded.icon_url,updated_at=timezone('utc',now());
+end
+$$;
+
+create or replace function public.upsert_social_profile(
+  target_id uuid default null,
+  target_platform_key text default null,
+  target_display_name text default null,
+  target_handle text default null,
+  target_profile_url text default null,
+  target_surfaces text[] default array['all']::text[],
+  target_sort_order integer default 100,
+  target_is_active boolean default true
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+declare saved_id uuid;
+begin
+  if not (public.is_platform_super_admin() or public.has_permission('platform.social.manage',null)) then
+    raise exception using errcode='42501',message='social profile management permission required';
+  end if;
+  if not exists(select 1 from public.social_platform_catalog where platform_key=target_platform_key) then
+    raise exception using errcode='22023',message='select a registered social platform first';
+  end if;
+  if coalesce(btrim(target_display_name),'')='' or coalesce(btrim(target_profile_url),'') !~ '^https://' then
+    raise exception using errcode='22023',message='a profile name and secure profile URL are required';
+  end if;
+  if coalesce(cardinality(target_surfaces),0)=0 then
+    raise exception using errcode='22023',message='choose at least one display location';
+  end if;
+  if target_id is null then
+    insert into public.social_profiles(platform_key,display_name,handle,profile_url,target_surfaces,sort_order,is_active)
+    values(target_platform_key,btrim(target_display_name),nullif(btrim(target_handle),''),btrim(target_profile_url),target_surfaces,target_sort_order,target_is_active)
+    returning id into saved_id;
+  else
+    update public.social_profiles
+    set platform_key=target_platform_key,display_name=btrim(target_display_name),
+        handle=nullif(btrim(target_handle),''),profile_url=btrim(target_profile_url),
+        target_surfaces=$6,sort_order=$7,is_active=$8,
+        updated_at=timezone('utc',now())
+    where id=target_id returning id into saved_id;
+    if saved_id is null then raise exception using errcode='P0002',message='social profile not found'; end if;
+  end if;
+  return saved_id;
+end
+$$;
+
+revoke all on function public.can_access_support_app(text,text) from public;
+revoke all on function public.create_support_app_thread(text,text,text,text,text,text,text,text,jsonb) from public;
+revoke all on function public.read_support_app_queue(text,text,integer) from public;
+revoke all on function public.respond_to_support_app_thread(uuid,text,text,boolean,text,jsonb) from public;
+revoke all on function public.upsert_support_app(text,text,boolean) from public;
+revoke all on function public.read_active_social_accounts(text) from public;
+revoke all on function public.upsert_social_platform(text,text,text,text) from public;
+revoke all on function public.upsert_social_profile(uuid,text,text,text,text,text[],integer,boolean) from public;
+
+grant execute on function public.can_access_support_app(text,text) to authenticated;
+grant execute on function public.create_support_app_thread(text,text,text,text,text,text,text,text,jsonb) to authenticated;
+grant execute on function public.read_support_app_queue(text,text,integer) to authenticated;
+grant execute on function public.respond_to_support_app_thread(uuid,text,text,boolean,text,jsonb) to authenticated;
+grant execute on function public.upsert_support_app(text,text,boolean) to authenticated;
+grant execute on function public.read_active_social_accounts(text) to anon,authenticated;
+grant execute on function public.upsert_social_platform(text,text,text,text) to authenticated;
+grant execute on function public.upsert_social_profile(uuid,text,text,text,text,text[],integer,boolean) to authenticated;
+
+-- Private attachment storage. Paths are <uploader user id>/<thread id>/<file name>.
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values (
+  'support-attachments','support-attachments',false,10485760,
+  array['image/jpeg','image/png','image/webp','application/pdf','text/plain','video/mp4','audio/mpeg']::text[]
+)
+on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
+
+do $$
+begin
+  if not exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='support_attachments_read_scoped') then
+    create policy support_attachments_read_scoped on storage.objects
+      for select to authenticated
+      using (
+        bucket_id='support-attachments'
+        and exists (
+          select 1 from public.support_threads t
+          where t.id::text=(storage.foldername(name))[2]
+            and (
+              t.requester_user_id=auth.uid()
+              or public.can_access_support_app(t.app_key,'read')
+              or public.can_access_support_app(t.app_key,'manage')
+            )
+        )
+      );
+  end if;
+  if not exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='support_attachments_insert_scoped') then
+    create policy support_attachments_insert_scoped on storage.objects
+      for insert to authenticated
+      with check (
+        bucket_id='support-attachments'
+        and (storage.foldername(name))[1]=auth.uid()::text
+        and exists (
+          select 1 from public.support_threads t
+          where t.id::text=(storage.foldername(name))[2]
+            and (
+              t.requester_user_id=auth.uid()
+              or public.can_access_support_app(t.app_key,'manage')
+            )
+        )
+      );
+  end if;
+end $$;
+),
   display_name text not null,
   icon_key text not null default 'globe',
   icon_url text null check (icon_url is null or icon_url ~ '^https://'),
