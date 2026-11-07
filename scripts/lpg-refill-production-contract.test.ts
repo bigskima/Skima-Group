@@ -186,10 +186,16 @@ Deno.test("commercial quotes never use straight-line route pricing", async () =>
   assertIncludes(commercialLeg, "missingMapsSecretResponse");
 });
 
-Deno.test("all LPG workspaces retain module safety evidence", async () => {
-  const support = await read("apps/lpg-mobile/src/native/ui/SupportScreen.tsx");
-  assertIncludes(support, "await mutation.mutateAsync");
-  assertIncludes(support, 'firstString(order, ["lpgOrderId", "lpg_order_id", "id"])');
+Deno.test("shared support center preserves LPG safety and order context", async () => {
+  const [support, shared] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/SupportScreen.tsx"),
+    read("packages/mobile-experience/src/SupportCenter.tsx"),
+  ]);
+  assertIncludes(support, 'appKey="refill"');
+  assertIncludes(shared, 'category === "safety"');
+  assertIncludes(shared, "await onSafetyIncident(");
+  assertIncludes(shared, "orderReference: orderReference.trim() || null");
+  assertIncludes(shared, 'target_app_key: appKey');
   assertNotIncludes(support, 'if (workspace === "customer")');
 });
 
