@@ -25,7 +25,7 @@ For Android, create a separate Firebase Android app for each package name. Downl
 
 For remote FCM delivery, enable Firebase Cloud Messaging HTTP v1 and upload the matching Firebase service-account JSON to that Expo project using EAS credentials. The service-account JSON is private and must never be committed to this repository. Each app needs its own Android package, Firebase app and matching credentials.
 
-For iOS, each app needs its own Bundle Identifier, Apple Developer team and APNs authentication key uploaded to its Expo project. Remote iOS push cannot be completed with only a client-side config or the notification permission prompt.
+For iOS, register each app's Bundle Identifier for push notifications and configure its APNs credentials in the corresponding Expo project. An APNs authentication key from the same Apple Developer team may be reused across that team's app projects where supported by EAS. Remote iOS push cannot be completed with only a client-side config or the notification permission prompt.
 
 ## Supabase dispatcher schedule
 
@@ -86,4 +86,4 @@ Configure these GitHub repository **Variables** (project IDs are identifiers, no
 
 Configure the GitHub Actions **Secret** `EXPO_TOKEN` with an Expo access token. Separately, configure each app's EAS production environment with its matching `SKIMA_<APP>_GOOGLE_SERVICES_JSON_BASE64` secret and Firebase FCM service-account credentials. The workflow does not fabricate or embed provider credentials, and it will fail validation when an app's EAS project identifier is missing. It does not run automatically on pushes; an administrator must start it manually.
 
-For iOS push, upload the app-specific APNs authentication key to each corresponding Expo project and confirm the production Bundle Identifier matches the Apple app registration. The shared notification client and dispatcher do not replace those provider-side signing credentials.
+For iOS push, configure APNs credentials for each corresponding Expo project and confirm that app's production Bundle Identifier matches the Apple app registration. The shared notification client and dispatcher do not replace those provider-side signing credentials.
