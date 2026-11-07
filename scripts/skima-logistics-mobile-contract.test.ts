@@ -748,10 +748,21 @@ Deno.test("Managed Driver coverage offers secure radius coverage without removin
 Deno.test("Location retention and inventory worker can run from the authenticated Vault-backed schedule", async () => {
   const worker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
   const scheduler = await Deno.readTextFile("supabase/migrations/20261107192000_runtime_worker_scheduler.sql");
-  requireText(worker, "suppliedSecret !== workerSecret", "dedicated worker secret remains supported");
-  requireText(worker, "suppliedSecret !== serviceRoleKey", "worker accepts authenticated service-role scheduling");
+  requireText(worker, "trustedDedicatedSecret", "dedicated worker secret remains supported");
+  requireText(worker, "trustedServiceRoleBearer", "worker accepts authenticated service-role scheduling");
+  requireText(worker, "isProjectServiceRoleJwt", "service role JWT is project validated");
+  requireText(worker, "claims.role === \"service_role\"", "service role claim is required");
+  requireText(worker, "claims.ref === projectRef", "service role JWT is bound to this project");
   requireText(worker, "replace(/^Bearer\\s+/i", "Bearer credential parsing");
   requireText(scheduler, "skima-runtime-worker", "runtime worker cron job");
   requireText(scheduler, "skima_service_role_key", "scheduler reads the service role from Vault");
   requireText(scheduler, "net.http_post", "scheduler invokes the worker endpoint");
+});
+
+Deno.test("Runtime worker scheduler authenticates project-bound service-role JWTs at the Edge gateway", async () => {
+  const worker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
+  requireText(worker, "isProjectServiceRoleJwt", "project service-role JWT validation");
+  requireText(worker, 'claims.role === "service_role"', "service role claim check");
+  requireText(worker, "claims.ref === projectRef", "JWT project binding");
+  requireText(worker, "claims.iss === \"supabase\"", "Supabase issuer check");
 });
