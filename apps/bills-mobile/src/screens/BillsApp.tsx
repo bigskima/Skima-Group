@@ -86,7 +86,7 @@ export function BillsApp() {
         {desktop ? (
           <View style={[styles.sidebar, { backgroundColor: palette.surface, borderRightColor: palette.border }]}>
             <View style={styles.sidebarBrand}>
-              <BillsBrandMark size={44} />
+              <BillsBrandMark compact />
               <View>
                 <Text style={[styles.brand, { color: palette.ink }]}>SKIMA <Text style={{ color: palette.brand }}>BILLS</Text></Text>
                 <Text style={[styles.pageTitle, { color: palette.muted }]}>Everyday payments</Text>
@@ -111,7 +111,7 @@ export function BillsApp() {
                 <Pressable onPress={() => setPage("bills")} style={[styles.back, { backgroundColor: palette.brandSoft }]}>
                   <ArrowLeft color={palette.brand} size={18} />
                 </Pressable>
-              ) : !desktop ? <BillsBrandMark size={40} /> : null}
+              ) : !desktop ? <BillsBrandMark compact /> : null}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[styles.brand, { color: palette.ink }]}>
                   {desktop ? title : <><Text style={{ color: palette.ink }}>SKIMA </Text><Text style={{ color: palette.brand }}>BILLS</Text></>}
