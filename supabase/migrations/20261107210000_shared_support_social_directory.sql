@@ -261,6 +261,121 @@ as $$
   limit least(greatest(target_limit,1),100)
 $$;
 
+create or replace function public.read_my_support_app_threads(target_app_key text, target_limit integer default 50)
+returns table(
+  id uuid, workspace text, category text, priority text, subject text,
+  status text, last_message_at timestamptz, created_at timestamptz, messages jsonb
+)
+language sql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+  select t.id,t.workspace,t.category,t.priority,t.subject,t.status,t.last_message_at,t.created_at,
+    coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',m.id,'authorKind',m.author_kind,'body',m.body,
+        'createdAt',m.created_at,'attachments',m.attachments
+      ) order by m.created_at)
+      from public.support_thread_messages m
+      where m.thread_id=t.id and not m.is_internal
+    ),'[]'::jsonb)
+  from public.support_threads t
+  where t.requester_user_id=auth.uid() and t.app_key=target_app_key
+  order by t.last_message_at desc
+  limit least(greatest(target_limit,1),100)
+$;
+
+create or replace function public.reply_to_my_support_app_thread(
+  target_thread_id uuid,
+  target_app_key text,
+  target_body text,
+  target_source text default 'skima.mobile.support',
+  target_idempotency_key text default null,
+  target_metadata jsonb default '{}'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare new_message_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception using errcode='42501',message='authentication required';
+  end if;
+  if coalesce(btrim(target_body),'')='' or char_length(btrim(target_body))>4000 then
+    raise exception using errcode='22023',message='reply must contain between 1 and 4000 characters';
+  end if;
+  if coalesce(btrim(target_idempotency_key),'')='' then
+    raise exception using errcode='22023',message='idempotency key is required';
+  end if;
+  if not exists(
+    select 1 from public.support_threads
+    where id=target_thread_id and app_key=target_app_key
+      and requester_user_id=auth.uid() and status not in ('closed')
+  ) then
+    raise exception using errcode='42501',message='support conversation is unavailable';
+  end if;
+  insert into public.support_thread_messages(
+    thread_id,author_user_id,author_kind,body,source,idempotency_key,metadata
+  ) values (
+    target_thread_id,auth.uid(),'requester',btrim(target_body),target_source,
+    target_idempotency_key,coalesce(target_metadata,'{}'::jsonb)
+  )
+  on conflict(source,idempotency_key) do update set source=excluded.source
+  returning id into new_message_id;
+  update public.support_threads
+  set status='open',last_message_at=timezone('utc',now()),updated_at=timezone('utc',now())
+  where id=target_thread_id;
+  return new_message_id;
+end
+$;
+
+create or replace function public.append_support_message_attachment(
+  target_thread_id uuid,
+  target_message_id uuid,
+  target_attachment jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare thread_app_key text; message_author uuid; attachment_path text;
+begin
+  select t.app_key into thread_app_key
+  from public.support_threads t where t.id=target_thread_id;
+  if thread_app_key is null then
+    raise exception using errcode='P0002',message='support conversation not found';
+  end if;
+  select m.author_user_id into message_author
+  from public.support_thread_messages m
+  where m.id=target_message_id and m.thread_id=target_thread_id;
+  if message_author is null then
+    raise exception using errcode='P0002',message='support message not found';
+  end if;
+  if not (
+    (exists(select 1 from public.support_threads t where t.id=target_thread_id and t.requester_user_id=auth.uid())
+      and message_author=auth.uid())
+    or public.can_access_support_app(thread_app_key,'manage')
+  ) then
+    raise exception using errcode='42501',message='attachment access is not available';
+  end if;
+  if jsonb_typeof(target_attachment)<>'object' then
+    raise exception using errcode='22023',message='attachment details are invalid';
+  end if;
+  attachment_path := target_attachment->>'path';
+  if coalesce(attachment_path,'')='' or split_part(attachment_path,'/',2)<>target_thread_id::text
+     or split_part(attachment_path,'/',1)<>auth.uid()::text then
+    raise exception using errcode='22023',message='attachment path is invalid';
+  end if;
+  update public.support_thread_messages
+  set attachments=attachments || jsonb_build_array(target_attachment)
+  where id=target_message_id and thread_id=target_thread_id;
+end
+$;
+
 create or replace function public.read_support_app_queue(
   target_app_key text,
   target_status text default null,
@@ -515,6 +630,13 @@ begin
   return saved_id;
 end
 $$;
+
+revoke all on function public.read_my_support_app_threads(text,integer) from public;
+revoke all on function public.reply_to_my_support_app_thread(uuid,text,text,text,text,jsonb) from public;
+revoke all on function public.append_support_message_attachment(uuid,uuid,jsonb) from public;
+grant execute on function public.read_my_support_app_threads(text,integer) to authenticated;
+grant execute on function public.reply_to_my_support_app_thread(uuid,text,text,text,text,jsonb) to authenticated;
+grant execute on function public.append_support_message_attachment(uuid,uuid,jsonb) to authenticated;
 
 revoke all on function public.can_access_support_app(text,text) from public;
 revoke all on function public.create_support_app_thread(text,text,text,text,text,text,text,text,jsonb) from public;
