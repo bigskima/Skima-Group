@@ -14,7 +14,7 @@ export function StoreBrandMark({ size = 138, compact = false }: { size?: number;
     queryFn: async () => {
       const { data, error } = await supabase.rpc("read_published_product_content", {
         target_placement_keys: placements,
-        target_module_key: null,
+        target_module_key: "store",
         target_audience_key: "public",
         target_country_code: null,
         target_region: null,
