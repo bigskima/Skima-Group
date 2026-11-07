@@ -22,6 +22,7 @@ on:
       - "packages/engines/**"
       - "packages/modules/**"
       - "packages/mobile-design/**"
+      - "packages/mobile-experience/**"
       - "supabase/migrations/**"
       - "supabase/functions/**"
       - "deno.json"
