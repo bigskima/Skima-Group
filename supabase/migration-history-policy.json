@@ -154,6 +154,7 @@
     "20261103224827_logistics_earnings_withdrawal_and_driver_payment_controls.sql",
     "20261107190000_store_delivery_eta_repair.sql",
     "20261107191000_managed_driver_radius_coverage.sql",
-    "20261107192000_runtime_worker_scheduler.sql"
+    "20261107192000_runtime_worker_scheduler.sql",
+    "20261107195000_notification_status_event_idempotency_concurrency.sql"
   ]
 }
