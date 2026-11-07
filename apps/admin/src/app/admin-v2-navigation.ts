@@ -651,7 +651,7 @@ function buildIntelligenceWorkspaceNavigation(items: readonly NavigationItem[]):
 }
 
 function buildExperienceWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
-  const orderedKeys = ["content", "policies", "branding", "app-links", "referrals"] as const;
+  const orderedKeys = ["content", "policies", "branding", "app-links", "referrals", "social-links"] as const;
   const visibleItems = orderedKeys
     .map((key) => items.find((item) => item.key === key))
     .filter((item): item is NavigationItem => Boolean(item));
