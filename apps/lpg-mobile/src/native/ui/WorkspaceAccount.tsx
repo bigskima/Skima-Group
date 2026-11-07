@@ -120,8 +120,8 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
         />
         <QuickTile
           icon={CircleHelp}
-          label="Safety & support"
-          detail="Get help or report an issue"
+          label="Help & Support"
+          detail="Chat with SKIMA or report a problem"
           onPress={() => router.push(`/(${group})/support` as never)}
         />
       </View>
