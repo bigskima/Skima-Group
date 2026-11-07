@@ -14,7 +14,6 @@ import { StoreManagementScreen } from "./StoreManagementScreen";
 import { SupportHubScreen } from "./SupportHubScreen";
 import { useSession } from "../session/SessionProvider";
 import { useStoreGuide } from "../onboarding/StoreGuideProvider";
-import { SupportCenter } from "../ui/SupportCenter";
 
 const tabs = [
   { key: "shop", label: "Shop", icon: ShoppingBag },
@@ -28,8 +27,6 @@ export function StoreApp() {
   const guide = useStoreGuide();
   const session = useSession();
   const canManageStore = Boolean(session.context?.platformAdmin?.status === "active" && session.context.permissions.includes("platform.store.manage"));
-  const supportPermissions = session.context?.permissions ?? [];
-  const canManageSupport = supportPermissions.includes("platform.support.manage") || supportPermissions.includes("platform.support.manage.store");
   const { width } = useWindowDimensions();
   const desktop = width >= 960;
   const [page, setPage] = useState<StorePage>("shop");
@@ -97,7 +94,6 @@ export function StoreApp() {
             {page === "referrals" ? <StoreReferralsScreen /> : null}
             {page === "manage" && canManageStore ? <StoreManagementScreen /> : null}
             {page === "support" ? <SupportHubScreen onBack={() => open("account")} /> : null}
-            {page === "support" ? <SupportCenter appKey="store" workspace="customer" supabase={session.supabase} palette={palette} canManage={canManageSupport} /> : null}
           </View>
           {!desktop && isTab ? <View style={[styles.tabs, { backgroundColor: palette.surface, borderTopColor: palette.border }]}>{tabs.map((tab) => navigationItem(tab, "bottom"))}</View> : null}
         </View>
