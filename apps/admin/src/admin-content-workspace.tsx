@@ -298,6 +298,52 @@ const contentSurfacePresets: readonly ContentSurfacePreset[] = [
     publicationMode: "unique",
   },
   {
+    key: "store-customer-home-banner",
+    label: "Store home banner",
+    surface: "SKIMA Store customer home",
+    description: "Publish a Store promotion without replacing shop discovery, cart or order essentials.",
+    recommendedSize: "WebP/PNG, 1920×840px or 16:7",
+    icon: Megaphone,
+    placementKey: "mobile.home.promotion",
+    placementDisplayName: "Mobile home promotion",
+    placementSurfaceKey: "mobile.customer.home",
+    placementContentKind: "promotion",
+    placementAudiences: "customer",
+    publicationKey: "content.home.promotion.store.admin",
+    title: "A better way to shop.",
+    body: "Discover everyday essentials from trusted sellers and follow each order in one place.",
+    moduleKey: "store",
+    audienceKeys: "customer",
+    ctaLabel: "Explore the shop",
+    ctaType: "route",
+    ctaTarget: "/shop",
+    priority: "500",
+    publicationMode: "unique",
+  },
+  {
+    key: "bills-customer-home-banner",
+    label: "Bills home banner",
+    surface: "SKIMA Bills customer home",
+    description: "Publish a Bills promotion while keeping bill categories, payment and activity actions easy to reach.",
+    recommendedSize: "WebP/PNG, 1920×840px or 16:7",
+    icon: Megaphone,
+    placementKey: "mobile.home.promotion",
+    placementDisplayName: "Mobile home promotion",
+    placementSurfaceKey: "mobile.customer.home",
+    placementContentKind: "promotion",
+    placementAudiences: "customer",
+    publicationKey: "content.home.promotion.bills.admin",
+    title: "Bills, made easier.",
+    body: "Pay supported services in a few taps and keep your payment history close.",
+    moduleKey: "bills",
+    audienceKeys: "customer",
+    ctaLabel: "Pay a bill",
+    ctaType: "route",
+    ctaTarget: "/bills",
+    priority: "500",
+    publicationMode: "unique",
+  },
+  {
     key: "welcome-hero",
     label: "Welcome fallback",
     surface: "Fallback welcome image",
@@ -1082,17 +1128,50 @@ export function AdminContentWorkspace() {
               value={publicationForm.priority}
               onChange={(event) => setPublicationForm({ ...publicationForm, priority: event.currentTarget.value })}
             />
-            <TextInput
-              label="CTA route"
-              name="ctaTarget"
-              helperText="Controls where the banner arrow navigates, for example /(customer)/orders/new."
-              value={publicationForm.ctaTarget}
+            <SelectInput
+              label="Show this banner in"
+              name="moduleKey"
+              value={publicationForm.moduleKey}
+              options={publicationAppOptions}
               onChange={(event) => setPublicationForm({
                 ...publicationForm,
-                ctaTarget: event.currentTarget.value,
-                ctaType: event.currentTarget.value.trim() && !publicationForm.ctaType ? "route" : publicationForm.ctaType,
+                moduleKey: event.currentTarget.value,
+                ctaTarget: publicationForm.ctaType === "route" ? "" : publicationForm.ctaTarget,
               })}
             />
+          </div>
+
+          <div className="admin-form-grid">
+            <SelectInput
+              label="CTA action"
+              name="ctaType"
+              value={publicationForm.ctaType}
+              options={ctaOptions}
+              onChange={(event) => setPublicationForm({
+                ...publicationForm,
+                ctaType: event.currentTarget.value,
+                ctaTarget: "",
+              })}
+            />
+            {publicationForm.ctaType === "route" ? (
+              <SelectInput
+                label="In-app destination"
+                name="ctaTarget"
+                value={publicationForm.ctaTarget}
+                options={routeOptionsForModule(publicationForm.moduleKey)}
+                disabled={!publicationForm.moduleKey}
+                onChange={(event) => setPublicationForm({ ...publicationForm, ctaTarget: event.currentTarget.value })}
+              />
+            ) : publicationForm.ctaType === "url" ? (
+              <TextInput
+                label="External HTTPS link"
+                name="ctaTarget"
+                type="url"
+                helperText="Paste a public HTTPS link, or choose No action."
+                value={publicationForm.ctaTarget}
+                onChange={(event) => setPublicationForm({ ...publicationForm, ctaTarget: event.currentTarget.value })}
+              />
+            ) : <div />}
           </div>
 
           <details className="admin-content-advanced">
@@ -1122,24 +1201,10 @@ export function AdminContentWorkspace() {
                 value={publicationForm.audienceKeys}
                 onChange={(event) => setPublicationForm({ ...publicationForm, audienceKeys: event.currentTarget.value })}
               />
-              <TextInput
-                label="Module key"
-                name="moduleKey"
-                value={publicationForm.moduleKey}
-                onChange={(event) => setPublicationForm({ ...publicationForm, moduleKey: event.currentTarget.value })}
-              />
-            </div>
-
-            <div className="admin-form-grid">
-              <SelectInput
-                label="CTA action"
-                name="ctaType"
-                value={publicationForm.ctaType}
-                options={ctaOptions}
-                onChange={(event) => setPublicationForm({ ...publicationForm, ctaType: event.currentTarget.value })}
-              />
               <div />
             </div>
+
+
 
             <div className="admin-form-grid">
               <TextInput
@@ -1236,6 +1301,60 @@ const ctaOptions = [
   { label: "Open URL", value: "url" },
   { label: "Open application", value: "application" },
 ] as const;
+
+const publicationAppOptions = [
+  { label: "All SKIMA apps", value: "" },
+  { label: "SKIMA Refill", value: "lpg" },
+  { label: "SKIMA Store", value: "store" },
+  { label: "SKIMA Logistics", value: "logistics" },
+  { label: "SKIMA Bills", value: "bills" },
+] as const;
+
+const publicationRouteOptions: Record<string, Array<{ label: string; value: string }>> = {
+  lpg: [
+    { label: "Customer home", value: "/(customer)" },
+    { label: "New refill order", value: "/(customer)/orders/new" },
+    { label: "My orders", value: "/(customer)/orders" },
+    { label: "Wallet", value: "/(customer)/wallet" },
+    { label: "Account", value: "/(customer)/account" },
+    { label: "Notifications", value: "/(customer)/notifications" },
+    { label: "Referrals & rewards", value: "/(customer)/referrals" },
+  ],
+  store: [
+    { label: "Shop", value: "/shop" },
+    { label: "My orders", value: "/orders" },
+    { label: "Wallet", value: "/wallet" },
+    { label: "Account", value: "/account" },
+    { label: "Notifications", value: "/notifications" },
+    { label: "Referrals & rewards", value: "/referrals" },
+  ],
+  logistics: [
+    { label: "Customer home", value: "/(customer)" },
+    { label: "Request a service", value: "/(customer)/request" },
+    { label: "My jobs", value: "/(customer)/jobs" },
+    { label: "Bookings", value: "/(customer)/bookings" },
+    { label: "Wallet", value: "/(customer)/wallet" },
+    { label: "Account", value: "/(customer)/account" },
+    { label: "Notifications", value: "/(customer)/notifications" },
+    { label: "Referrals & rewards", value: "/(customer)/referrals" },
+  ],
+  bills: [
+    { label: "Pay bills", value: "/bills" },
+    { label: "Payment activity", value: "/activity" },
+    { label: "Wallet", value: "/wallet" },
+    { label: "Account", value: "/account" },
+    { label: "Notifications", value: "/notifications" },
+    { label: "Referrals & rewards", value: "/referrals" },
+  ],
+};
+
+function routeOptionsForModule(moduleKey: string) {
+  return [
+    { label: moduleKey ? "Choose a destination" : "Choose an app first", value: "" },
+    ...(publicationRouteOptions[moduleKey] ?? []),
+  ];
+}
+
 
 function buildPublicationColumns(
   openEditor: (publication: PublicationRecord) => void,
