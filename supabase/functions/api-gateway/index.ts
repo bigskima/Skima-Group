@@ -3563,7 +3563,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
     let orderQuery = supabase
       .from("order_records")
-      .select("id,service_request_id,module_id,module_version_id,organization_id,branch_id,requester_user_id,status,fulfillment_method,currency_code,subtotal_amount,fee_amount,discount_amount,tax_amount,total_amount,order_payload,metadata,accepted_at,preparing_at,ready_at,fulfilled_at,completed_at,cancelled_at,created_at,updated_at,line_items:order_line_items(id,line_number,item_id,variant_id,quantity,unit_amount,line_amount,currency_code,fulfillment_status,item_snapshot)")
+      .select("id,service_request_id,module_id,module_version_id,organization_id,branch_id,requester_user_id,status,fulfillment_method,currency_code,subtotal_amount,fee_amount,discount_amount,tax_amount,total_amount,order_payload,metadata,accepted_at,preparing_at,ready_at,fulfilled_at,completed_at,cancelled_at,created_at,updated_at,line_items:order_line_items(id,line_number,item_id,variant_id,quantity,unit_amount,line_amount,currency_code,fulfillment_status,item_snapshot),events:order_events(id,event_type_key,from_status,to_status,metadata,created_at)")
       .eq("module_id", moduleResult.data.id)
       .eq("requester_user_id", authResult.user.id)
       .eq("order_payload->>channel", "skima_store")
