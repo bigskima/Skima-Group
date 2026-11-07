@@ -75,7 +75,7 @@ export function StoreManagementScreen() {
   const { palette } = useAppTheme();
   const client = useQueryClient();
   const isStoreManager = Boolean(
-    session.context?.platformAdmin &&
+    session.context?.platformAdmin?.status === "active" &&
     session.context.permissions.includes("platform.store.manage"),
   );
 
@@ -263,8 +263,6 @@ export function StoreManagementScreen() {
   if (!store.storeModule) {
     return <Page><State title="Store module unavailable" body="The Store module is not active. Contact a platform administrator." retry={() => void refresh()} /></Page>;
   }
-
-  const cancellationReason = cancellationReasons.find((reason) => reason.key === cancelReasonKey) ?? cancellationReasons[0];
 
   return (
     <Page refreshControl={<RefreshControl refreshing={store.items.isRefetching || ordersQuery.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
