@@ -13,6 +13,9 @@
       ],
       "zod": [
         "./node_modules/zod"
+      ],
+      "@skima/mobile-experience/*": [
+        "../../packages/mobile-experience/src/*"
       ]
     }
   },
