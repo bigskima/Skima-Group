@@ -1,3 +1,4 @@
+import { SocialMediaSection } from "./SocialMediaSection";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -124,6 +125,7 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
           onPress={() => router.push(`/(${group})/support` as never)}
         />
       </View>
+      <SocialMediaSection supabase={session.supabase} surface={group} palette={theme.palette} />
     </Screen>
   );
 }
