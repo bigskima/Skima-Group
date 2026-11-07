@@ -83,7 +83,7 @@ export function BillsAuthScreen({ initialMode = "login" }: { initialMode?: Mode 
               </View>
               <View style={styles.brandCopy}>
                 <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
-                <Text style={[styles.brandCaption, { color: palette.muted }]}>{kind.toUpperCase()}</Text>
+                <Text style={[styles.brandCaption, { color: palette.muted }]}>BILLS</Text>
               </View>
             </View>
             <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
