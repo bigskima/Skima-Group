@@ -17,7 +17,6 @@ export function navigateStoreRoute(route: unknown) {
     "/account": "account", "/top-up": "top-up", "/withdraw": "withdraw",
     "/notifications": "notifications", "/support": "support",
     "/referrals": "referrals",
-    "/support": "support",
     "/manage": "manage", "/store/manage": "manage",
   };
   const page = pages[path];
