@@ -423,12 +423,20 @@ create index if not exists push_notification_outbox_queue_idx
 
 alter table public.push_device_registrations enable row level security;
 alter table public.push_notification_outbox enable row level security;
-alter table public.push_notification_outbox enable row level security;
 drop policy if exists push_device_registrations_owner_read on public.push_device_registrations;
 create policy push_device_registrations_owner_read on public.push_device_registrations
 for select to authenticated using (user_id = auth.uid());
 revoke all on table public.push_device_registrations from anon, authenticated;
 grant select on public.push_device_registrations to authenticated;
+
+-- This queue contains private message bodies and device tokens; only the
+-- trusted service role may access it.
+drop policy if exists push_notification_outbox_service_role_all on public.push_notification_outbox;
+create policy push_notification_outbox_service_role_all
+on public.push_notification_outbox
+for all to service_role
+using (true)
+with check (true);
 revoke all on table public.push_notification_outbox from anon, authenticated;
 
 create or replace function public.register_skima_push_device(
