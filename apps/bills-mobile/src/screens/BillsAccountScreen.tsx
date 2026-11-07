@@ -1,3 +1,4 @@
+import { SocialMediaSection } from "../ui/SocialMediaSection";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -109,6 +110,7 @@ export function BillsAccountScreen({ onOpenPage }: { onOpenPage: (page: any) => 
           <ChevronRight size={16} color={palette.muted} />
         </Pressable>
       </View>
+      <SocialMediaSection supabase={session.supabase} surface="bills" palette={palette} />
       {notice ? <Notice text={notice} tone={notice.includes("could not") ? "error" : "success"} /> : null}
       <ActionButton label="Sign out" variant="danger" onPress={() => setConfirmSignOut(true)} />
 
