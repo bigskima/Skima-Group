@@ -5,7 +5,7 @@ This implementation uses one Supabase notification queue and Expo Push for Refil
 ## What is implemented
 
 - Each app registers a signed-in user's Expo push token against an app key and installation ID.
-- An existing notification_messages row on the push channel is routed to the matching app installation when its payload contains app_key (or appKey), title and body.
+- An existing user-targeted notification_messages row on either the in_app or push channel is routed to the matching app installation when the payload identifies one SKIMA app and includes a title and body. OTP, organisation and unscoped messages are not forwarded.
 - App-specific Android channels and deep-link routes are carried in the push payload.
 - The protected skima-push-dispatch Edge Function sends queued notifications, records Expo tickets, retries temporary failures, checks provider receipts and disables tokens reported as unregistered.
 - Android app configuration reads the app's Google Services file path from its EAS environment. No Firebase service-account key or JSON credential is committed.
@@ -14,14 +14,14 @@ This implementation uses one Supabase notification queue and Expo Push for Refil
 
 Each app has a separate Expo project. Configure the correct EAS project ID in that app's EAS environment:
 
-| App | EAS project ID variable | Google Services file variable |
+| App | EAS project ID variable | Private Firebase file secret |
 |---|---|---|
-| Refill | Existing project ID in app config | SKIMA_REFILL_GOOGLE_SERVICES_FILE |
-| Store | EXPO_PUBLIC_STORE_EAS_PROJECT_ID | SKIMA_STORE_GOOGLE_SERVICES_FILE |
-| Logistics | EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID | SKIMA_LOGISTICS_GOOGLE_SERVICES_FILE |
-| Bills | EXPO_PUBLIC_BILLS_EAS_PROJECT_ID | SKIMA_BILLS_GOOGLE_SERVICES_FILE |
+| Refill | Existing project ID in app config | SKIMA_REFILL_GOOGLE_SERVICES_JSON_BASE64 |
+| Store | EXPO_PUBLIC_STORE_EAS_PROJECT_ID | SKIMA_STORE_GOOGLE_SERVICES_JSON_BASE64 |
+| Logistics | EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID | SKIMA_LOGISTICS_GOOGLE_SERVICES_JSON_BASE64 |
+| Bills | EXPO_PUBLIC_BILLS_EAS_PROJECT_ID | SKIMA_BILLS_GOOGLE_SERVICES_JSON_BASE64 |
 
-For Android, create a separate Firebase Android app for each package name. Download its matching google-services.json and upload it as a private EAS file/secret for that app. Do not put one app's JSON into another app's build. Set that app's file variable to its private EAS file path, or use ./google-services.json only when the file is intentionally present in that app's private build context.
+For Android, create a separate Firebase Android app for each package name. Download its matching google-services.json and store its base64-encoded contents in that app's private EAS environment secret shown above. The EAS pre-install hook materialises it as that app's local google-services.json and verifies the package name before Expo config is evaluated. Do not put one app's JSON into another app's build. The optional SKIMA_<APP>_GOOGLE_SERVICES_FILE variable can select a different private build path when needed.
 
 For remote FCM delivery, enable Firebase Cloud Messaging HTTP v1 and upload the matching Firebase service-account JSON to that Expo project using EAS credentials. The service-account JSON is private and must never be committed to this repository. Each app needs its own Android package, Firebase app and matching credentials.
 
