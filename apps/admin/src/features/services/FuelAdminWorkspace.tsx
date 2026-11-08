@@ -415,8 +415,62 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
       </section>
 
       <section className="sk-panel catalog-v2__form-card">
-        <div className="sk-panel__header"><div><p className="admin-section-kicker">Branch-level offer</p><h2>Station prices and charges</h2></div><StatusBadge>Per product · Per currency</StatusBadge></div>
-        <p className="skima-muted">Each branch and product has independent litre limits and prices. Container charges, delivery, platform fee and tax are stored with the station offer and included in the server-calculated customer quote.</p>
+        <div className="sk-panel__header">
+          <div><p className="admin-section-kicker">Global Fuel pricing</p><h2>SKIMA markup per litre</h2></div>
+          <StatusBadge>Independent · Per product · Per currency</StatusBadge>
+        </div>
+        <p className="skima-muted">These are SKIMA's own per-litre charges. They are separate from each station's selling price and any additional fixed order charge. The same live value is included in the customer's server-generated quote.</p>
+        <div className="admin-inline-actions">
+          {CURRENCIES.map((currency) => (
+            <Button
+              key={currency.value}
+              size="sm"
+              variant={feeCurrencyCode === currency.value ? "primary" : "outline"}
+              onClick={() => setFeeCurrencyCode(currency.value)}
+            >{currency.value}</Button>
+          ))}
+        </div>
+        {platformFees.isLoading ? <LoadingState label="Loading Fuel markup policies" /> : null}
+        {platformFees.error ? (
+          <ErrorState title="Fuel markup settings unavailable" message={catalogError(platformFees.error)} onRetry={() => void platformFees.refetch()} />
+        ) : null}
+        {!platformFees.isLoading && !platformFees.error ? (
+          <div className="fuel-admin-list">
+            {PRODUCT_KEYS.map((productKey) => {
+              const fee = (platformFees.data ?? []).find((record) =>
+                catalogText(record, "product_key") === productKey &&
+                catalogText(record, "currency_code") === feeCurrencyCode
+              );
+              const liveAmount = fee ? catalogNumber(fee, "amount_per_litre") : 0;
+              return (
+                <article className="fuel-admin-list-row" key={productKey}>
+                  <div>
+                    <strong>{productName(productKey, productRows)}</strong>
+                    <small>{productKey} · Live {formatMoney(liveAmount, feeCurrencyCode)}/L</small>
+                  </div>
+                  <div className="fuel-admin-dispatch-actions">
+                    <TextInput
+                      label={"SKIMA markup (" + feeCurrencyCode + "/L)"}
+                      type="number"
+                      value={feeDrafts[productKey] ?? String(liveAmount)}
+                      onChange={(event) => setFeeDrafts((current) => ({ ...current, [productKey]: event.currentTarget.value }))}
+                    />
+                    <Button
+                      isLoading={saveFuelFee.isPending}
+                      disabled={!fee || saveFuelFee.isPending || feeDrafts[productKey] === undefined}
+                      onClick={() => void submitFuelFee(productKey)}
+                    >Save & apply</Button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header"><div><p className="admin-section-kicker">Branch offer administration</p><h2>Station price & commercial setup</h2></div><StatusBadge>Per branch · Per product · Per currency</StatusBadge></div>
+        <p className="skima-muted">Stations maintain their own day-to-day selling price, litre limits and locally supported fulfilment modes. Use this administrator tool for initial offer setup or a supported commercial intervention. SKIMA's per-litre markup is managed separately above.</p>
         <div className="skima-form-grid">
           <SelectInput label="Station branch" value={offerForm.branchId} onChange={(event) => setOfferForm({ ...offerForm, branchId: event.currentTarget.value })} options={branchOptions} />
           <SelectInput label="Fuel product" value={offerForm.productKey} onChange={(event) => setOfferForm({ ...offerForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
