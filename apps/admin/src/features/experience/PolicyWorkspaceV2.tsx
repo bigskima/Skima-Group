@@ -199,7 +199,7 @@ export function PolicyWorkspaceV2() {
       render: (record) => (
         <span>
           <strong>{record.title}</strong><br />
-          <small>{normalizeStatusLabel(record.audience)} · {record.serviceScope.toUpperCase()}</small>
+          <small>{normalizeStatusLabel(record.audience)} · {serviceScopeLabel(record.serviceScope)}</small>
         </span>
       ),
     },
@@ -242,7 +242,7 @@ export function PolicyWorkspaceV2() {
       <PageHeader
         eyebrow="Experience · Terms & Policies"
         title="Terms & Policies"
-        description="Work through policy documents, versions and acceptance status one layer at a time instead of managing everything on one long page."
+        description="Manage the customer terms for Refill, Logistics, Store and Bills, alongside partner and platform policies. Edit drafts, publish new versions and review recorded customer acceptance."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void query.refetch()}>Refresh</Button>}
       />
 
@@ -581,6 +581,11 @@ function PublishDialog({
       </form>
     </Dialog>
   );
+}
+
+function serviceScopeLabel(scope: string) {
+  const labels: Record<string, string> = { lpg: "REFILL", logistics: "LOGISTICS", store: "STORE", bills: "BILLS", platform: "PLATFORM" };
+  return labels[scope.toLowerCase()] ?? scope.toUpperCase();
 }
 
 function nullable(value: string) {
