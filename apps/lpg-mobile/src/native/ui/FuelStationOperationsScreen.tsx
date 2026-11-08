@@ -40,8 +40,19 @@ export function FuelStationOperationsScreen() {
   const { palette } = useAppTheme();
   const stationInventory = useStationInventory();
   const station = nestedRecord(stationInventory.data, "station");
-  const stationBranchId = firstString(station, ["stationBranchId", "station_branch_id", "branchId", "branch_id"]) ?? "";
-  const organizationId = firstString(station, ["organizationId", "organization_id"]) ?? "";
+  // stationBranchId in the LPG inventory model is the LPG station-profile ID,
+  // not the organization_branches.id used by Fuel offers and inventory.
+  const stationProfileId = firstString(station, ["stationBranchId", "station_branch_id"]) ?? "";
+  const stationContext = useGatewayQuery({
+    key: ["fuel", "station", "branch-context", stationProfileId],
+    path: `/runtime/fuel/station-context?stationProfileId=${encodeURIComponent(stationProfileId)}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(stationProfileId),
+    refetchInterval: 60000,
+  });
+  const resolvedStationContext = stationContext.data?.[0] ?? null;
+  const stationBranchId = firstString(resolvedStationContext, ["branch_id"]) ?? "";
+  const organizationId = firstString(resolvedStationContext, ["organization_id"]) ?? "";
   const products = useGatewayQuery({
     key: ["fuel", "products"],
     path: "/runtime/fuel/products",
@@ -311,7 +322,7 @@ export function FuelStationOperationsScreen() {
 
   const refreshAll = async () => {
     await Promise.allSettled([
-      stationInventory.refetch(), operations.refetch(), storage.refetch(), offers.refetch(), modeControls.refetch(), currencies.refetch(),
+      stationInventory.refetch(), stationContext.refetch(), operations.refetch(), storage.refetch(), offers.refetch(), modeControls.refetch(), currencies.refetch(),
       containerTypes.refetch(), containers.refetch(), qualifications.refetch(),
       reservations.refetch(), allocations.refetch(), vehicles.refetch(),
     ]);
@@ -683,8 +694,8 @@ export function FuelStationOperationsScreen() {
     }, "All filled containers have been handed to the assigned driver. Delivery has started automatically.");
   };
 
-  const loading = stationInventory.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
-  const failed = Boolean(stationInventory.error || operations.error || storage.error || offers.error || globalModeControlsUnavailable);
+  const loading = stationInventory.isPending || stationContext.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
+  const failed = Boolean(stationInventory.error || stationContext.error || operations.error || storage.error || offers.error || globalModeControlsUnavailable);
   const stageTone = (stage: string): "neutral" | "brand" | "success" | "warning" | "danger" => {
     if (["completed", "inspection_passed"].includes(stage)) return "success";
     if (["cancelled", "exception"].includes(stage)) return "danger";
@@ -699,11 +710,19 @@ export function FuelStationOperationsScreen() {
       subtitle="Accept paid orders, reserve tank stock, fill and measure containers, then assign an approved driver and vehicle."
       action={<AppButton label="Back to station" size="sm" variant="ghost" onPress={() => router.replace("/(station)" as never)} />}
     >
-      {!stationBranchId ? (
+      {!stationProfileId ? (
         <EmptyState
-          title="Station branch not resolved"
+          title="Station profile not resolved"
           description="Complete station workspace setup before processing Fuel orders."
           action={<AppButton label="Refresh station" variant="secondary" onPress={() => void refreshAll()} />}
+        />
+      ) : !stationBranchId && !stationContext.isPending ? (
+        <EmptyState
+          title="Fuel branch could not be resolved"
+          description={stationContext.error
+            ? friendlyError(stationContext.error, "SKIMA could not resolve this station's Fuel branch.")
+            : "This approved LPG station profile is not currently linked to an active organization branch. Contact SKIMA Admin before configuring Fuel offers or stock."}
+          action={<AppButton label="Retry branch lookup" variant="secondary" onPress={() => void stationContext.refetch()} />}
         />
       ) : loading ? (
         <View style={styles.loading}><ActivityIndicator /><Text style={[styles.muted, { color: palette.muted }]}>Loading Fuel station operations…</Text></View>
