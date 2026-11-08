@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Package, Plus, RefreshCcw, Save, ShieldCheck, Truck, Warehouse } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { createClientIdempotencyKey } from "@skima/frontend-core";
@@ -54,6 +54,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const client = useQueryClient();
   const [offerForm, setOfferForm] = useState<OfferForm>(empty);
   const [selectedModes, setSelectedModes] = useState<string[]>([...FULFILLMENT_MODES]);
+  const [feeCurrencyCode, setFeeCurrencyCode] = useState("NGN");
+  const [feeDrafts, setFeeDrafts] = useState<Record<string, string>>({});
   const [storageForm, setStorageForm] = useState({
     branchId: "", productKey: "fuel.pms", key: "", name: "", capacity: "", reserve: "0", status: "active",
   });
@@ -78,8 +80,22 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const containers = useFuelQuery(api, status, "containers", "/runtime/fuel/containers");
   const qualifications = useFuelQuery(api, status, "qualifications", "/runtime/fuel/driver-qualifications");
   const dispatchQueue = useFuelQuery(api, status, "dispatch-queue", "/runtime/fuel/orders/operations?stage=ready_for_driver");
+  const platformFees = useFuelQuery(api, status, "platform-fees", "/runtime/fuel/platform-fees");
 
-  const queries = [products, branches, offers, tanks, containerTypes, containers, qualifications, dispatchQueue];
+  useEffect(() => {
+    if (!platformFees.data) return;
+    setFeeDrafts(Object.fromEntries(
+      PRODUCT_KEYS.map((productKey) => {
+        const fee = platformFees.data.find((record) =>
+          catalogText(record, "product_key") === productKey &&
+          catalogText(record, "currency_code") === feeCurrencyCode
+        );
+        return [productKey, fee ? String(catalogNumber(fee, "amount_per_litre")) : "0"];
+      }),
+    ));
+  }, [platformFees.data, feeCurrencyCode]);
+
+  const queries = [products, branches, offers, tanks, containerTypes, containers, qualifications, dispatchQueue, platformFees];
   const loading = queries.some((query) => query.isLoading);
   const failed = queries.find((query) => query.error)?.error;
   const branchOptions = useMemo(() => [
@@ -106,7 +122,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   };
   const toggleProduct = useFuelMutation(api, "/runtime/fuel/products", invalidate, setNotice, setActionError);
   const bulkToggleProducts = useFuelMutation(api, "/runtime/fuel/products", invalidate, setNotice, setActionError);
-  const saveOffer = useFuelMutation(api, "/runtime/fuel/offers", invalidate, setNotice, setActionError);
+  const saveOffer = useFuelMutation(api, "/runtime/fuel/admin-pricing/branch-offer", invalidate, setNotice, setActionError);
+  const saveFuelFee = useFuelMutation(api, "/runtime/fuel/platform-fees", invalidate, setNotice, setActionError);
   const saveTank = useFuelMutation(api, "/runtime/fuel/storage", invalidate, setNotice, setActionError);
   const saveContainerType = useFuelMutation(api, "/runtime/fuel/container-types", invalidate, setNotice, setActionError);
   const registerContainer = useFuelMutation(api, "/runtime/fuel/containers/register", invalidate, setNotice, setActionError);
@@ -132,6 +149,24 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         ? "All fuel products globally enabled by a platform administrator"
         : "All fuel products globally disabled by a platform administrator",
       idempotencyKey: createClientIdempotencyKey("admin.fuel.products.bulk", status),
+    });
+  };
+
+  const submitFuelFee = async (productKey: string) => {
+    const amountPerLitre = Number(feeDrafts[productKey] ?? "");
+    if (!Number.isFinite(amountPerLitre) || amountPerLitre < 0) {
+      setActionError("Enter a valid non-negative SKIMA fee per litre.");
+      return;
+    }
+    await saveFuelFee.mutateAsync({
+      productKey,
+      currencyCode: feeCurrencyCode,
+      amountPerLitre,
+      reason: "Fuel per-litre platform markup configured by an authorized SKIMA Fuel administrator.",
+      idempotencyKey: createClientIdempotencyKey(
+        "admin.fuel.platform-fee",
+        productKey + ":" + feeCurrencyCode + ":" + amountPerLitre,
+      ),
     });
   };
 
