@@ -321,7 +321,7 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
           )}
         </>
       )}
-      {approvedDrivers.length === 0 && !driversQuery.isPending ? (
+      {approvedDrivers.length === 0 && !driversQuery.isPending && !driversQuery.error ? (
         <Card padding="md">
           <Text style={[styles.copy, { color: palette.muted }]}>No SKIMA-approved driver profiles are linked to this company yet. Invite or onboard a driver first; vehicle assignment opens when the driver's identity has been approved.</Text>
         </Card>
