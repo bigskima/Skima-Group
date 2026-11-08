@@ -482,7 +482,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <TextInput label="Container rental charge (per container)" type="number" value={offerForm.rentalAmount} onChange={(event) => setOfferForm({ ...offerForm, rentalAmount: event.currentTarget.value })} />
           <TextInput label="Refundable rental deposit (per container)" type="number" value={offerForm.depositAmount} onChange={(event) => setOfferForm({ ...offerForm, depositAmount: event.currentTarget.value })} />
           <TextInput label="Driver / delivery fee" type="number" value={offerForm.deliveryFee} onChange={(event) => setOfferForm({ ...offerForm, deliveryFee: event.currentTarget.value })} />
-          <TextInput label="Platform fee" type="number" value={offerForm.platformFee} onChange={(event) => setOfferForm({ ...offerForm, platformFee: event.currentTarget.value })} />
+          <TextInput label="Additional fixed platform fee (per order)" type="number" value={offerForm.platformFee} onChange={(event) => setOfferForm({ ...offerForm, platformFee: event.currentTarget.value })} />
           <TextInput label="Tax rate (%)" type="number" value={offerForm.taxRate} onChange={(event) => setOfferForm({ ...offerForm, taxRate: event.currentTarget.value })} />
           <SelectInput label="Offer status" value={offerForm.status} onChange={(event) => setOfferForm({ ...offerForm, status: event.currentTarget.value })} options={[{ label: "Draft", value: "draft" }, { label: "Active", value: "active" }, { label: "Paused", value: "paused" }]} />
         </div>
@@ -507,7 +507,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
 
       <div className="fuel-admin-two-column">
         <section className="sk-panel catalog-v2__form-card">
-          <div className="sk-panel__header"><div><p className="admin-section-kicker">Station inventory</p><h2>Configure fuel tanks</h2></div><Warehouse size={21} /></div>
+          <div className="sk-panel__header"><div><p className="admin-section-kicker">Station inventory oversight</p><h2>Fuel tanks & stock records</h2></div><Warehouse size={21} /></div>
+          <p className="skima-muted">Station managers should normally create tanks, record supplier receipts and reconcile physical stock in their own Fuel Operations workspace. Admins retain setup and oversight access for onboarding and support.</p>
           <div className="skima-form-grid">
             <SelectInput label="Station branch" value={storageForm.branchId} onChange={(event) => setStorageForm({ ...storageForm, branchId: event.currentTarget.value })} options={branchOptions} />
             <SelectInput label="Product" value={storageForm.productKey} onChange={(event) => setStorageForm({ ...storageForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
