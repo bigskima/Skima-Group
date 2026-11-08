@@ -76,6 +76,7 @@ Deno.test("Fuel resolves the LPG station profile ID to the canonical organizatio
 Deno.test("missing global fulfilment settings are not misrepresented as disabled", () => {
   includes(station, "globalModeControlsUnavailable", "station detects missing global control data");
   includes(station, "modeControls.error", "station checks the mode-control request error");
-  includes(station, "No mode has been assumed disabled", "station distinguishes an unavailable control read from an admin decision");
   includes(station, '!globalKnown ? "Unavailable" : !globallyEnabled ? "Globally off"', "an unreturned control is not labelled Globally Off");
+  includes(station, "temporarily unavailable. You can still manage tanks and physical stock", "station inventory remains usable when global mode policy cannot be fetched");
+  excludes(station, "const failed = Boolean(stationInventory.error || stationContext.error || operations.error || storage.error || offers.error || globalModeControlsUnavailable)", "a global mode-control request does not take the whole station workspace offline");
 });
