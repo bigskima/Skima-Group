@@ -3,9 +3,11 @@ import {
   customerTabs,
 } from "../../src/native/navigation/WorkspaceTabs";
 import { WorkspaceGate } from "../../src/native/navigation/WorkspaceGate";
+import { RefillCustomerPolicyGate } from "../../src/native/policies/RefillCustomerPolicyGate";
 export default function Layout() {
   return (
     <WorkspaceGate workspace="customer">
+      <RefillCustomerPolicyGate>
       <WorkspaceTabs
         guideScope="customer"
         tabs={customerTabs}
@@ -52,6 +54,7 @@ export default function Layout() {
           "referrals",
         ]}
       />
+      </RefillCustomerPolicyGate>
     </WorkspaceGate>
   );
 }
