@@ -378,4 +378,59 @@ $;
 revoke all on function public.read_fuel_station_branch_context(uuid) from public,anon;
 grant execute on function public.read_fuel_station_branch_context(uuid) to authenticated;
 
+
+-- The underlying branch-offer RPC also serves station operators. Wrap it in
+-- a platform-only guard before exposing the full commercial editor to Admin.
+create or replace function public.configure_fuel_admin_branch_product_offer(
+  target_branch_id uuid,
+  target_product_key text,
+  target_currency_code text,
+  target_price_per_litre numeric,
+  target_minimum_litres numeric,
+  target_maximum_litres numeric,
+  target_container_purchase_amount numeric,
+  target_container_rental_amount numeric,
+  target_refundable_deposit_amount numeric,
+  target_driver_delivery_fee_amount numeric,
+  target_platform_fee_amount numeric,
+  target_tax_rate_percent numeric,
+  target_fulfillment_modes text[],
+  target_status text,
+  target_idempotency_key text,
+  target_metadata jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+begin
+  if auth.role()<>'service_role' and not public.can_manage_fuel_platform() then
+    raise exception using errcode='42501',message='Platform Fuel management permission is required for administrator branch-offer changes';
+  end if;
+
+  return public.configure_fuel_branch_product_offer(
+    target_branch_id,
+    target_product_key,
+    target_currency_code,
+    target_price_per_litre,
+    target_minimum_litres,
+    target_maximum_litres,
+    target_container_purchase_amount,
+    target_container_rental_amount,
+    target_refundable_deposit_amount,
+    target_driver_delivery_fee_amount,
+    target_platform_fee_amount,
+    target_tax_rate_percent,
+    target_fulfillment_modes,
+    target_status,
+    target_idempotency_key,
+    target_metadata
+  );
+end;
+$;
+
+revoke all on function public.configure_fuel_admin_branch_product_offer(uuid,text,text,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,text[],text,text,jsonb) from public,anon;
+grant execute on function public.configure_fuel_admin_branch_product_offer(uuid,text,text,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,text[],text,text,jsonb) to authenticated;
+
 commit;
