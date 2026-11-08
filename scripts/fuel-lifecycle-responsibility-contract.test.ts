@@ -17,6 +17,8 @@ Deno.test("Fuel markup policies have one audited source and are visible to Fuel 
   includes(migration, "public.read_fuel_product_fee_schedule()", "authenticated customers and admin workspaces read a shared fee schedule");
   includes(migration, "public.set_fuel_product_fee(", "Fuel admins update fees through an audited policy-version RPC");
   includes(migration, "public.can_manage_fuel_platform()", "only authorized Fuel platform administrators can change markups");
+  includes(migration, "public.configure_fuel_admin_branch_product_offer(", "full commercial offer editing has a platform-only guard");
+  includes(migration, "Platform Fuel management permission is required for administrator branch-offer changes", "station managers cannot use the admin commercial offer endpoint");
   for (const productKey of ["fuel.pms", "fuel.ago", "fuel.dpk"]) {
     includes(migration, productKey, `${productKey} remains independently configured`);
   }
@@ -36,7 +38,7 @@ Deno.test("station offer editing cannot overwrite platform-owned commercial sett
   includes(runtime, 'routePath === "/runtime/fuel/offers"', "station offer endpoint remains available");
   includes(runtime, "configure_fuel_station_product_offer", "station updates use the permission-scoped station RPC");
   includes(runtime, 'routePath === "/runtime/fuel/admin-pricing/branch-offer"', "admin commercial offer setup has a distinct endpoint");
-  includes(runtime, "configure_fuel_branch_product_offer", "admin branch offer uses the full validated commercial RPC");
+  includes(runtime, "configure_fuel_admin_branch_product_offer", "admin branch offer uses the full validated platform-only commercial RPC");
   includes(admin, '"/runtime/fuel/admin-pricing/branch-offer"', "admin UI uses the admin-only commercial route");
   includes(station, 'path: "/runtime/fuel/offers"', "station UI stays on the restricted station route");
   includes(station, "Station price per litre", "station edits its own supply/selling price");
