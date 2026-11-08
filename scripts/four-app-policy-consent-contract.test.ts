@@ -3,8 +3,9 @@ const decoder = new TextDecoder();
 async function read(path: string) {
   return decoder.decode(await Deno.readFile(path));
 }
-const [refillGate, refillReader, logisticsGate, storeGate, billsGate, docsMigration, versionsMigration, admin] = await Promise.all([
+const [refillGate, refillApi, refillReader, logisticsGate, storeGate, billsGate, docsMigration, versionsMigration, admin] = await Promise.all([
   read("apps/lpg-mobile/src/native/policies/RefillCustomerPolicyGate.tsx"),
+  read("apps/lpg-mobile/src/native/api/policies.ts"),
   read("apps/lpg-mobile/src/native/ui/PolicyDocumentScreen.tsx"),
   read("apps/logistics-mobile/src/policies/PolicyConsentGate.tsx"),
   read("apps/store-mobile/src/policies/PolicyConsentGate.tsx"),
@@ -15,7 +16,7 @@ const [refillGate, refillReader, logisticsGate, storeGate, billsGate, docsMigrat
 ]);
 Deno.test("all four customer apps require their own current accepted policy", () => {
   for (const [source, key] of [
-    [refillGate, "policy.customer.terms"],
+    [refillGate + refillApi, "policy.customer.terms"],
     [logisticsGate, "policy.customer.logistics.terms"],
     [storeGate, "policy.customer.store.terms"],
     [billsGate, "policy.customer.bills.terms"],
