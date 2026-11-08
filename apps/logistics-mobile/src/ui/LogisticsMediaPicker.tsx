@@ -1,5 +1,4 @@
 import * as ImagePicker from "expo-image-picker";
-import { File, UploadType } from "expo-file-system";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import React, { useState } from "react";
@@ -11,6 +10,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
 import { Card } from "./Card";
+import { uploadSignedAsset } from "../utils/uploadSignedAsset";
 
 type PublicEntity = "logistics_company" | "logistics_vehicle" | "driver";
 type PublicRole =
@@ -104,16 +104,12 @@ export function LogisticsMediaPicker(props: {
         },
         UploadSessionSchema,
       );
-      const file = new File(image.uri);
-      const uploaded = await file.createUploadTask(uploadSession.signedUrl, {
-        httpMethod: "PUT",
-        uploadType: UploadType.BINARY_CONTENT,
-        mimeType: contentType,
-        headers: { "content-type": contentType },
-        sessionType: "background",
-        onProgress: ({ bytesSent, totalBytes }) =>
-          setProgress(totalBytes > 0 ? Math.min(1, bytesSent / totalBytes) : 0),
-      }).uploadAsync();
+      const uploaded = await uploadSignedAsset({
+        uri: image.uri,
+        signedUrl: uploadSession.signedUrl,
+        contentType,
+        onProgress: setProgress,
+      });
       if (uploaded.status < 200 || uploaded.status >= 300) {
         throw new Error(`The protected image upload was rejected (${uploaded.status}).`);
       }
@@ -121,7 +117,7 @@ export function LogisticsMediaPicker(props: {
         "/runtime/media/assets",
         {
           assetTypeKey: "media.image.public",
-          byteSize: file.size,
+          byteSize: uploaded.byteSize,
           contentType,
           idempotencyKey: `${idempotencyKey}:asset`,
           metadata: { originalFileName: image.fileName ?? `logistics-image.${extension}` },
