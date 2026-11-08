@@ -60,6 +60,17 @@ Deno.test("station tank setup, receipts and corrections have audited stock workf
   includes(customer, "requestedLitres > availableStockLitres", "customer checkout blocks orders above available tank stock");
 });
 
+Deno.test("Fuel resolves the LPG station profile ID to the canonical organization branch ID", () => {
+  includes(migration, "public.read_fuel_station_branch_context(", "authorized station branch resolver exists");
+  includes(migration, "public.can_read_lpg_station_inventory(target_station_profile_id)", "branch resolver preserves the existing station-inventory access check");
+  includes(migration, "branch.id=station.branch_id", "branch resolver returns organization_branches.id rather than the LPG profile ID");
+  includes(runtime, 'routePath === "/runtime/fuel/station-context"', "Fuel runtime exposes the station context resolver");
+  includes(runtime, "read_fuel_station_branch_context", "runtime invokes the authorized database resolver");
+  includes(station, 'path: `/runtime/fuel/station-context?stationProfileId=${encodeURIComponent(stationProfileId)}`', "station uses the LPG profile ID only as the resolver input");
+  includes(station, 'firstString(resolvedStationContext, ["branch_id"])', "Fuel reads the canonical organization branch ID from the resolver");
+  excludes(station, 'firstString(station, ["stationBranchId", "station_branch_id", "branchId", "branch_id"])', "Fuel does not use the LPG profile ID as an organization branch ID");
+});
+
 Deno.test("missing global fulfilment settings are not misrepresented as disabled", () => {
   includes(station, "globalModeControlsUnavailable", "station detects missing global control data");
   includes(station, "modeControls.error", "station checks the mode-control request error");
