@@ -65,6 +65,18 @@ export function FuelOrderScreen() {
     schema: RecordArraySchema,
     refetchInterval: 30000,
   });
+  const platformFees = useGatewayQuery({
+    key: ["fuel", "platform-fees"],
+    path: "/runtime/fuel/platform-fees",
+    schema: RecordArraySchema,
+    refetchInterval: 30000,
+  });
+  const stockAvailability = useGatewayQuery({
+    key: ["fuel", "stock-availability"],
+    path: "/runtime/fuel/customer-stock-availability",
+    schema: RecordArraySchema,
+    refetchInterval: 15000,
+  });
   const managedPrices = useGatewayQuery({
     key: ["fuel", "managed-prices"],
     path: "/runtime/fuel/managed-prices",
@@ -187,17 +199,46 @@ export function FuelOrderScreen() {
   const pricePerLitre = fulfillmentMode === "skima_managed"
     ? managedRetailPricePerLitre
     : stationPricePerLitre;
+  const productFeeRecord = (platformFees.data ?? []).find((fee) =>
+    firstString(fee, ["product_key"]) === selectedProductKey &&
+    firstString(fee, ["currency_code"]) === currencyCode
+  );
+  const platformFeePerLitre = firstNumber(productFeeRecord, ["amount_per_litre"]) ?? 0;
+  const selectedStockAvailability = stockAvailability.data?.find((record) =>
+    firstString(record, ["branch_id"]) === branchId &&
+    firstString(record, ["product_key"]) === selectedProductKey &&
+    firstString(record, ["currency_code"]) === currencyCode
+  ) ?? null;
+  const availableStockLitres = firstNumber(selectedStockAvailability, ["available_litres"]) ?? 0;
   const containerCost = selectedOffer
     ? firstNumber(selectedOffer, [containerMode === "purchase" ? "container_purchase_amount" : "container_rental_amount"]) ?? 0
     : 0;
   const depositPerContainer = containerMode === "rental" && selectedOffer
     ? firstNumber(selectedOffer, ["refundable_deposit_amount"]) ?? 0
     : 0;
+  const estimatedFuelAmount = requestedLitres && requestedLitres > 0
+    ? requestedLitres * (pricePerLitre ?? 0)
+    : 0;
+  const estimatedDriverFee = selectedOffer ? firstNumber(selectedOffer, ["driver_delivery_fee_amount"]) ?? 0 : 0;
+  const estimatedAdditionalPlatformFee = selectedOffer ? firstNumber(selectedOffer, ["platform_fee_amount"]) ?? 0 : 0;
+  const estimatedProductMarkup = requestedLitres && requestedLitres > 0
+    ? requestedLitres * platformFeePerLitre
+    : 0;
+  const estimatedTaxRate = selectedOffer ? firstNumber(selectedOffer, ["tax_rate_percent"]) ?? 0 : 0;
+  const estimatedTax = (
+    estimatedFuelAmount +
+    containerCount * containerCost +
+    estimatedDriverFee +
+    estimatedAdditionalPlatformFee +
+    estimatedProductMarkup
+  ) * estimatedTaxRate / 100;
   const estimatedTotal = selectedOffer && requestedLitres && requestedLitres > 0
-    ? requestedLitres * (pricePerLitre ?? 0) +
+    ? estimatedFuelAmount +
       containerCount * containerCost +
-      (firstNumber(selectedOffer, ["driver_delivery_fee_amount"]) ?? 0) +
-      (firstNumber(selectedOffer, ["platform_fee_amount"]) ?? 0) +
+      estimatedDriverFee +
+      estimatedAdditionalPlatformFee +
+      estimatedProductMarkup +
+      estimatedTax +
       containerCount * depositPerContainer
     : null;
   const globallyEnabledModes = new Set(
@@ -230,6 +271,9 @@ export function FuelOrderScreen() {
     if (requestedLitres < (minLitres ?? 0) || (maxLitres !== null && requestedLitres > maxLitres)) {
       return `This station accepts between ${minLitres ?? 0} and ${maxLitres ?? "its configured maximum"} litres.`;
     }
+    if (!selectedStockAvailability) return "This station's live tank stock is not configured. Choose another station or try again later.";
+    if (availableStockLitres <= 0) return "This station has no recorded fuel available for new orders at the moment.";
+    if (requestedLitres > availableStockLitres) return `Only ${availableStockLitres.toLocaleString()} litres are currently available at this station.`;
     const decimals = litresInput.split(".")[1]?.length ?? 0;
     if (decimals > selectedProductPrecision) return `Enter no more than ${selectedProductPrecision} decimal places.`;
     if (!selectedContainerType || !nominalCapacity) return "Choose a compatible delivery container.";
@@ -241,7 +285,7 @@ export function FuelOrderScreen() {
     if (!chosenLocationId) return "Add or select a saved delivery location before placing the order.";
     if (!walletId) return `An active ${currencyCode} customer wallet is required to pay for this order.`;
     return null;
-  }, [selectedProductRecord, selectedOffer, branchId, requestedLitres, minLitres, maxLitres, litresInput, selectedProductPrecision, selectedContainerType, nominalCapacity, allowedFulfillmentModes, fulfillmentMode, chosenLocationId, walletId, currencyCode]);
+  }, [selectedProductRecord, selectedOffer, branchId, requestedLitres, minLitres, maxLitres, litresInput, selectedProductPrecision, selectedContainerType, nominalCapacity, allowedFulfillmentModes, fulfillmentMode, chosenLocationId, walletId, currencyCode, selectedStockAvailability, availableStockLitres]);
 
 
   const quantityValid = Boolean(
@@ -327,9 +371,14 @@ export function FuelOrderScreen() {
     }
   };
 
-  const refreshAll = () => void Promise.all([products.refetch(), offers.refetch(), containerTypes.refetch(), locations.refetch(), wallets.refetch()]);
-  const loading = products.isPending || offers.isPending || containerTypes.isPending || wallets.isPending || locations.isPending;
-  const loadingError = products.error || offers.error || containerTypes.error || wallets.error || locations.error;
+  const refreshAll = () => void Promise.all([
+    products.refetch(), offers.refetch(), containerTypes.refetch(), locations.refetch(), wallets.refetch(),
+    platformFees.refetch(), stockAvailability.refetch(), fulfillmentControls.refetch(), managedPrices.refetch(),
+  ]);
+  const loading = products.isPending || offers.isPending || containerTypes.isPending || wallets.isPending || locations.isPending ||
+    platformFees.isPending || stockAvailability.isPending || fulfillmentControls.isPending;
+  const loadingError = products.error || offers.error || containerTypes.error || wallets.error || locations.error ||
+    platformFees.error || stockAvailability.error || fulfillmentControls.error;
 
 
 
