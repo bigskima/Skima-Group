@@ -1377,17 +1377,28 @@ $function$
 
 do $seed$
 declare
+  nigeria_id uuid;
+  country_level_id uuid;
+  state_level_id uuid;
   delta_state_id uuid;
   lga_level_id uuid;
   locality_level_id uuid;
   lga_id uuid;
   locality_id uuid;
 begin
-  select geography.id into delta_state_id
+  select id into country_level_id
+  from public.geography_levels
+  where key='country' and status='active';
+
+  select id into state_level_id
+  from public.geography_levels
+  where key='admin_level_1' and status='active';
+
+  select geography.id into nigeria_id
   from public.geographies geography
   join public.geography_levels level on level.id=geography.geography_level_id
-  where geography.normalized_name='delta state'
-    and level.key='admin_level_1'
+  where geography.normalized_name='nigeria'
+    and level.key='country'
     and geography.country_code='NG'
     and geography.status='active'
   order by geography.created_at
@@ -1396,8 +1407,42 @@ begin
   select id into lga_level_id from public.geography_levels where key='admin_level_2' and status='active';
   select id into locality_level_id from public.geography_levels where key='locality' and status='active';
 
-  if delta_state_id is null or lga_level_id is null or locality_level_id is null then
-    raise exception 'Delta State and active LGA/locality geography levels are required to seed Asaba';
+  if nigeria_id is null or country_level_id is null or state_level_id is null
+     or lga_level_id is null or locality_level_id is null then
+    raise exception 'Nigeria and active country, state, LGA and locality geography levels are required to seed Asaba';
+  end if;
+
+  select geography.id into delta_state_id
+  from public.geographies geography
+  where geography.parent_id=nigeria_id
+    and geography.geography_level_id=state_level_id
+    and geography.normalized_name='delta state'
+    and geography.country_code='NG'
+    and geography.status <> 'retired'
+  order by case geography.status when 'active' then 0 when 'draft' then 1 when 'inactive' then 2 else 3 end,
+           geography.created_at
+  limit 1
+  for update;
+
+  if delta_state_id is null then
+    insert into public.geographies (
+      parent_id,geography_level_id,canonical_name,normalized_name,country_code,
+      source,external_reference,aliases,metadata,status
+    ) values (
+      nigeria_id,state_level_id,'Delta State','delta state','NG',
+      'admin.named_geography','skima:nigeria:delta',
+      '["Delta"]'::jsonb,
+      '{"sourceSurface":"admin_geography_seed","country":"Nigeria","coverageMeaning":"state parent only; not a selected locality"}'::jsonb,
+      'active'
+    ) returning id into delta_state_id;
+  else
+    update public.geographies
+    set canonical_name='Delta State',
+        aliases=aliases || '["Delta"]'::jsonb,
+        metadata=metadata || '{"sourceSurface":"admin_geography_seed","country":"Nigeria","coverageMeaning":"state parent only; not a selected locality"}'::jsonb,
+        status='active',
+        updated_at=timezone('utc',now())
+    where id=delta_state_id;
   end if;
 
   select id into lga_id
