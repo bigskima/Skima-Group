@@ -35,6 +35,12 @@ const session = await Deno.readTextFile("apps/logistics-mobile/src/session/Sessi
 const providers = await Deno.readTextFile("apps/logistics-mobile/src/providers/AppProviders.tsx");
 const routes = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/_layout.tsx");
 const providerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/ProviderTabs.tsx");
+const signedUploadHelper = await Deno.readTextFile("apps/logistics-mobile/src/utils/uploadSignedAsset.ts");
+const legacyProviderLayout = await Deno.readTextFile("apps/logistics-mobile/app/provider/_layout.tsx");
+const legacyProviderHome = await Deno.readTextFile("apps/logistics-mobile/app/provider/index.tsx");
+const legacyProviderAccount = await Deno.readTextFile("apps/logistics-mobile/app/provider/account.tsx");
+const legacyProviderOpportunities = await Deno.readTextFile("apps/logistics-mobile/app/provider/opportunities.tsx");
+const legacyProviderServices = await Deno.readTextFile("apps/logistics-mobile/app/provider/services.tsx");
 const providerDashboard = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderDashboardScreen.tsx");
 const providerWorkspace = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderWorkspaceScreen.tsx");
 const guideProvider = await Deno.readTextFile("apps/logistics-mobile/src/onboarding/LogisticsGuideProvider.tsx");
@@ -776,4 +782,31 @@ Deno.test("Notification status event idempotency is safe under concurrent worker
   requireText(migration, "Recheck after acquiring the row lock", "event idempotency is rechecked after waiting");
   requireText(migration, "on conflict (notification_message_id, idempotency_key) do nothing", "duplicate event retries do not abort worker batches");
   requireText(migration, "different notification status details", "same idempotency key cannot silently change event content");
+});
+
+Deno.test("Company workspace exposes exactly four mobile tabs and keeps legacy routes out of tab navigation", () => {
+  const visibleTabCount = providerNavigation.match(/tabBarIcon:/g)?.length ?? 0;
+  if (visibleTabCount !== 4) throw new Error(`Expected four visible provider tabs, found ${visibleTabCount}.`);
+  requireText(providerNavigation, '<Tabs.Screen name="works" options={{ href: null }} />', "legacy /works route is hidden from bottom navigation");
+  if ((providerNavigation.match(/name="support"/g) ?? []).length !== 1) {
+    throw new Error("Support must be registered exactly once in provider navigation.");
+  }
+  requireText(legacyProviderLayout, '<Stack screenOptions={{ headerShown: false }} />', "legacy /provider namespace uses a stack, not a second tab bar");
+  requireNotText(legacyProviderLayout, "ProviderTabs", "legacy route tree must not mount a second provider tab bar");
+  requireText(legacyProviderHome, 'href="/(provider)/index"', "legacy provider home redirects to canonical workspace");
+  requireText(legacyProviderAccount, 'href="/(provider)/account"', "legacy provider account redirects to canonical account");
+  requireText(legacyProviderOpportunities, 'href="/(provider)/opportunities"', "legacy provider opportunities redirect to canonical inbox");
+  requireText(legacyProviderServices, 'href="/(provider)/services"', "legacy provider services redirect to canonical company profile");
+});
+
+Deno.test("Company image and document uploads use browser Blob uploads and retain native uploads", () => {
+  requireText(signedUploadHelper, 'if (Platform.OS === "web")', "browser-specific signed upload path");
+  requireText(signedUploadHelper, "const blob = await source.blob()", "browser picker URI is read as a Blob");
+  requireText(signedUploadHelper, "body: blob", "browser sends the Blob to the signed PUT URL");
+  requireText(signedUploadHelper, "createUploadTask", "native background upload path is retained");
+  requireText(publicMediaPicker, "uploadSignedAsset", "company public media uses shared upload helper");
+  requireText(companyApplication, "uploadSignedAsset", "private application documents use shared upload helper");
+  requireText(companyApplication, "maxBytes: 50 * 1024 * 1024", "50 MB document limit is checked before upload");
+  requireText(companyFleet, "!driversQuery.error", "a failed driver request cannot display an empty driver directory");
+  requireText(companyFleet, "Retry drivers", "driver directory has an independent retry action");
 });
