@@ -743,6 +743,97 @@ export function FuelStationOperationsScreen() {
             {branchOffers.length === 0 ? <Text style={[styles.muted, { color: palette.muted }]}>No active Fuel offers are configured for this branch.</Text> : null}
           </Card>
 
+          <Card
+            title="Configure fuel tanks"
+            description="Create one storage record for each physical tank or approved storage compartment. Capacity and safety reserve are enforced by SKIMA."
+          >
+            <View style={styles.productChipRow}>
+              {enabledFuelProducts.map((product) => {
+                const key = firstString(product, ["key"]) ?? "";
+                const active = tankProductKey === key;
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => setTankProductKey(key)}
+                    style={[styles.productChip, { borderColor: active ? palette.brand : palette.border, backgroundColor: active ? palette.brandSoft : palette.surface }]}
+                  >
+                    <Text style={[styles.productChipText, { color: active ? palette.brand : palette.ink }]}>{productNameForKey(key)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <AppField label="Tank key" value={tankKey} onChangeText={setTankKey} placeholder="e.g. petrol-main-tank" />
+            <AppField label="Tank name" value={tankName} onChangeText={setTankName} placeholder="e.g. PMS Tank 1" />
+            <AppField label="Capacity (litres)" value={tankCapacity} onChangeText={setTankCapacity} placeholder="e.g. 30000" keyboardType="decimal-pad" />
+            <AppField label="Safety reserve (litres)" value={tankSafetyReserve} onChangeText={setTankSafetyReserve} placeholder="0" keyboardType="decimal-pad" />
+            <AppButton
+              label="Save fuel tank"
+              fullWidth
+              loading={configureTank.isPending}
+              disabled={!stationBranchId || !organizationId || !enabledFuelProducts.length}
+              onPress={() => void createStationTank()}
+            />
+          </Card>
+
+          <Card
+            title="Fuel receipts and stock corrections"
+            description="Record supplier deliveries against the actual tank. Each receipt and correction is added to the immutable stock movement history."
+          >
+            {(storage.data ?? []).filter((unit) => firstString(unit, ["status"]) !== "retired").length === 0 ? (
+              <Text style={[styles.muted, { color: palette.muted }]}>No tanks are configured yet. Create a tank above, then record its opening stock as a supplier receipt.</Text>
+            ) : (
+              <>
+                <Text style={[styles.sectionLabel, { color: palette.ink }]}>Select tank</Text>
+                <View style={styles.offerModeList}>
+                  {(storage.data ?? []).filter((unit) => firstString(unit, ["status"]) !== "retired").map((unit) => {
+                    const unitId = firstString(unit, ["id"]) ?? "";
+                    const active = selectedStockUnitId === unitId;
+                    const name = firstString(unit, ["display_name", "key"]) ?? "Fuel tank";
+                    const product = productNameForKey(firstString(unit, ["product_key"]) ?? "");
+                    const stock = firstNumber(unit, ["physical_stock_litres"]) ?? 0;
+                    const reserved = firstNumber(unit, ["reserved_stock_litres"]) ?? 0;
+                    const reserve = firstNumber(unit, ["safety_reserve_litres"]) ?? 0;
+                    return (
+                      <Pressable
+                        key={unitId}
+                        onPress={() => setSelectedStockUnitId(unitId)}
+                        style={[styles.offerModeRow, { borderColor: active ? palette.brand : palette.border, backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle }]}
+                      >
+                        <View style={styles.offerModeCopy}>
+                          <Text style={[styles.orderTitle, { color: palette.ink }]}>{name}</Text>
+                          <Text style={[styles.muted, { color: palette.muted }]}>{product} · {stock.toLocaleString()} L physical · {Math.max(0, stock - reserved - reserve).toLocaleString()} L available</Text>
+                        </View>
+                        <StatusPill label={active ? "Selected" : firstString(unit, ["status"]) ?? "Tank"} tone={active ? "success" : "neutral"} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <AppField label="Supplier delivery quantity (litres)" value={stockReceiptLitres} onChangeText={setStockReceiptLitres} placeholder="e.g. 5000" keyboardType="decimal-pad" />
+                <AppField label="Supplier receipt / delivery reference" value={stockReceiptReason} onChangeText={setStockReceiptReason} placeholder="Supplier, delivery note or receipt number" />
+                <AppButton
+                  label="Record supplier receipt"
+                  fullWidth
+                  loading={receiveStock.isPending}
+                  disabled={!selectedStockUnitId}
+                  onPress={() => void recordStockReceipt()}
+                />
+                <View style={styles.operationInfo}>
+                  <Text style={[styles.muted, { color: palette.ink }]}>For corrections only, enter a positive amount to add or a negative amount to remove stock. SKIMA will reject changes that breach reserved quantities, safety reserve or tank capacity.</Text>
+                </View>
+                <AppField label="Stock adjustment (+/- litres)" value={stockAdjustmentLitres} onChangeText={setStockAdjustmentLitres} placeholder="e.g. -25 or 25" keyboardType="decimal-pad" />
+                <AppField label="Reason for stock adjustment" value={stockAdjustmentReason} onChangeText={setStockAdjustmentReason} placeholder="Explain the physical stock reconciliation" />
+                <AppButton
+                  label="Record stock adjustment"
+                  variant="secondary"
+                  fullWidth
+                  loading={adjustStock.isPending}
+                  disabled={!selectedStockUnitId}
+                  onPress={() => void recordStockAdjustment()}
+                />
+              </>
+            )}
+          </Card>
+
           {notice ? <Text style={[styles.successText, { color: palette.success }]}>{notice}</Text> : null}
           {error ? <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
