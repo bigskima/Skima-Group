@@ -155,7 +155,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
   const selectableAreas = serviceAreas.data ?? [];
   const availableAreas = selectableAreas.filter((area) => !assignedKeys.has(area.key));
   const selectedArea = availableAreas.find((area) => area.key === areaKey) ?? null;
-  const selectedAreaCanBeAssigned = selectedArea?.hasBoundary === true;
+  const selectedAreaCanBeAssigned = selectedArea !== null;
 
   useEffect(() => {
     if (areaKey && availableAreas.some((area) => area.key === areaKey)) return;
@@ -318,7 +318,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
                   onChange={(event) => setAreaKey(event.currentTarget.value)}
                   options={[
                     { label: availableAreas.length ? "Choose an enabled location" : selectableAreas.length ? "All enabled locations are already assigned" : "No enabled locations available", value: "" },
-                    ...availableAreas.map((area) => ({ label: area.hasBoundary ? areaLabel(area) : `${areaLabel(area)} · Map boundary required`, value: area.key })),
+                    ...availableAreas.map((area) => ({ label: areaLabel(area), value: area.key })),
                   ]}
                 />
                 <SelectInput
@@ -331,8 +331,8 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
                   ]}
                 />
               </div>
-              {selectedArea && !selectedAreaCanBeAssigned ? <div className="sk-panel"><StatusBadge tone="warning">Map boundary required</StatusBadge><p className="skima-muted">This location is enabled in SKIMA’s geography catalogue, but it does not yet have a verified boundary. A physical Managed Driver cannot use the mapped-area method until that boundary is verified, because dispatch uses the customer’s GPS point to enforce the mapped coverage boundary. The radius method can be used with an accurately recorded operating centre and checks the customer’s GPS point against the configured distance.</p><Button size="sm" variant="outline" onClick={() => props.onNavigate("/operations/coverage")}>Open geography & coverage setup</Button></div> : null}
-              {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">All enabled locations are now visible here. Mapped dispatch requires a verified boundary; radius coverage is also available for an accurately recorded operating centre and still checks the customer's GPS point against its configured distance.</p> : null}
+              {selectedArea && selectedArea.hasBoundary !== true ? <div className="sk-panel"><StatusBadge tone="info">Named-area coverage</StatusBadge><p className="skima-muted">A verified map boundary is optional for this named area. SKIMA matches the customer’s saved address hierarchy to the selected place and its parent location (for example, Asaba → Oshimili South → Delta State). Selecting Asaba does not enable the whole of Delta State. Customer location coordinates and the saved address must still be valid for dispatch.</p></div> : null}
+              {(serviceAreas.data ?? []).some((area) => area.hasBoundary !== true) ? <p className="skima-muted">All enabled named locations are selectable. Where a verified polygon is unavailable, dispatch checks the saved locality and parent hierarchy for the customer's location. A named locality is not widened to its parent state; a verified polygon can still be added later for exact map-based enforcement.</p> : null}
             </>
           ) : (
             <>

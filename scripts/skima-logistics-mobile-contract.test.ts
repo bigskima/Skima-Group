@@ -143,13 +143,13 @@ Deno.test("Customer and provider deep links survive browser refresh across the f
   requireText(providerWorksRoute, "Backwards-compatible route", "legacy provider deep link compatibility");
 });
 
-Deno.test("Managed Driver coverage shows all enabled geographies but blocks unsafe boundaryless dispatch assignments", () => {
+Deno.test("Managed Driver coverage allows named areas without requiring a map boundary", () => {
   requireText(managedDriverCoverage, "const selectableAreas = serviceAreas.data ?? []", "all enabled selectable geographies remain visible");
   requireText(managedDriverCoverage, "const availableAreas = selectableAreas.filter", "all unassigned enabled areas are listed");
-  requireText(managedDriverCoverage, "Map boundary required", "boundary requirement is visible to administrators");
-  requireText(managedDriverCoverage, "selectedAreaCanBeAssigned", "physical driver assignment remains boundary-gated");
-  requireText(managedDriverCoverage, "geography & coverage setup", "admin can navigate to boundary setup");
-  requireText(managedDriverCoverage, "dispatch uses the customer’s GPS point", "explain why a verified boundary is required");
+  requireText(managedDriverCoverage, "const selectedAreaCanBeAssigned = selectedArea !== null", "an enabled named area can be assigned without a polygon");
+  requireNotText(managedDriverCoverage, "Map boundary required", "no boundary-required gate remains in Managed Driver assignment");
+  requireText(managedDriverCoverage, "A verified map boundary is optional for this named area.", "explain named-area matching without a polygon");
+  requireText(managedDriverCoverage, "Asaba → Oshimili South → Delta State", "explain that named city selection does not widen to the parent state");
 });
 
 Deno.test("Logistics request review actions fit the mobile viewport", () => {

@@ -13,11 +13,12 @@ function rejectText(source: string, fragment: string, label: string) {
 }
 
 Deno.test("Coverage administration can add named service areas without map coordinates", async () => {
-  const [coverage, geographyMigration, managedMigration, managedAdmin] = await Promise.all([
+  const [coverage, geographyMigration, managedMigration, managedAdmin, managedIntegrityMigration] = await Promise.all([
     read("apps/admin/src/features/operations/CoverageWorkspaceV2.tsx"),
     read("supabase/migrations/20261029182549_nigeria_location_enablement_fulfilment_gates.sql"),
     read("supabase/migrations/20261106120000_lpg_named_geography_service_area_runtime.sql"),
     read("apps/admin/src/admin-managed-driver-coverage-workspace.tsx"),
+    read("supabase/migrations/20261108152629_store_geography_coverage_integrity.sql"),
   ]);
   requireText(coverage, "Add service area", "coverage overview quick action");
   requireText(coverage, "skima_managed_fulfillment", "SKIMA Managed coverage rule");
@@ -28,8 +29,22 @@ Deno.test("Coverage administration can add named service areas without map coord
   requireText(managedMigration, "'geography:'||matched_geography_id::text", "Managed price policy resolves new geography key");
   requireText(managedAdmin, "const selectableAreas = serviceAreas.data ?? []", "all active named locations are selectable");
   requireText(managedAdmin, "const availableAreas = selectableAreas.filter", "already assigned locations are excluded without hiding other areas");
-  requireText(managedAdmin, "selectedAreaCanBeAssigned = selectedArea?.hasBoundary === true", "physical Driver assignment still requires a verified map boundary");
-  requireText(managedAdmin, "All enabled locations are now visible here", "administrator sees the reason an area cannot yet be dispatched");
+  requireText(managedAdmin, "const selectedAreaCanBeAssigned = selectedArea !== null", "named locations are assignable without a polygon");
+  rejectText(managedAdmin, "Map boundary required", "named area selection is not blocked by a missing polygon");
+  requireText(managedAdmin, "A verified map boundary is optional for this named area.", "named area dispatch rule is explained to the administrator");
+  requireText(managedIntegrityMigration, "managed_driver_geography_matches_location", "dispatch resolves boundaryless named areas from saved address hierarchy");
+  requireText(managedIntegrityMigration, "'Delta State','delta state'", "Delta State is created under Nigeria when absent on a fresh database");
+  requireText(managedIntegrityMigration, "Oshimili South", "Asaba is seeded under the correct LGA");
+  requireText(managedIntegrityMigration, "Asaba", "Asaba is a named locality, not a state-wide rule");
+});
+
+Deno.test("Managed customer quote gating accepts boundaryless named geography through saved locality hierarchy", async () => {
+  const migration = await read("supabase/migrations/20261108153330_lpg_managed_named_geography_quote_gates.sql");
+  requireText(migration, "target_location_metadata", "quote availability receives the saved address metadata");
+  requireText(migration, "target_formatted_address", "quote availability receives the saved formatted address");
+  requireText(migration, "managed_driver_geography_matches_location", "boundaryless service areas use the named geography matcher");
+  requireText(migration, "pickup_record.formatted_address", "pickup location is checked using its saved hierarchy");
+  requireText(migration, "delivery_record.formatted_address", "delivery location is checked using its saved hierarchy");
 });
 
 Deno.test("Managed availability and routing use the same named geography policy", async () => {
