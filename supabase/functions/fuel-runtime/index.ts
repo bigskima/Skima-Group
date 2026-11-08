@@ -269,7 +269,7 @@ async function handleFuelRuntimeRequest(
     if ("response" in body) return body.response;
     const payload = body.value;
     return rpcResponse(
-      supabase.rpc("configure_fuel_branch_product_offer", {
+      supabase.rpc("configure_fuel_admin_branch_product_offer", {
         target_branch_id: requireUuid(payload.branchId, "branchId"),
         target_product_key: requireString(payload.productKey, "productKey"),
         target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
