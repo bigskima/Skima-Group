@@ -147,7 +147,7 @@ export function ProviderCompanyScreen() {
                 <View style={styles.companyRow}>
                   <View style={[styles.companyIcon, { backgroundColor: palette.surface }]}><Building2 color={palette.brand} size={21} /></View>
                   <View style={styles.companyCopy}>
-                    <Text style={[styles.companyEyebrow, { color: palette.brand }]}>REGISTERED ORGANISATION</Text>
+                    <Text style={[styles.companyEyebrow, { color: palette.brand }]}>COMPANY PROFILE</Text>
                     <Text style={[styles.companyName, { color: palette.ink }]}>{asString(company, "public_name") ?? "Logistics provider"}</Text>
                     <Text style={[styles.companyMeta, { color: palette.muted }]}>{asString(organization, "legal_name") ?? "Legal name not supplied"}</Text>
                   </View>
