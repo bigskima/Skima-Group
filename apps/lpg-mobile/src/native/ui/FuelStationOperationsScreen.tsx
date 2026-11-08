@@ -109,8 +109,18 @@ export function FuelStationOperationsScreen() {
   const [offerCurrencyCode, setOfferCurrencyCode] = useState("NGN");
   const [offerPrice, setOfferPrice] = useState("");
   const [offerMinimumLitres, setOfferMinimumLitres] = useState("1");
-  const [offerMaximumLitres, setOfferMaximumLitres] = useState("1000");
-  const [offerModes, setOfferModes] = useState<string[]>(["station_managed", "independent_driver", "skima_managed"]);
+  const [offerMaximumLitres, setOfferMaximumLitres] = useState("");
+  const [offerModes, setOfferModes] = useState<string[]>([]);
+  const [tankProductKey, setTankProductKey] = useState("fuel.pms");
+  const [tankKey, setTankKey] = useState("");
+  const [tankName, setTankName] = useState("");
+  const [tankCapacity, setTankCapacity] = useState("");
+  const [tankSafetyReserve, setTankSafetyReserve] = useState("0");
+  const [selectedStockUnitId, setSelectedStockUnitId] = useState("");
+  const [stockReceiptLitres, setStockReceiptLitres] = useState("");
+  const [stockReceiptReason, setStockReceiptReason] = useState("");
+  const [stockAdjustmentLitres, setStockAdjustmentLitres] = useState("");
+  const [stockAdjustmentReason, setStockAdjustmentReason] = useState("");
   const [offerNotice, setOfferNotice] = useState<string | null>(null);
   const [offerError, setOfferError] = useState<string | null>(null);
 
@@ -133,6 +143,21 @@ export function FuelStationOperationsScreen() {
     path: "/runtime/fuel/offers",
     schema: ActionResponseSchema,
     invalidate: [["fuel", "station", "offers"], ["fuel", "offers"]],
+  });
+  const configureTank = useGatewayMutation({
+    path: "/runtime/fuel/storage",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"]],
+  });
+  const receiveStock = useGatewayMutation({
+    path: "/runtime/fuel/storage/receive",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"]],
+  });
+  const adjustStock = useGatewayMutation({
+    path: "/runtime/fuel/storage/adjust",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"]],
   });
   const reserveBatch = useGatewayMutation({
     path: "/runtime/fuel/orders/stock/reserve-for-order",
