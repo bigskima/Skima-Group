@@ -453,7 +453,15 @@ export function FuelOrderScreen() {
             <QuoteLine label="Fuel" value={money(firstNumber(createdQuote.componentSnapshot, ["fuel_amount"]), createdQuote.currencyCode)} />
             <QuoteLine label={containerMode === "purchase" ? "Container purchase" : "Container rental"} value={money(firstNumber(createdQuote.componentSnapshot, ["container_amount"]), createdQuote.currencyCode)} />
             <QuoteLine label="Delivery" value={money(firstNumber(createdQuote.componentSnapshot, ["driver_delivery_fee_amount"]), createdQuote.currencyCode)} />
-            <QuoteLine label="SKIMA service fee" value={money(firstNumber(createdQuote.componentSnapshot, ["platform_fee_amount"]), createdQuote.currencyCode)} />
+            <QuoteLine label="SKIMA fuel markup" value={money(firstNumber(createdQuote.componentSnapshot, ["admin_product_fee_amount"]), createdQuote.currencyCode)} />
+            <QuoteLine
+              label="Additional fixed platform fee"
+              value={money(Math.max(
+                0,
+                (firstNumber(createdQuote.componentSnapshot, ["platform_fee_amount"]) ?? 0) -
+                (firstNumber(createdQuote.componentSnapshot, ["admin_product_fee_amount"]) ?? 0),
+              ), createdQuote.currencyCode)}
+            />
             <QuoteLine label="Tax" value={money(firstNumber(createdQuote.componentSnapshot, ["tax_amount"]) ?? createdQuote.taxAmount, createdQuote.currencyCode)} />
             {containerMode === "rental" ? <QuoteLine label="Refundable container deposit" value={money(firstNumber(createdQuote.componentSnapshot, ["refundable_deposit_amount"]), createdQuote.currencyCode)} /> : null}
             <View style={[styles.quoteDivider, { backgroundColor: palette.border }]} />
@@ -753,6 +761,7 @@ export function FuelOrderScreen() {
                     <Text style={[styles.liveEstimateLabel, { color: palette.muted }]}>ESTIMATED ORDER TOTAL</Text>
                     <Text style={[styles.liveEstimateAmount, { color: palette.ink }]}>{estimatedTotal === null ? "—" : money(estimatedTotal, currencyCode)}</Text>
                     <Text style={[styles.muted, { color: palette.muted }]}>{selectedProductTitle} · {requestedLitres} L · {branchName} · {fulfillmentMode === "skima_managed" ? "SKIMA Managed retail" : "Station price"}</Text>
+                    <Text style={[styles.muted, { color: palette.muted }]}>SKIMA markup: {money(platformFeePerLitre, currencyCode)}/L · Recorded stock available: {availableStockLitres.toLocaleString()} L</Text>
                   </View>
                 </View>
               ) : null}
