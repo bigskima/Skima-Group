@@ -1,5 +1,5 @@
 const migration = await Deno.readTextFile(
-  "supabase/migrations/20261108122000_fuel_lifecycle_pricing_readiness.sql",
+  "supabase/migrations/20261108125346_fuel_lifecycle_pricing_readiness.sql",
 );
 const runtime = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
 const admin = await Deno.readTextFile("apps/admin/src/features/services/FuelAdminWorkspace.tsx");
