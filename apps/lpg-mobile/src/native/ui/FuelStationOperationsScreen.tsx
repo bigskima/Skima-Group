@@ -212,6 +212,9 @@ export function FuelStationOperationsScreen() {
   const branchOffers = (offers.data ?? []).filter((offer) =>
     firstString(offer, ["status"]) === "active" && firstString(offer, ["branch_id"]) === stationBranchId
   );
+  const selectedStockUnit = (storage.data ?? []).find((unit) =>
+    firstString(unit, ["id"]) === selectedStockUnitId
+  ) ?? null;
   const orderCurrency = firstString(nestedRecord(focusedOrder, "order"), ["currency_code"]) ?? "NGN";
   const currentOffer = focusedOrder
     ? branchOffers.find((offer) =>
@@ -415,8 +418,9 @@ export function FuelStationOperationsScreen() {
 
   const recordStockReceipt = async () => {
     const quantity = Number(stockReceiptLitres);
-    if (!selectedStockUnitId || !Number.isFinite(quantity) || quantity <= 0 || !stockReceiptReason.trim()) {
-      setError("Choose a tank, enter the litres received and provide a supplier receipt or delivery reference.");
+    if (!selectedStockUnitId || firstString(selectedStockUnit, ["status"]) !== "active" ||
+        !Number.isFinite(quantity) || quantity <= 0 || !stockReceiptReason.trim()) {
+      setError("Choose an active tank, enter the litres received and provide a supplier receipt or delivery reference.");
       return;
     }
     setError(null);
@@ -785,7 +789,7 @@ export function FuelStationOperationsScreen() {
               <>
                 <Text style={[styles.sectionLabel, { color: palette.ink }]}>Select tank</Text>
                 <View style={styles.offerModeList}>
-                  {(storage.data ?? []).filter((unit) => firstString(unit, ["status"]) !== "retired").map((unit) => {
+                  {(storage.data ?? []).filter((unit) => ["active", "paused"].includes(firstString(unit, ["status"]) ?? "")).map((unit) => {
                     const unitId = firstString(unit, ["id"]) ?? "";
                     const active = selectedStockUnitId === unitId;
                     const name = firstString(unit, ["display_name", "key"]) ?? "Fuel tank";
@@ -814,7 +818,7 @@ export function FuelStationOperationsScreen() {
                   label="Record supplier receipt"
                   fullWidth
                   loading={receiveStock.isPending}
-                  disabled={!selectedStockUnitId}
+                  disabled={!selectedStockUnitId || firstString(selectedStockUnit, ["status"]) !== "active"}
                   onPress={() => void recordStockReceipt()}
                 />
                 <View style={styles.operationInfo}>
