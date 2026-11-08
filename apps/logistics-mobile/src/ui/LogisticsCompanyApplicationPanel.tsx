@@ -1,6 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as Linking from "expo-linking";
-import { File, UploadType } from "expo-file-system";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +14,7 @@ import { AppField } from "./AppField";
 import { Card } from "./Card";
 import { SectionHeader } from "./SectionHeader";
 import { StatusPill } from "./StatusPill";
+import { uploadSignedAsset } from "../utils/uploadSignedAsset";
 
 type Row = Record<string, unknown>;
 type RegistrationStatus = "registered" | "in_progress" | "not_registered";
@@ -297,21 +297,21 @@ export function LogisticsCompanyApplicationPanel({
         idempotencyKey: uploadKey,
         storageBucket: "skima-platform-documents",
       }, UploadSessionSchema);
-      const file = new File(asset.uri);
-      const uploaded = await file.createUploadTask(uploadSession.signedUrl, {
-        httpMethod: "PUT",
-        uploadType: UploadType.BINARY_CONTENT,
-        mimeType: contentType,
-        headers: { "content-type": contentType },
-        sessionType: "background",
-      }).uploadAsync();
+      const uploaded = await uploadSignedAsset({
+        uri: asset.uri,
+        signedUrl: uploadSession.signedUrl,
+        contentType,
+      });
       if (uploaded.status < 200 || uploaded.status >= 300) {
         throw new Error(`The document upload was rejected (${uploaded.status}).`);
+      }
+      if (uploaded.byteSize > 50 * 1024 * 1024) {
+        throw new Error("Each company document must be no larger than 50 MB.");
       }
       return api.post("/runtime/documents", {
         applicationId,
         requirementKey,
-        byteSize: asset.size ?? file.size,
+        byteSize: asset.size ?? uploaded.byteSize,
         contentType,
         idempotencyKey: `${uploadKey}:submission`,
         metadata: {
