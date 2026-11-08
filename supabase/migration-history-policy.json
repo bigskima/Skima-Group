@@ -158,6 +158,6 @@
     "20261107192000_runtime_worker_scheduler.sql",
     "20261107195000_notification_status_event_idempotency_concurrency.sql",
     "20261108095432_logistics_company_identity_and_revision_runtime.sql",
-    "20261108122000_fuel_lifecycle_pricing_readiness.sql"
+    "20261108125346_fuel_lifecycle_pricing_readiness.sql"
   ]
 }
