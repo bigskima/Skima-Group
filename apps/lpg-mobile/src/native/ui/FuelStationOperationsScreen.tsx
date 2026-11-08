@@ -695,7 +695,7 @@ export function FuelStationOperationsScreen() {
   };
 
   const loading = stationInventory.isPending || stationContext.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
-  const failed = Boolean(stationInventory.error || stationContext.error || operations.error || storage.error || offers.error || globalModeControlsUnavailable);
+  const failed = Boolean(stationInventory.error || stationContext.error || operations.error || storage.error || offers.error);
   const stageTone = (stage: string): "neutral" | "brand" | "success" | "warning" | "danger" => {
     if (["completed", "inspection_passed"].includes(stage)) return "success";
     if (["cancelled", "exception"].includes(stage)) return "danger";
@@ -864,6 +864,11 @@ export function FuelStationOperationsScreen() {
             title="What your station sells"
             description="Enable PMS, diesel or kerosene for this branch and set your own selling price. SKIMA's global product and fulfilment switches always take priority."
           >
+            {globalModeControlsUnavailable ? (
+              <Text style={[styles.errorText, { color: palette.danger }]}>
+                SKIMA's global fulfilment settings are temporarily unavailable. You can still manage tanks and physical stock, but station offers cannot be changed until the platform settings are verified.
+              </Text>
+            ) : null}
             {enabledFuelProducts.length === 0 ? (
               <Text style={[styles.muted, { color: palette.muted }]}>SKIMA has globally disabled all Fuel products. Your station cannot enable or sell them.</Text>
             ) : (
