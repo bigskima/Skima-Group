@@ -35,6 +35,7 @@ on:
       - "scripts/skima-bills-mobile-contract.test.ts"
       - "scripts/skima-store-mobile-contract.test.ts"
       - "scripts/skima-customer-facing-copy-contract.test.ts"
+      - "scripts/four-app-policy-consent-contract.test.ts"
       - "scripts/in-app-guide-target-contract.test.ts"
       - "scripts/payout-runtime-production-contract.test.ts"
       - "scripts/verification-runtime-contract.test.ts"
@@ -97,6 +98,8 @@ jobs:
         run: deno test --allow-read scripts/skima-four-app-experience-contract.test.ts
       - name: Verify customer-facing copy across SKIMA services
         run: deno test --allow-read scripts/skima-customer-facing-copy-contract.test.ts
+      - name: Verify four-app customer policy consent and progressive reading
+        run: npm run four-app-policy:contract
       - name: Verify service discovery and post-completion customer experience
         run: deno test --allow-read scripts/skima-customer-success-experience-contract.test.ts
       - name: Verify LPG auth production contracts
