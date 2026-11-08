@@ -152,15 +152,23 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
   return (
     <View style={styles.section}>
       <SectionHeader title="Company fleet" description="Your company owns and manages its vehicles, licensing records and driver assignments." />
-      {vehicles.isPending || vehicleTypes.isPending || driversQuery.isPending ? (
+      {vehicles.isPending || vehicleTypes.isPending ? (
         <Card padding="lg"><Text style={[styles.copy, { color: palette.muted }]}>Loading your company fleet…</Text></Card>
-      ) : vehicles.error || vehicleTypes.error || driversQuery.error ? (
+      ) : vehicles.error || vehicleTypes.error ? (
         <Card padding="lg" gap={spacing.sm}>
-          <Text style={[styles.copy, { color: palette.muted }]}>Fleet information could not be loaded.</Text>
-          <AppButton size="sm" variant="secondary" label="Retry" onPress={() => void refresh()} />
+          <Text style={[styles.copy, { color: palette.muted }]}>Company vehicle records could not be loaded. Your driver directory is kept separate from this request.</Text>
+          <AppButton size="sm" variant="secondary" label="Retry fleet" onPress={() => void Promise.all([vehicles.refetch(), vehicleTypes.refetch()])} />
         </Card>
       ) : (
         <>
+          {driversQuery.isPending ? (
+            <Card padding="md"><Text style={[styles.copy, { color: palette.muted }]}>Loading approved company drivers…</Text></Card>
+          ) : driversQuery.error ? (
+            <Card padding="md" gap={spacing.sm}>
+              <Text style={[styles.copy, { color: palette.muted }]}>The company driver directory could not be loaded. Vehicle records remain available, but driver assignment is temporarily unavailable.</Text>
+              <AppButton size="sm" variant="secondary" label="Retry drivers" onPress={() => void driversQuery.refetch()} />
+            </Card>
+          ) : null}
           {approvedDrivers.length ? (
             <View style={styles.driverDirectory}>
               <SectionHeader title="Company drivers" description="Keep a clear, current portrait for each approved driver. Customers see the assigned driver's photo before and during the booking." />
