@@ -176,7 +176,7 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
             </View>
             <Text style={[styles.progressValue, { color: palette.brand }]}>{Math.round(progress * 100)}%</Text>
           </View>
-          <View style={[styles.progressTrack, { backgroundColor: palette.border }]}><View style={[styles.progressFill, { width: (progress * 100) + "%", backgroundColor: palette.brand }]} /></View>
+          <View style={[styles.progressTrack, { backgroundColor: palette.border }]}><View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, progress * 100))}%` as `${number}%`, backgroundColor: palette.brand }]} /></View>
           <View style={styles.toolbar}>
             <Pressable onPress={() => setContentsOpen((value) => !value)} style={[styles.toolButton, { borderColor: palette.border }]}><Text style={[styles.toolText, { color: palette.brand }]}>{contentsOpen ? "Hide contents" : "Contents"}</Text></Pressable>
             <Pressable onPress={readAloud} style={[styles.toolButton, { borderColor: palette.border }]}><Text style={[styles.toolText, { color: palette.brand }]}>{reading ? "Stop reading" : "Read aloud"}</Text></Pressable>
