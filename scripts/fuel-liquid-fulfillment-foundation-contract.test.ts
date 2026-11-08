@@ -158,7 +158,7 @@ Deno.test("fuel event ledgers are append-only and product data is permission-sco
 });
 
 Deno.test("fuel migration history records the verified production head", () => {
-  if (historyPolicy.remoteHeadVersion !== "20261108152629") {
+  if (historyPolicy.remoteHeadVersion !== "20261108153330") {
     throw new Error("The migration policy must match the verified production head after Store, Managed Driver geography and Fuel lifecycle deployments.");
   }
   if (!historyPolicy.businessModuleMigrations.includes("20261101202000_fuel_liquid_fulfillment_foundation.sql")) {
