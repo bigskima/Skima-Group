@@ -1,0 +1,8 @@
+-- Register customer-facing terms for each non-Refill SKIMA consumer app.
+insert into public.policy_documents
+  (key,title,audience,service_scope,acceptance_statement,is_required,status,summary_content,metadata)
+values
+('policy.customer.bills.terms','SKIMA Bills Customer Terms of Use','customer','bills','I have read and agree to the current SKIMA Bills Customer Terms of Use.',true,'active','These terms cover airtime, data, electricity, TV and other supported bill payments, including customer details, provider confirmation, fees, reversals, refunds, complaints and transaction records.',jsonb_build_object('appKey','bills','documentType','customer_terms','canonicalVersion','1.0')),
+('policy.customer.logistics.terms','SKIMA Logistics Customer Terms of Use','customer','logistics','I have read and agree to the current SKIMA Logistics Customer Terms of Use.',true,'active','These terms cover delivery requests, provider offers, bookings, pricing, customer and provider responsibilities, service changes, payments, complaints and claims when using SKIMA Logistics.',jsonb_build_object('appKey','logistics','documentType','customer_terms','canonicalVersion','1.0')),
+('policy.customer.store.terms','SKIMA Store Customer Terms of Use','customer','store','I have read and agree to the current SKIMA Store Customer Terms of Use.',true,'active','These terms cover product listings, sellers, orders, checkout, payments, delivery, cancellations, returns, refunds, complaints and customer responsibilities when shopping through SKIMA Store.',jsonb_build_object('appKey','store','documentType','customer_terms','canonicalVersion','1.0'))
+on conflict (key) do nothing;
