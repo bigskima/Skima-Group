@@ -253,6 +253,11 @@ export function FuelStationOperationsScreen() {
     firstString(product, ["status"]) === "enabled" &&
     ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(firstString(product, ["key"]) ?? "")
   );
+  const selectedProductModeControls = (modeControls.data ?? []).filter((control) =>
+    firstString(control, ["product_key"]) === offerProductKey
+  );
+  const globalModeControlsUnavailable = Boolean(modeControls.error) ||
+    (!modeControls.isPending && enabledFuelProducts.length > 0 && selectedProductModeControls.length !== 3);
   const enabledCurrencies = (currencies.data ?? []).filter((currency) =>
     firstString(currency, ["status"]) === "enabled" && firstString(currency, ["code"])
   );
@@ -675,7 +680,7 @@ export function FuelStationOperationsScreen() {
   };
 
   const loading = stationInventory.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
-  const failed = stationInventory.error || operations.error || storage.error || offers.error;
+  const failed = Boolean(stationInventory.error || operations.error || storage.error || offers.error || globalModeControlsUnavailable);
   const stageTone = (stage: string): "neutral" | "brand" | "success" | "warning" | "danger" => {
     if (["completed", "inspection_passed"].includes(stage)) return "success";
     if (["cancelled", "exception"].includes(stage)) return "danger";
@@ -699,7 +704,13 @@ export function FuelStationOperationsScreen() {
       ) : loading ? (
         <View style={styles.loading}><ActivityIndicator /><Text style={[styles.muted, { color: palette.muted }]}>Loading Fuel station operations…</Text></View>
       ) : failed ? (
-        <EmptyState title="Fuel operations could not be loaded" description="Refresh and try again." action={<AppButton label="Refresh" onPress={() => void refreshAll()} />} />
+        <EmptyState
+          title="Fuel operations could not be loaded"
+          description={globalModeControlsUnavailable
+            ? "SKIMA's global fulfilment settings could not be verified. No mode has been assumed disabled. Refresh before changing offers or dispatching a new order."
+            : "Refresh and try again. Existing orders and stock records have not been changed."}
+          action={<AppButton label="Refresh" onPress={() => void refreshAll()} />}
+        />
       ) : (
         <>
           <Card title="Fuel tank availability" description="Only the unreserved stock above the tank safety reserve can be committed to new orders.">
@@ -794,7 +805,7 @@ export function FuelStationOperationsScreen() {
                     label="Maximum litres per order"
                     value={offerMaximumLitres}
                     onChangeText={setOfferMaximumLitres}
-                    placeholder="1000"
+                    placeholder="e.g. 200"
                     keyboardType="decimal-pad"
                   />
                 </View>
@@ -805,7 +816,9 @@ export function FuelStationOperationsScreen() {
                     ["independent_driver", "Independent Managed", "Independent qualified driver and own vehicle"],
                     ["skima_managed", "SKIMA Managed", "SKIMA driver programme and SKIMA fleet vehicle"],
                   ] as const).map(([mode, title, description]) => {
-                    const globallyEnabled = globallyAllowedOfferModes.has(mode);
+                    const modeControl = selectedProductModeControls.find((control) => firstString(control, ["fulfillment_mode"]) === mode);
+                    const globalKnown = Boolean(modeControl);
+                    const globallyEnabled = modeControl?.enabled === true;
                     const checked = offerModes.includes(mode);
                     return (
                       <Pressable
@@ -816,9 +829,9 @@ export function FuelStationOperationsScreen() {
                       >
                         <View style={styles.offerModeCopy}>
                           <Text style={[styles.orderTitle, { color: palette.ink }]}>{title}</Text>
-                          <Text style={[styles.muted, { color: palette.muted }]}>{globallyEnabled ? description : "Disabled by SKIMA Admin · cannot be enabled by this station"}</Text>
+                          <Text style={[styles.muted, { color: palette.muted }]}>{!globalKnown ? "SKIMA's global setting could not be verified" : globallyEnabled ? description : "Disabled by SKIMA Admin · cannot be enabled by this station"}</Text>
                         </View>
-                        <StatusPill label={!globallyEnabled ? "Globally off" : checked ? "On" : "Off"} tone={!globallyEnabled ? "warning" : checked ? "success" : "neutral"} />
+                        <StatusPill label={!globalKnown ? "Unavailable" : !globallyEnabled ? "Globally off" : checked ? "On" : "Off"} tone={!globalKnown ? "warning" : !globallyEnabled ? "warning" : checked ? "success" : "neutral"} />
                       </Pressable>
                     );
                   })}
