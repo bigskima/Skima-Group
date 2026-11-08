@@ -81,6 +81,17 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const qualifications = useFuelQuery(api, status, "qualifications", "/runtime/fuel/driver-qualifications");
   const dispatchQueue = useFuelQuery(api, status, "dispatch-queue", "/runtime/fuel/orders/operations?stage=ready_for_driver");
   const platformFees = useFuelQuery(api, status, "platform-fees", "/runtime/fuel/platform-fees");
+  const feeCurrencies = useMemo(() => [...new Set(
+    (platformFees.data ?? [])
+      .map((record) => catalogText(record, "currency_code"))
+      .filter(Boolean)
+  )].map((code) => ({ label: code, value: code })), [platformFees.data]);
+
+  useEffect(() => {
+    if (feeCurrencies.length > 0 && !feeCurrencies.some((currency) => currency.value === feeCurrencyCode)) {
+      setFeeCurrencyCode(feeCurrencies[0].value);
+    }
+  }, [feeCurrencies, feeCurrencyCode]);
 
   useEffect(() => {
     if (!platformFees.data) return;
@@ -421,7 +432,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         </div>
         <p className="skima-muted">These are SKIMA's own per-litre charges. They are separate from each station's selling price and any additional fixed order charge. The same live value is included in the customer's server-generated quote.</p>
         <div className="admin-inline-actions">
-          {CURRENCIES.map((currency) => (
+          {feeCurrencies.map((currency) => (
             <Button
               key={currency.value}
               size="sm"
