@@ -285,14 +285,21 @@ export function FuelStationOperationsScreen() {
   useEffect(() => {
     setOfferPrice(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["price_per_litre"]) ?? "") : "");
     setOfferMinimumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["minimum_litres"]) ?? 1) : "1");
-    setOfferMaximumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["maximum_litres"]) ?? 1000) : "1000");
+    setOfferMaximumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["maximum_litres"]) ?? "") : "");
     const configured = Array.isArray(stationOfferForEditor?.fulfillment_modes)
       ? stationOfferForEditor.fulfillment_modes.filter((value): value is string => typeof value === "string")
-      : ["station_managed", "independent_driver", "skima_managed"];
+      : [];
     setOfferModes(configured.filter((mode) => globallyAllowedOfferModes.has(mode)));
     setOfferNotice(null);
     setOfferError(null);
   }, [stationBranchId, offerProductKey, offerCurrencyCode, stationOfferForEditor?.id, stationOfferForEditor?.updated_at, globallyAllowedOfferModeKey]);
+
+  useEffect(() => {
+    const firstUnit = (storage.data ?? []).find((unit) => firstString(unit, ["status"]) === "active");
+    if (!selectedStockUnitId || !(storage.data ?? []).some((unit) => firstString(unit, ["id"]) === selectedStockUnitId)) {
+      setSelectedStockUnitId(firstString(firstUnit, ["id"]) ?? "");
+    }
+  }, [storage.data, selectedStockUnitId]);
 
   const refreshAll = async () => {
     await Promise.allSettled([
@@ -323,6 +330,14 @@ export function FuelStationOperationsScreen() {
     const price = Number(offerPrice);
     const minimum = Number(offerMinimumLitres);
     const maximum = Number(offerMaximumLitres);
+    if (!modeControls.data?.length || modeControls.error) {
+      setOfferError("SKIMA's global fulfilment settings could not be verified. Refresh before saving a station offer.");
+      return;
+    }
+    if (!stationBranchId) {
+      setOfferError("This station's branch could not be resolved. Refresh station setup before saving.");
+      return;
+    }
     if (!offerProductKey || !offerCurrencyCode || !Number.isFinite(price) || price <= 0 ||
         !Number.isFinite(minimum) || minimum <= 0 || !Number.isFinite(maximum) || maximum < minimum) {
       setOfferError("Enter a positive station selling price and a valid minimum/maximum litre range.");
@@ -351,6 +366,95 @@ export function FuelStationOperationsScreen() {
       await Promise.all([offers.refetch(), modeControls.refetch()]);
     } catch (cause) {
       setOfferError(friendlyError(cause, "SKIMA could not save this station product offer."));
+    }
+  };
+
+  const createStationTank = async () => {
+    const capacity = Number(tankCapacity);
+    const reserve = Number(tankSafetyReserve);
+    if (!stationBranchId || !organizationId) {
+      setError("Station branch or organisation could not be resolved. Refresh station setup.");
+      return;
+    }
+    if (!tankKey.trim() || !tankName.trim() || !Number.isFinite(capacity) || capacity <= 0 ||
+        !Number.isFinite(reserve) || reserve < 0 || reserve > capacity ||
+        !enabledFuelProducts.some((product) => firstString(product, ["key"]) === tankProductKey)) {
+      setError("Choose an enabled fuel product and enter a tank name, unique key, positive capacity and valid safety reserve.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      await configureTank.mutateAsync({
+        organizationId,
+        branchId: stationBranchId,
+        productKey: tankProductKey,
+        storageKey: tankKey.trim(),
+        displayName: tankName.trim(),
+        capacityLitres: capacity,
+        safetyReserveLitres: reserve,
+        status: "active",
+        metadata: { configured_from: "station_fuel_operations" },
+        idempotencyKey: idempotencyKey("fuel-tank-setup", stationBranchId + ":" + tankKey.trim()),
+      });
+      setTankKey("");
+      setTankName("");
+      setTankCapacity("");
+      setTankSafetyReserve("0");
+      setNotice("Fuel tank configured. Record the opening stock below before accepting orders.");
+      await storage.refetch();
+    } catch (cause) {
+      setError(friendlyError(cause, "SKIMA could not configure this fuel tank."));
+    }
+  };
+
+  const recordStockReceipt = async () => {
+    const quantity = Number(stockReceiptLitres);
+    if (!selectedStockUnitId || !Number.isFinite(quantity) || quantity <= 0 || !stockReceiptReason.trim()) {
+      setError("Choose a tank, enter the litres received and provide a supplier receipt or delivery reference.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      await receiveStock.mutateAsync({
+        storageUnitId: selectedStockUnitId,
+        quantityLitres: quantity,
+        reason: stockReceiptReason.trim(),
+        idempotencyKey: idempotencyKey("fuel-stock-receipt", selectedStockUnitId + ":" + quantity + ":" + stockReceiptReason.trim()),
+        metadata: { station_branch_id: stationBranchId, entry_channel: "station_fuel_operations" },
+      });
+      setStockReceiptLitres("");
+      setStockReceiptReason("");
+      setNotice("Fuel receipt recorded and physical stock updated.");
+      await storage.refetch();
+    } catch (cause) {
+      setError(friendlyError(cause, "SKIMA could not record this fuel stock receipt."));
+    }
+  };
+
+  const recordStockAdjustment = async () => {
+    const delta = Number(stockAdjustmentLitres);
+    if (!selectedStockUnitId || !Number.isFinite(delta) || delta === 0 || !stockAdjustmentReason.trim()) {
+      setError("Choose a tank, enter a non-zero signed litre adjustment and explain the stock correction.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      await adjustStock.mutateAsync({
+        storageUnitId: selectedStockUnitId,
+        quantityDeltaLitres: delta,
+        reason: stockAdjustmentReason.trim(),
+        idempotencyKey: idempotencyKey("fuel-stock-adjustment", selectedStockUnitId + ":" + delta + ":" + stockAdjustmentReason.trim()),
+        metadata: { station_branch_id: stationBranchId, entry_channel: "station_fuel_operations" },
+      });
+      setStockAdjustmentLitres("");
+      setStockAdjustmentReason("");
+      setNotice("Fuel stock adjustment recorded in the stock movement history.");
+      await storage.refetch();
+    } catch (cause) {
+      setError(friendlyError(cause, "SKIMA could not adjust this fuel stock."));
     }
   };
 
