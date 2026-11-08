@@ -8,6 +8,7 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 import { SessionProvider } from "../session/SessionProvider";
 import { StoreGuideProvider } from "../onboarding/StoreGuideProvider";
 import { StoreNotificationLifecycle } from "../notifications/StoreNotificationLifecycle";
+import { PolicyConsentGate } from "../policies/PolicyConsentGate";
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [client] = useState(() => new QueryClient({
@@ -28,10 +29,12 @@ export function AppProviders({ children }: PropsWithChildren) {
         <ThemeProvider>
           <QueryClientProvider client={client}>
             <SessionProvider>
+              <PolicyConsentGate>
               <StoreGuideProvider>
                 <StoreNotificationLifecycle />
                 {children}
               </StoreGuideProvider>
+              </PolicyConsentGate>
             </SessionProvider>
           </QueryClientProvider>
         </ThemeProvider>
