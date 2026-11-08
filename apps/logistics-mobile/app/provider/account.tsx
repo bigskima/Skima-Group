@@ -1,2 +1,5 @@
-import { CustomerAccountScreen } from "../../src/screens/CustomerAccountScreen";
-export default function ProviderAccountRoute() { return <CustomerAccountScreen workspace="provider" />; }
+import { Redirect } from "expo-router";
+
+export default function LegacyProviderAccountRoute() {
+  return <Redirect href="/(provider)/account" />;
+}
