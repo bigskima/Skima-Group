@@ -36,11 +36,11 @@ export function ProviderTabs() {
     }}>
       <Tabs.Screen name="index" options={{ title: "Overview", tabBarIcon: ({ color, size }) => <Building2 color={String(color)} size={size} /> }} />
       <Tabs.Screen name="opportunities" options={{ href: null }} />
+      <Tabs.Screen name="works" options={{ href: null }} />
       <Tabs.Screen name="work" options={{ title: "Jobs", tabBarIcon: ({ color, size }) => <Truck color={String(color)} size={size} /> }} />
       <Tabs.Screen name="workspace" options={{ title: "Workspace", tabBarIcon: ({ color, size }) => <LayoutGrid color={String(color)} size={size} /> }} />
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <Settings2 color={String(color)} size={size} /> }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
-      <Tabs.Screen name="support" options={{ href: null }} />
       <Tabs.Screen name="support" options={{ href: null }} />
       <Tabs.Screen name="referrals" options={{ href: null }} />
       <Tabs.Screen name="finance" options={{ href: null }} />
