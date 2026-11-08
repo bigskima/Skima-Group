@@ -30,7 +30,7 @@ Deno.test("Coverage administration can add named service areas without map coord
   requireText(managedAdmin, "const selectableAreas = serviceAreas.data ?? []", "all active named locations are selectable");
   requireText(managedAdmin, "const availableAreas = selectableAreas.filter", "already assigned locations are excluded without hiding other areas");
   requireText(managedAdmin, "const selectedAreaCanBeAssigned = selectedArea !== null", "named locations are assignable without a polygon");
-  requireNotText(managedAdmin, "Map boundary required", "named area selection is not blocked by a missing polygon");
+  rejectText(managedAdmin, "Map boundary required", "named area selection is not blocked by a missing polygon");
   requireText(managedAdmin, "A verified map boundary is optional for this named area.", "named area dispatch rule is explained to the administrator");
   requireText(managedIntegrityMigration, "managed_driver_geography_matches_location", "dispatch resolves boundaryless named areas from saved address hierarchy");
   requireText(managedIntegrityMigration, "Oshimili South", "Asaba is seeded under the correct LGA");
