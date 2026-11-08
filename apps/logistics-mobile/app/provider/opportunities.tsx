@@ -1,2 +1,5 @@
-import { ProviderOpportunitiesScreen } from "../../src/screens/ProviderOpportunitiesScreen";
-export default function ProviderOpportunitiesRoute() { return <ProviderOpportunitiesScreen />; }
+import { Redirect } from "expo-router";
+
+export default function LegacyProviderOpportunitiesRoute() {
+  return <Redirect href="/(provider)/opportunities" />;
+}
