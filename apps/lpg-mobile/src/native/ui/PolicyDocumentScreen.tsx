@@ -43,11 +43,13 @@ export function PolicyDocumentScreen({
   applicationId = null,
   roleKey = null,
   allowAcceptance = true,
+  mandatory = false,
 }: {
   readonly policyKey: PolicyKey;
   readonly applicationId?: string | null;
   readonly roleKey?: string | null;
   readonly allowAcceptance?: boolean;
+  readonly mandatory?: boolean;
 }) {
   const session = useSession();
   const { palette } = useAppTheme();
@@ -159,14 +161,16 @@ export function PolicyDocumentScreen({
     <Screen
       eyebrow="SKIMA policy centre"
       title={document?.title ?? "Privacy & policy"}
-      subtitle={document?.published
+      subtitle={mandatory
+        ? "Review the current customer terms before entering SKIMA Refill. Open each chapter, then confirm your agreement."
+        : document?.published
         ? `Version ${document.versionLabel ?? "current"} • Read chapter by chapter or use Read aloud.`
         : "Read the summary here. The external source remains available when a published in-app copy is unavailable."}
-      action={
+      action={mandatory ? undefined : (
         <Pressable accessibilityRole="button" onPress={() => router.back()}>
           <Text style={[styles.back, { color: palette.brand }]}>Back</Text>
         </Pressable>
-      }
+      )}
     >
       {policy.isLoading ? (
         <Card>
