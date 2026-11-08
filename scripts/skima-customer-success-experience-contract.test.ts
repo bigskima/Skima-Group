@@ -33,6 +33,7 @@ Deno.test("Coverage administration can add named service areas without map coord
   rejectText(managedAdmin, "Map boundary required", "named area selection is not blocked by a missing polygon");
   requireText(managedAdmin, "A verified map boundary is optional for this named area.", "named area dispatch rule is explained to the administrator");
   requireText(managedIntegrityMigration, "managed_driver_geography_matches_location", "dispatch resolves boundaryless named areas from saved address hierarchy");
+  requireText(managedIntegrityMigration, "'Delta State','delta state'", "Delta State is created under Nigeria when absent on a fresh database");
   requireText(managedIntegrityMigration, "Oshimili South", "Asaba is seeded under the correct LGA");
   requireText(managedIntegrityMigration, "Asaba", "Asaba is a named locality, not a state-wide rule");
 });
