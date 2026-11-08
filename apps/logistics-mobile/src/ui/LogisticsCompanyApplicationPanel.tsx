@@ -301,12 +301,10 @@ export function LogisticsCompanyApplicationPanel({
         uri: asset.uri,
         signedUrl: uploadSession.signedUrl,
         contentType,
+        maxBytes: 50 * 1024 * 1024,
       });
       if (uploaded.status < 200 || uploaded.status >= 300) {
         throw new Error(`The document upload was rejected (${uploaded.status}).`);
-      }
-      if (uploaded.byteSize > 50 * 1024 * 1024) {
-        throw new Error("Each company document must be no larger than 50 MB.");
       }
       return api.post("/runtime/documents", {
         applicationId,
