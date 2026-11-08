@@ -18,7 +18,7 @@ Deno.test("Coverage administration can add named service areas without map coord
     read("supabase/migrations/20261029182549_nigeria_location_enablement_fulfilment_gates.sql"),
     read("supabase/migrations/20261106120000_lpg_named_geography_service_area_runtime.sql"),
     read("apps/admin/src/admin-managed-driver-coverage-workspace.tsx"),
-    read("supabase/migrations/20261108160000_store_geography_coverage_integrity.sql"),
+    read("supabase/migrations/20261108152629_store_geography_coverage_integrity.sql"),
   ]);
   requireText(coverage, "Add service area", "coverage overview quick action");
   requireText(coverage, "skima_managed_fulfillment", "SKIMA Managed coverage rule");
