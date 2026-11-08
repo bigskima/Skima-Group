@@ -120,6 +120,15 @@ async function handleFuelRuntimeRequest(
   url: URL,
 ): Promise<Response> {
   const authResult = { user };
+  if (routePath === "/runtime/fuel/station-context" && request.method === "GET") {
+    return rpcResponse(
+      supabase.rpc("read_fuel_station_branch_context", {
+        target_station_profile_id: requireUuid(url.searchParams.get("stationProfileId"), "stationProfileId"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/runtime/fuel/products") {
     if (request.method === "GET") {
       return selectRecords(
