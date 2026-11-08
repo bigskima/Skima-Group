@@ -1,11 +1,12 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import type { PropsWithChildren } from "react";
 import { useCurrentPolicy, useCurrentPolicyAcceptance } from "../api/policies";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography } from "../theme/tokens";
 import { PolicyDocumentScreen } from "../ui/PolicyDocumentScreen";
 
-export function RefillCustomerPolicyGate({ children }: React.PropsWithChildren) {
+export function RefillCustomerPolicyGate({ children }: PropsWithChildren) {
   const session = useSession();
   const { palette } = useAppTheme();
   const policy = useCurrentPolicy("policy.customer.terms");
