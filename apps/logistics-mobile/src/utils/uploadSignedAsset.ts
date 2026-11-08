@@ -16,6 +16,7 @@ export async function uploadSignedAsset(input: {
   signedUrl: string;
   contentType: string;
   onProgress?: (progress: number) => void;
+  maxBytes?: number;
 }): Promise<SignedAssetUploadResult> {
   if (Platform.OS === "web") {
     const source = await fetch(input.uri);
@@ -23,6 +24,9 @@ export async function uploadSignedAsset(input: {
       throw new Error("The selected file could not be read by the browser.");
     }
     const blob = await source.blob();
+    if (input.maxBytes !== undefined && blob.size > input.maxBytes) {
+      throw new Error(`The selected file must be no larger than ${Math.floor(input.maxBytes / (1024 * 1024))} MB.`);
+    }
     const response = await fetch(input.signedUrl, {
       method: "PUT",
       headers: { "content-type": input.contentType },
@@ -33,6 +37,9 @@ export async function uploadSignedAsset(input: {
   }
 
   const file = new File(input.uri);
+  if (input.maxBytes !== undefined && file.size > input.maxBytes) {
+    throw new Error(`The selected file must be no larger than ${Math.floor(input.maxBytes / (1024 * 1024))} MB.`);
+  }
   const result = await file.createUploadTask(input.signedUrl, {
     httpMethod: "PUT",
     uploadType: UploadType.BINARY_CONTENT,
