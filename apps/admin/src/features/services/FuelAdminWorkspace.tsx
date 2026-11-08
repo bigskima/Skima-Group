@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Package, Plus, RefreshCcw, Save, ShieldCheck, Truck, Warehouse } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { createClientIdempotencyKey } from "@skima/frontend-core";
@@ -54,6 +54,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const client = useQueryClient();
   const [offerForm, setOfferForm] = useState<OfferForm>(empty);
   const [selectedModes, setSelectedModes] = useState<string[]>([...FULFILLMENT_MODES]);
+  const [feeCurrencyCode, setFeeCurrencyCode] = useState("NGN");
+  const [feeDrafts, setFeeDrafts] = useState<Record<string, string>>({});
   const [storageForm, setStorageForm] = useState({
     branchId: "", productKey: "fuel.pms", key: "", name: "", capacity: "", reserve: "0", status: "active",
   });
@@ -78,8 +80,33 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const containers = useFuelQuery(api, status, "containers", "/runtime/fuel/containers");
   const qualifications = useFuelQuery(api, status, "qualifications", "/runtime/fuel/driver-qualifications");
   const dispatchQueue = useFuelQuery(api, status, "dispatch-queue", "/runtime/fuel/orders/operations?stage=ready_for_driver");
+  const platformFees = useFuelQuery(api, status, "platform-fees", "/runtime/fuel/platform-fees");
+  const feeCurrencies = useMemo(() => [...new Set(
+    (platformFees.data ?? [])
+      .map((record) => catalogText(record, "currency_code"))
+      .filter(Boolean)
+  )].map((code) => ({ label: code, value: code })), [platformFees.data]);
 
-  const queries = [products, branches, offers, tanks, containerTypes, containers, qualifications, dispatchQueue];
+  useEffect(() => {
+    if (feeCurrencies.length > 0 && !feeCurrencies.some((currency) => currency.value === feeCurrencyCode)) {
+      setFeeCurrencyCode(feeCurrencies[0].value);
+    }
+  }, [feeCurrencies, feeCurrencyCode]);
+
+  useEffect(() => {
+    if (!platformFees.data) return;
+    setFeeDrafts(Object.fromEntries(
+      PRODUCT_KEYS.map((productKey) => {
+        const fee = platformFees.data.find((record) =>
+          catalogText(record, "product_key") === productKey &&
+          catalogText(record, "currency_code") === feeCurrencyCode
+        );
+        return [productKey, fee ? String(catalogNumber(fee, "amount_per_litre")) : "0"];
+      }),
+    ));
+  }, [platformFees.data, feeCurrencyCode]);
+
+  const queries = [products, branches, offers, tanks, containerTypes, containers, qualifications, dispatchQueue, platformFees];
   const loading = queries.some((query) => query.isLoading);
   const failed = queries.find((query) => query.error)?.error;
   const branchOptions = useMemo(() => [
@@ -106,7 +133,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   };
   const toggleProduct = useFuelMutation(api, "/runtime/fuel/products", invalidate, setNotice, setActionError);
   const bulkToggleProducts = useFuelMutation(api, "/runtime/fuel/products", invalidate, setNotice, setActionError);
-  const saveOffer = useFuelMutation(api, "/runtime/fuel/offers", invalidate, setNotice, setActionError);
+  const saveOffer = useFuelMutation(api, "/runtime/fuel/admin-pricing/branch-offer", invalidate, setNotice, setActionError);
+  const saveFuelFee = useFuelMutation(api, "/runtime/fuel/platform-fees", invalidate, setNotice, setActionError);
   const saveTank = useFuelMutation(api, "/runtime/fuel/storage", invalidate, setNotice, setActionError);
   const saveContainerType = useFuelMutation(api, "/runtime/fuel/container-types", invalidate, setNotice, setActionError);
   const registerContainer = useFuelMutation(api, "/runtime/fuel/containers/register", invalidate, setNotice, setActionError);
@@ -132,6 +160,24 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         ? "All fuel products globally enabled by a platform administrator"
         : "All fuel products globally disabled by a platform administrator",
       idempotencyKey: createClientIdempotencyKey("admin.fuel.products.bulk", status),
+    });
+  };
+
+  const submitFuelFee = async (productKey: string) => {
+    const amountPerLitre = Number(feeDrafts[productKey] ?? "");
+    if (!Number.isFinite(amountPerLitre) || amountPerLitre < 0) {
+      setActionError("Enter a valid non-negative SKIMA fee per litre.");
+      return;
+    }
+    await saveFuelFee.mutateAsync({
+      productKey,
+      currencyCode: feeCurrencyCode,
+      amountPerLitre,
+      reason: "Fuel per-litre platform markup configured by an authorized SKIMA Fuel administrator.",
+      idempotencyKey: createClientIdempotencyKey(
+        "admin.fuel.platform-fee",
+        productKey + ":" + feeCurrencyCode + ":" + amountPerLitre,
+      ),
     });
   };
 
@@ -380,8 +426,62 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
       </section>
 
       <section className="sk-panel catalog-v2__form-card">
-        <div className="sk-panel__header"><div><p className="admin-section-kicker">Branch-level offer</p><h2>Station prices and charges</h2></div><StatusBadge>Per product · Per currency</StatusBadge></div>
-        <p className="skima-muted">Each branch and product has independent litre limits and prices. Container charges, delivery, platform fee and tax are stored with the station offer and included in the server-calculated customer quote.</p>
+        <div className="sk-panel__header">
+          <div><p className="admin-section-kicker">Global Fuel pricing</p><h2>SKIMA markup per litre</h2></div>
+          <StatusBadge>Independent · Per product · Per currency</StatusBadge>
+        </div>
+        <p className="skima-muted">These are SKIMA's own per-litre charges. They are separate from each station's selling price and any additional fixed order charge. The same live value is included in the customer's server-generated quote.</p>
+        <div className="admin-inline-actions">
+          {feeCurrencies.map((currency) => (
+            <Button
+              key={currency.value}
+              size="sm"
+              variant={feeCurrencyCode === currency.value ? "primary" : "outline"}
+              onClick={() => setFeeCurrencyCode(currency.value)}
+            >{currency.value}</Button>
+          ))}
+        </div>
+        {platformFees.isLoading ? <LoadingState label="Loading Fuel markup policies" /> : null}
+        {platformFees.error ? (
+          <ErrorState title="Fuel markup settings unavailable" message={catalogError(platformFees.error)} onRetry={() => void platformFees.refetch()} />
+        ) : null}
+        {!platformFees.isLoading && !platformFees.error ? (
+          <div className="fuel-admin-list">
+            {PRODUCT_KEYS.map((productKey) => {
+              const fee = (platformFees.data ?? []).find((record) =>
+                catalogText(record, "product_key") === productKey &&
+                catalogText(record, "currency_code") === feeCurrencyCode
+              );
+              const liveAmount = fee ? catalogNumber(fee, "amount_per_litre") : 0;
+              return (
+                <article className="fuel-admin-list-row" key={productKey}>
+                  <div>
+                    <strong>{productName(productKey, productRows)}</strong>
+                    <small>{productKey} · Live {formatMoney(liveAmount, feeCurrencyCode)}/L</small>
+                  </div>
+                  <div className="fuel-admin-dispatch-actions">
+                    <TextInput
+                      label={"SKIMA markup (" + feeCurrencyCode + "/L)"}
+                      type="number"
+                      value={feeDrafts[productKey] ?? String(liveAmount)}
+                      onChange={(event) => setFeeDrafts((current) => ({ ...current, [productKey]: event.currentTarget.value }))}
+                    />
+                    <Button
+                      isLoading={saveFuelFee.isPending}
+                      disabled={!fee || saveFuelFee.isPending || feeDrafts[productKey] === undefined}
+                      onClick={() => void submitFuelFee(productKey)}
+                    >Save & apply</Button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header"><div><p className="admin-section-kicker">Branch offer administration</p><h2>Station price & commercial setup</h2></div><StatusBadge>Per branch · Per product · Per currency</StatusBadge></div>
+        <p className="skima-muted">Stations maintain their own day-to-day selling price, litre limits and locally supported fulfilment modes. Use this administrator tool for initial offer setup or a supported commercial intervention. SKIMA's per-litre markup is managed separately above.</p>
         <div className="skima-form-grid">
           <SelectInput label="Station branch" value={offerForm.branchId} onChange={(event) => setOfferForm({ ...offerForm, branchId: event.currentTarget.value })} options={branchOptions} />
           <SelectInput label="Fuel product" value={offerForm.productKey} onChange={(event) => setOfferForm({ ...offerForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
@@ -393,7 +493,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <TextInput label="Container rental charge (per container)" type="number" value={offerForm.rentalAmount} onChange={(event) => setOfferForm({ ...offerForm, rentalAmount: event.currentTarget.value })} />
           <TextInput label="Refundable rental deposit (per container)" type="number" value={offerForm.depositAmount} onChange={(event) => setOfferForm({ ...offerForm, depositAmount: event.currentTarget.value })} />
           <TextInput label="Driver / delivery fee" type="number" value={offerForm.deliveryFee} onChange={(event) => setOfferForm({ ...offerForm, deliveryFee: event.currentTarget.value })} />
-          <TextInput label="Platform fee" type="number" value={offerForm.platformFee} onChange={(event) => setOfferForm({ ...offerForm, platformFee: event.currentTarget.value })} />
+          <TextInput label="Additional fixed platform fee (per order)" type="number" value={offerForm.platformFee} onChange={(event) => setOfferForm({ ...offerForm, platformFee: event.currentTarget.value })} />
           <TextInput label="Tax rate (%)" type="number" value={offerForm.taxRate} onChange={(event) => setOfferForm({ ...offerForm, taxRate: event.currentTarget.value })} />
           <SelectInput label="Offer status" value={offerForm.status} onChange={(event) => setOfferForm({ ...offerForm, status: event.currentTarget.value })} options={[{ label: "Draft", value: "draft" }, { label: "Active", value: "active" }, { label: "Paused", value: "paused" }]} />
         </div>
@@ -418,7 +518,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
 
       <div className="fuel-admin-two-column">
         <section className="sk-panel catalog-v2__form-card">
-          <div className="sk-panel__header"><div><p className="admin-section-kicker">Station inventory</p><h2>Configure fuel tanks</h2></div><Warehouse size={21} /></div>
+          <div className="sk-panel__header"><div><p className="admin-section-kicker">Station inventory oversight</p><h2>Fuel tanks & stock records</h2></div><Warehouse size={21} /></div>
+          <p className="skima-muted">Station managers should normally create tanks, record supplier receipts and reconcile physical stock in their own Fuel Operations workspace. Admins retain setup and oversight access for onboarding and support.</p>
           <div className="skima-form-grid">
             <SelectInput label="Station branch" value={storageForm.branchId} onChange={(event) => setStorageForm({ ...storageForm, branchId: event.currentTarget.value })} options={branchOptions} />
             <SelectInput label="Product" value={storageForm.productKey} onChange={(event) => setStorageForm({ ...storageForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />

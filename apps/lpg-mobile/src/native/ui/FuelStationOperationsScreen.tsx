@@ -40,8 +40,19 @@ export function FuelStationOperationsScreen() {
   const { palette } = useAppTheme();
   const stationInventory = useStationInventory();
   const station = nestedRecord(stationInventory.data, "station");
-  const stationBranchId = firstString(station, ["stationBranchId", "station_branch_id", "branchId", "branch_id"]) ?? "";
-  const organizationId = firstString(station, ["organizationId", "organization_id"]) ?? "";
+  // stationBranchId in the LPG inventory model is the LPG station-profile ID,
+  // not the organization_branches.id used by Fuel offers and inventory.
+  const stationProfileId = firstString(station, ["stationBranchId", "station_branch_id"]) ?? "";
+  const stationContext = useGatewayQuery({
+    key: ["fuel", "station", "branch-context", stationProfileId],
+    path: `/runtime/fuel/station-context?stationProfileId=${encodeURIComponent(stationProfileId)}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(stationProfileId),
+    refetchInterval: 60000,
+  });
+  const resolvedStationContext = stationContext.data?.[0] ?? null;
+  const stationBranchId = firstString(resolvedStationContext, ["branch_id"]) ?? "";
+  const organizationId = firstString(resolvedStationContext, ["organization_id"]) ?? "";
   const products = useGatewayQuery({
     key: ["fuel", "products"],
     path: "/runtime/fuel/products",
@@ -109,8 +120,18 @@ export function FuelStationOperationsScreen() {
   const [offerCurrencyCode, setOfferCurrencyCode] = useState("NGN");
   const [offerPrice, setOfferPrice] = useState("");
   const [offerMinimumLitres, setOfferMinimumLitres] = useState("1");
-  const [offerMaximumLitres, setOfferMaximumLitres] = useState("1000");
-  const [offerModes, setOfferModes] = useState<string[]>(["station_managed", "independent_driver", "skima_managed"]);
+  const [offerMaximumLitres, setOfferMaximumLitres] = useState("");
+  const [offerModes, setOfferModes] = useState<string[]>([]);
+  const [tankProductKey, setTankProductKey] = useState("fuel.pms");
+  const [tankKey, setTankKey] = useState("");
+  const [tankName, setTankName] = useState("");
+  const [tankCapacity, setTankCapacity] = useState("");
+  const [tankSafetyReserve, setTankSafetyReserve] = useState("0");
+  const [selectedStockUnitId, setSelectedStockUnitId] = useState("");
+  const [stockReceiptLitres, setStockReceiptLitres] = useState("");
+  const [stockReceiptReason, setStockReceiptReason] = useState("");
+  const [stockAdjustmentLitres, setStockAdjustmentLitres] = useState("");
+  const [stockAdjustmentReason, setStockAdjustmentReason] = useState("");
   const [offerNotice, setOfferNotice] = useState<string | null>(null);
   const [offerError, setOfferError] = useState<string | null>(null);
 
@@ -133,6 +154,21 @@ export function FuelStationOperationsScreen() {
     path: "/runtime/fuel/offers",
     schema: ActionResponseSchema,
     invalidate: [["fuel", "station", "offers"], ["fuel", "offers"]],
+  });
+  const configureTank = useGatewayMutation({
+    path: "/runtime/fuel/storage",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"]],
+  });
+  const receiveStock = useGatewayMutation({
+    path: "/runtime/fuel/storage/receive",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"]],
+  });
+  const adjustStock = useGatewayMutation({
+    path: "/runtime/fuel/storage/adjust",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"]],
   });
   const reserveBatch = useGatewayMutation({
     path: "/runtime/fuel/orders/stock/reserve-for-order",
@@ -187,6 +223,9 @@ export function FuelStationOperationsScreen() {
   const branchOffers = (offers.data ?? []).filter((offer) =>
     firstString(offer, ["status"]) === "active" && firstString(offer, ["branch_id"]) === stationBranchId
   );
+  const selectedStockUnit = (storage.data ?? []).find((unit) =>
+    firstString(unit, ["id"]) === selectedStockUnitId
+  ) ?? null;
   const orderCurrency = firstString(nestedRecord(focusedOrder, "order"), ["currency_code"]) ?? "NGN";
   const currentOffer = focusedOrder
     ? branchOffers.find((offer) =>
@@ -228,6 +267,11 @@ export function FuelStationOperationsScreen() {
     firstString(product, ["status"]) === "enabled" &&
     ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(firstString(product, ["key"]) ?? "")
   );
+  const selectedProductModeControls = (modeControls.data ?? []).filter((control) =>
+    firstString(control, ["product_key"]) === offerProductKey
+  );
+  const globalModeControlsUnavailable = Boolean(modeControls.error) ||
+    (!modeControls.isPending && enabledFuelProducts.length > 0 && selectedProductModeControls.length !== 3);
   const enabledCurrencies = (currencies.data ?? []).filter((currency) =>
     firstString(currency, ["status"]) === "enabled" && firstString(currency, ["code"])
   );
@@ -260,18 +304,25 @@ export function FuelStationOperationsScreen() {
   useEffect(() => {
     setOfferPrice(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["price_per_litre"]) ?? "") : "");
     setOfferMinimumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["minimum_litres"]) ?? 1) : "1");
-    setOfferMaximumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["maximum_litres"]) ?? 1000) : "1000");
+    setOfferMaximumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["maximum_litres"]) ?? "") : "");
     const configured = Array.isArray(stationOfferForEditor?.fulfillment_modes)
       ? stationOfferForEditor.fulfillment_modes.filter((value): value is string => typeof value === "string")
-      : ["station_managed", "independent_driver", "skima_managed"];
+      : [];
     setOfferModes(configured.filter((mode) => globallyAllowedOfferModes.has(mode)));
     setOfferNotice(null);
     setOfferError(null);
   }, [stationBranchId, offerProductKey, offerCurrencyCode, stationOfferForEditor?.id, stationOfferForEditor?.updated_at, globallyAllowedOfferModeKey]);
 
+  useEffect(() => {
+    const firstUnit = (storage.data ?? []).find((unit) => firstString(unit, ["status"]) === "active");
+    if (!selectedStockUnitId || !(storage.data ?? []).some((unit) => firstString(unit, ["id"]) === selectedStockUnitId)) {
+      setSelectedStockUnitId(firstString(firstUnit, ["id"]) ?? "");
+    }
+  }, [storage.data, selectedStockUnitId]);
+
   const refreshAll = async () => {
     await Promise.allSettled([
-      stationInventory.refetch(), operations.refetch(), storage.refetch(), offers.refetch(), modeControls.refetch(), currencies.refetch(),
+      stationInventory.refetch(), stationContext.refetch(), operations.refetch(), storage.refetch(), offers.refetch(), modeControls.refetch(), currencies.refetch(),
       containerTypes.refetch(), containers.refetch(), qualifications.refetch(),
       reservations.refetch(), allocations.refetch(), vehicles.refetch(),
     ]);
@@ -298,6 +349,14 @@ export function FuelStationOperationsScreen() {
     const price = Number(offerPrice);
     const minimum = Number(offerMinimumLitres);
     const maximum = Number(offerMaximumLitres);
+    if (!modeControls.data?.length || modeControls.error) {
+      setOfferError("SKIMA's global fulfilment settings could not be verified. Refresh before saving a station offer.");
+      return;
+    }
+    if (!stationBranchId) {
+      setOfferError("This station's branch could not be resolved. Refresh station setup before saving.");
+      return;
+    }
     if (!offerProductKey || !offerCurrencyCode || !Number.isFinite(price) || price <= 0 ||
         !Number.isFinite(minimum) || minimum <= 0 || !Number.isFinite(maximum) || maximum < minimum) {
       setOfferError("Enter a positive station selling price and a valid minimum/maximum litre range.");
@@ -326,6 +385,96 @@ export function FuelStationOperationsScreen() {
       await Promise.all([offers.refetch(), modeControls.refetch()]);
     } catch (cause) {
       setOfferError(friendlyError(cause, "SKIMA could not save this station product offer."));
+    }
+  };
+
+  const createStationTank = async () => {
+    const capacity = Number(tankCapacity);
+    const reserve = Number(tankSafetyReserve);
+    if (!stationBranchId || !organizationId) {
+      setError("Station branch or organisation could not be resolved. Refresh station setup.");
+      return;
+    }
+    if (!tankKey.trim() || !tankName.trim() || !Number.isFinite(capacity) || capacity <= 0 ||
+        !Number.isFinite(reserve) || reserve < 0 || reserve > capacity ||
+        !enabledFuelProducts.some((product) => firstString(product, ["key"]) === tankProductKey)) {
+      setError("Choose an enabled fuel product and enter a tank name, unique key, positive capacity and valid safety reserve.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      await configureTank.mutateAsync({
+        organizationId,
+        branchId: stationBranchId,
+        productKey: tankProductKey,
+        storageKey: tankKey.trim(),
+        displayName: tankName.trim(),
+        capacityLitres: capacity,
+        safetyReserveLitres: reserve,
+        status: "active",
+        metadata: { configured_from: "station_fuel_operations" },
+        idempotencyKey: idempotencyKey("fuel-tank-setup", stationBranchId + ":" + tankKey.trim()),
+      });
+      setTankKey("");
+      setTankName("");
+      setTankCapacity("");
+      setTankSafetyReserve("0");
+      setNotice("Fuel tank configured. Record the opening stock below before accepting orders.");
+      await storage.refetch();
+    } catch (cause) {
+      setError(friendlyError(cause, "SKIMA could not configure this fuel tank."));
+    }
+  };
+
+  const recordStockReceipt = async () => {
+    const quantity = Number(stockReceiptLitres);
+    if (!selectedStockUnitId || firstString(selectedStockUnit, ["status"]) !== "active" ||
+        !Number.isFinite(quantity) || quantity <= 0 || !stockReceiptReason.trim()) {
+      setError("Choose an active tank, enter the litres received and provide a supplier receipt or delivery reference.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      await receiveStock.mutateAsync({
+        storageUnitId: selectedStockUnitId,
+        quantityLitres: quantity,
+        reason: stockReceiptReason.trim(),
+        idempotencyKey: idempotencyKey("fuel-stock-receipt", selectedStockUnitId + ":" + quantity + ":" + stockReceiptReason.trim()),
+        metadata: { station_branch_id: stationBranchId, entry_channel: "station_fuel_operations" },
+      });
+      setStockReceiptLitres("");
+      setStockReceiptReason("");
+      setNotice("Fuel receipt recorded and physical stock updated.");
+      await storage.refetch();
+    } catch (cause) {
+      setError(friendlyError(cause, "SKIMA could not record this fuel stock receipt."));
+    }
+  };
+
+  const recordStockAdjustment = async () => {
+    const delta = Number(stockAdjustmentLitres);
+    if (!selectedStockUnitId || !Number.isFinite(delta) || delta === 0 || !stockAdjustmentReason.trim()) {
+      setError("Choose a tank, enter a non-zero signed litre adjustment and explain the stock correction.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      await adjustStock.mutateAsync({
+        storageUnitId: selectedStockUnitId,
+        quantityDeltaLitres: delta,
+        reason: stockAdjustmentReason.trim(),
+        idempotencyKey: idempotencyKey("fuel-stock-adjustment", selectedStockUnitId + ":" + delta + ":" + stockAdjustmentReason.trim()),
+        metadata: { station_branch_id: stationBranchId, entry_channel: "station_fuel_operations" },
+      });
+      setStockAdjustmentLitres("");
+      setStockAdjustmentReason("");
+      setNotice("Fuel stock adjustment recorded in the stock movement history.");
+      await storage.refetch();
+    } catch (cause) {
+      setError(friendlyError(cause, "SKIMA could not adjust this fuel stock."));
     }
   };
 
@@ -545,8 +694,8 @@ export function FuelStationOperationsScreen() {
     }, "All filled containers have been handed to the assigned driver. Delivery has started automatically.");
   };
 
-  const loading = stationInventory.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
-  const failed = stationInventory.error || operations.error || storage.error || offers.error;
+  const loading = stationInventory.isPending || stationContext.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
+  const failed = Boolean(stationInventory.error || stationContext.error || operations.error || storage.error || offers.error);
   const stageTone = (stage: string): "neutral" | "brand" | "success" | "warning" | "danger" => {
     if (["completed", "inspection_passed"].includes(stage)) return "success";
     if (["cancelled", "exception"].includes(stage)) return "danger";
@@ -561,16 +710,30 @@ export function FuelStationOperationsScreen() {
       subtitle="Accept paid orders, reserve tank stock, fill and measure containers, then assign an approved driver and vehicle."
       action={<AppButton label="Back to station" size="sm" variant="ghost" onPress={() => router.replace("/(station)" as never)} />}
     >
-      {!stationBranchId ? (
+      {!stationProfileId ? (
         <EmptyState
-          title="Station branch not resolved"
+          title="Station profile not resolved"
           description="Complete station workspace setup before processing Fuel orders."
           action={<AppButton label="Refresh station" variant="secondary" onPress={() => void refreshAll()} />}
+        />
+      ) : !stationBranchId && !stationContext.isPending ? (
+        <EmptyState
+          title="Fuel branch could not be resolved"
+          description={stationContext.error
+            ? friendlyError(stationContext.error, "SKIMA could not resolve this station's Fuel branch.")
+            : "This approved LPG station profile is not currently linked to an active organization branch. Contact SKIMA Admin before configuring Fuel offers or stock."}
+          action={<AppButton label="Retry branch lookup" variant="secondary" onPress={() => void stationContext.refetch()} />}
         />
       ) : loading ? (
         <View style={styles.loading}><ActivityIndicator /><Text style={[styles.muted, { color: palette.muted }]}>Loading Fuel station operations…</Text></View>
       ) : failed ? (
-        <EmptyState title="Fuel operations could not be loaded" description="Refresh and try again." action={<AppButton label="Refresh" onPress={() => void refreshAll()} />} />
+        <EmptyState
+          title="Fuel operations could not be loaded"
+          description={globalModeControlsUnavailable
+            ? "SKIMA's global fulfilment settings could not be verified. No mode has been assumed disabled. Refresh before changing offers or dispatching a new order."
+            : "Refresh and try again. Existing orders and stock records have not been changed."}
+          action={<AppButton label="Refresh" onPress={() => void refreshAll()} />}
+        />
       ) : (
         <>
           <Card title="Fuel tank availability" description="Only the unreserved stock above the tank safety reserve can be committed to new orders.">
@@ -603,6 +766,97 @@ export function FuelStationOperationsScreen() {
             {branchOffers.length === 0 ? <Text style={[styles.muted, { color: palette.muted }]}>No active Fuel offers are configured for this branch.</Text> : null}
           </Card>
 
+          <Card
+            title="Configure fuel tanks"
+            description="Create one storage record for each physical tank or approved storage compartment. Capacity and safety reserve are enforced by SKIMA."
+          >
+            <View style={styles.productChipRow}>
+              {enabledFuelProducts.map((product) => {
+                const key = firstString(product, ["key"]) ?? "";
+                const active = tankProductKey === key;
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => setTankProductKey(key)}
+                    style={[styles.productChip, { borderColor: active ? palette.brand : palette.border, backgroundColor: active ? palette.brandSoft : palette.surface }]}
+                  >
+                    <Text style={[styles.productChipText, { color: active ? palette.brand : palette.ink }]}>{productNameForKey(key)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <AppField label="Tank key" value={tankKey} onChangeText={setTankKey} placeholder="e.g. petrol-main-tank" />
+            <AppField label="Tank name" value={tankName} onChangeText={setTankName} placeholder="e.g. PMS Tank 1" />
+            <AppField label="Capacity (litres)" value={tankCapacity} onChangeText={setTankCapacity} placeholder="e.g. 30000" keyboardType="decimal-pad" />
+            <AppField label="Safety reserve (litres)" value={tankSafetyReserve} onChangeText={setTankSafetyReserve} placeholder="0" keyboardType="decimal-pad" />
+            <AppButton
+              label="Save fuel tank"
+              fullWidth
+              loading={configureTank.isPending}
+              disabled={!stationBranchId || !organizationId || !enabledFuelProducts.length}
+              onPress={() => void createStationTank()}
+            />
+          </Card>
+
+          <Card
+            title="Fuel receipts and stock corrections"
+            description="Record supplier deliveries against the actual tank. Each receipt and correction is added to the immutable stock movement history."
+          >
+            {(storage.data ?? []).filter((unit) => firstString(unit, ["status"]) !== "retired").length === 0 ? (
+              <Text style={[styles.muted, { color: palette.muted }]}>No tanks are configured yet. Create a tank above, then record its opening stock as a supplier receipt.</Text>
+            ) : (
+              <>
+                <Text style={[styles.sectionLabel, { color: palette.ink }]}>Select tank</Text>
+                <View style={styles.offerModeList}>
+                  {(storage.data ?? []).filter((unit) => ["active", "paused"].includes(firstString(unit, ["status"]) ?? "")).map((unit) => {
+                    const unitId = firstString(unit, ["id"]) ?? "";
+                    const active = selectedStockUnitId === unitId;
+                    const name = firstString(unit, ["display_name", "key"]) ?? "Fuel tank";
+                    const product = productNameForKey(firstString(unit, ["product_key"]) ?? "");
+                    const stock = firstNumber(unit, ["physical_stock_litres"]) ?? 0;
+                    const reserved = firstNumber(unit, ["reserved_stock_litres"]) ?? 0;
+                    const reserve = firstNumber(unit, ["safety_reserve_litres"]) ?? 0;
+                    return (
+                      <Pressable
+                        key={unitId}
+                        onPress={() => setSelectedStockUnitId(unitId)}
+                        style={[styles.offerModeRow, { borderColor: active ? palette.brand : palette.border, backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle }]}
+                      >
+                        <View style={styles.offerModeCopy}>
+                          <Text style={[styles.orderTitle, { color: palette.ink }]}>{name}</Text>
+                          <Text style={[styles.muted, { color: palette.muted }]}>{product} · {stock.toLocaleString()} L physical · {Math.max(0, stock - reserved - reserve).toLocaleString()} L available</Text>
+                        </View>
+                        <StatusPill label={active ? "Selected" : firstString(unit, ["status"]) ?? "Tank"} tone={active ? "success" : "neutral"} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <AppField label="Supplier delivery quantity (litres)" value={stockReceiptLitres} onChangeText={setStockReceiptLitres} placeholder="e.g. 5000" keyboardType="decimal-pad" />
+                <AppField label="Supplier receipt / delivery reference" value={stockReceiptReason} onChangeText={setStockReceiptReason} placeholder="Supplier, delivery note or receipt number" />
+                <AppButton
+                  label="Record supplier receipt"
+                  fullWidth
+                  loading={receiveStock.isPending}
+                  disabled={!selectedStockUnitId || firstString(selectedStockUnit, ["status"]) !== "active"}
+                  onPress={() => void recordStockReceipt()}
+                />
+                <View style={styles.operationInfo}>
+                  <Text style={[styles.muted, { color: palette.ink }]}>For corrections only, enter a positive amount to add or a negative amount to remove stock. SKIMA will reject changes that breach reserved quantities, safety reserve or tank capacity.</Text>
+                </View>
+                <AppField label="Stock adjustment (+/- litres)" value={stockAdjustmentLitres} onChangeText={setStockAdjustmentLitres} placeholder="e.g. -25 or 25" keyboardType="decimal-pad" />
+                <AppField label="Reason for stock adjustment" value={stockAdjustmentReason} onChangeText={setStockAdjustmentReason} placeholder="Explain the physical stock reconciliation" />
+                <AppButton
+                  label="Record stock adjustment"
+                  variant="secondary"
+                  fullWidth
+                  loading={adjustStock.isPending}
+                  disabled={!selectedStockUnitId}
+                  onPress={() => void recordStockAdjustment()}
+                />
+              </>
+            )}
+          </Card>
+
           {notice ? <Text style={[styles.successText, { color: palette.success }]}>{notice}</Text> : null}
           {error ? <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
@@ -610,6 +864,11 @@ export function FuelStationOperationsScreen() {
             title="What your station sells"
             description="Enable PMS, diesel or kerosene for this branch and set your own selling price. SKIMA's global product and fulfilment switches always take priority."
           >
+            {globalModeControlsUnavailable ? (
+              <Text style={[styles.errorText, { color: palette.danger }]}>
+                SKIMA's global fulfilment settings are temporarily unavailable. You can still manage tanks and physical stock, but station offers cannot be changed until the platform settings are verified.
+              </Text>
+            ) : null}
             {enabledFuelProducts.length === 0 ? (
               <Text style={[styles.muted, { color: palette.muted }]}>SKIMA has globally disabled all Fuel products. Your station cannot enable or sell them.</Text>
             ) : (
@@ -665,7 +924,7 @@ export function FuelStationOperationsScreen() {
                     label="Maximum litres per order"
                     value={offerMaximumLitres}
                     onChangeText={setOfferMaximumLitres}
-                    placeholder="1000"
+                    placeholder="e.g. 200"
                     keyboardType="decimal-pad"
                   />
                 </View>
@@ -676,7 +935,9 @@ export function FuelStationOperationsScreen() {
                     ["independent_driver", "Independent Managed", "Independent qualified driver and own vehicle"],
                     ["skima_managed", "SKIMA Managed", "SKIMA driver programme and SKIMA fleet vehicle"],
                   ] as const).map(([mode, title, description]) => {
-                    const globallyEnabled = globallyAllowedOfferModes.has(mode);
+                    const modeControl = selectedProductModeControls.find((control) => firstString(control, ["fulfillment_mode"]) === mode);
+                    const globalKnown = Boolean(modeControl);
+                    const globallyEnabled = modeControl?.enabled === true;
                     const checked = offerModes.includes(mode);
                     return (
                       <Pressable
@@ -687,9 +948,9 @@ export function FuelStationOperationsScreen() {
                       >
                         <View style={styles.offerModeCopy}>
                           <Text style={[styles.orderTitle, { color: palette.ink }]}>{title}</Text>
-                          <Text style={[styles.muted, { color: palette.muted }]}>{globallyEnabled ? description : "Disabled by SKIMA Admin · cannot be enabled by this station"}</Text>
+                          <Text style={[styles.muted, { color: palette.muted }]}>{!globalKnown ? "SKIMA's global setting could not be verified" : globallyEnabled ? description : "Disabled by SKIMA Admin · cannot be enabled by this station"}</Text>
                         </View>
-                        <StatusPill label={!globallyEnabled ? "Globally off" : checked ? "On" : "Off"} tone={!globallyEnabled ? "warning" : checked ? "success" : "neutral"} />
+                        <StatusPill label={!globalKnown ? "Unavailable" : !globallyEnabled ? "Globally off" : checked ? "On" : "Off"} tone={!globalKnown ? "warning" : !globallyEnabled ? "warning" : checked ? "success" : "neutral"} />
                       </Pressable>
                     );
                   })}
