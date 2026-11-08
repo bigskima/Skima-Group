@@ -37,6 +37,15 @@ Deno.test("Coverage administration can add named service areas without map coord
   requireText(managedIntegrityMigration, "Asaba", "Asaba is a named locality, not a state-wide rule");
 });
 
+Deno.test("Managed customer quote gating accepts boundaryless named geography through saved locality hierarchy", async () => {
+  const migration = await read("supabase/migrations/20261108153330_lpg_managed_named_geography_quote_gates.sql");
+  requireText(migration, "target_location_metadata", "quote availability receives the saved address metadata");
+  requireText(migration, "target_formatted_address", "quote availability receives the saved formatted address");
+  requireText(migration, "managed_driver_geography_matches_location", "boundaryless service areas use the named geography matcher");
+  requireText(migration, "pickup_record.formatted_address", "pickup location is checked using its saved hierarchy");
+  requireText(migration, "delivery_record.formatted_address", "delivery location is checked using its saved hierarchy");
+});
+
 Deno.test("Managed availability and routing use the same named geography policy", async () => {
   const [coverage, availabilityResolver, internalReference, priority, workspace] = await Promise.all([
     read("apps/admin/src/features/operations/CoverageWorkspaceV2.tsx"),
