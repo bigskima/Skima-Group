@@ -1,2 +1,5 @@
-import { ProviderHomeScreen } from "../../src/screens/ProviderHomeScreen";
-export default function ProviderHomeRoute() { return <ProviderHomeScreen />; }
+import { Redirect } from "expo-router";
+
+export default function LegacyProviderHomeRoute() {
+  return <Redirect href="/(provider)/index" />;
+}
