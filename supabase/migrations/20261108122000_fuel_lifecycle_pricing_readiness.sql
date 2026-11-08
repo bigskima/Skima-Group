@@ -352,7 +352,7 @@ language plpgsql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 begin
   if auth.uid() is null or target_station_profile_id is null then
     raise exception using errcode='42501',message='Authenticated station profile context is required';
@@ -373,7 +373,7 @@ begin
     and station.approval_status='approved'
     and station.compliance_status='approved';
 end;
-$;
+$$;
 
 revoke all on function public.read_fuel_station_branch_context(uuid) from public,anon;
 grant execute on function public.read_fuel_station_branch_context(uuid) to authenticated;
@@ -403,7 +403,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 begin
   if auth.role()<>'service_role' and not public.can_manage_fuel_platform() then
     raise exception using errcode='42501',message='Platform Fuel management permission is required for administrator branch-offer changes';
@@ -428,7 +428,7 @@ begin
     target_metadata
   );
 end;
-$;
+$$;
 
 revoke all on function public.configure_fuel_admin_branch_product_offer(uuid,text,text,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,text[],text,text,jsonb) from public,anon;
 grant execute on function public.configure_fuel_admin_branch_product_offer(uuid,text,text,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,text[],text,text,jsonb) to authenticated;
