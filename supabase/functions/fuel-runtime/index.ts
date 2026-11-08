@@ -208,6 +208,33 @@ async function handleFuelRuntimeRequest(
     return rpcResponse(supabase.rpc("read_fuel_fulfillment_mode_controls"), id);
   }
 
+
+  // One authoritative schedule feeds the Admin controls and customer estimate.
+  if (routePath === "/runtime/fuel/platform-fees") {
+    if (request.method === "GET") {
+      return rpcResponse(supabase.rpc("read_fuel_product_fee_schedule"), id);
+    }
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("set_fuel_product_fee", {
+          target_product_key: requireString(payload.productKey, "productKey"),
+          target_currency_code: requireString(payload.currencyCode, "currencyCode"),
+          target_amount_per_litre: requireNumber(payload.amountPerLitre, "amountPerLitre"),
+          target_reason: requireString(payload.reason, "reason"),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/fuel/customer-stock-availability" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_fuel_customer_stock_availability"), id);
+  }
+
   if (routePath === "/runtime/fuel/managed-prices" && request.method === "GET") {
     let query = supabase
       .from("fuel_managed_product_prices")
@@ -222,6 +249,37 @@ async function handleFuelRuntimeRequest(
 
   if (routePath === "/runtime/fuel/admin-pricing" && request.method === "GET") {
     return rpcResponse(supabase.rpc("read_fuel_admin_pricing_workspace"), id);
+  }
+
+
+  // Only platform Fuel administrators use the full commercial offer editor.
+  // Station operators keep the restricted /runtime/fuel/offers route, which
+  // cannot overwrite platform fee, container, delivery or tax policy fields.
+  if (routePath === "/runtime/fuel/admin-pricing/branch-offer" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_fuel_branch_product_offer", {
+        target_branch_id: requireUuid(payload.branchId, "branchId"),
+        target_product_key: requireString(payload.productKey, "productKey"),
+        target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+        target_price_per_litre: requireNumber(payload.pricePerLitre, "pricePerLitre"),
+        target_minimum_litres: requireNumber(payload.minimumLitres, "minimumLitres"),
+        target_maximum_litres: requireNumber(payload.maximumLitres, "maximumLitres"),
+        target_container_purchase_amount: optionalNumber(payload.containerPurchaseAmount, "containerPurchaseAmount") ?? 0,
+        target_container_rental_amount: optionalNumber(payload.containerRentalAmount, "containerRentalAmount") ?? 0,
+        target_refundable_deposit_amount: optionalNumber(payload.refundableDepositAmount, "refundableDepositAmount") ?? 0,
+        target_driver_delivery_fee_amount: optionalNumber(payload.driverDeliveryFeeAmount, "driverDeliveryFeeAmount") ?? 0,
+        target_platform_fee_amount: optionalNumber(payload.platformFeeAmount, "platformFeeAmount") ?? 0,
+        target_tax_rate_percent: optionalNumber(payload.taxRatePercent, "taxRatePercent") ?? 0,
+        target_fulfillment_modes: optionalStringArray(payload.fulfillmentModes) ?? [],
+        target_status: optionalString(payload.status) ?? "draft",
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/fuel/admin-pricing/managed-price" && request.method === "POST") {
