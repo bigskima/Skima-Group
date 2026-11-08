@@ -292,4 +292,47 @@ $$;
 revoke all on function public.read_fuel_customer_stock_availability() from public,anon;
 grant execute on function public.read_fuel_customer_stock_availability() to authenticated;
 
+-- Do not create a customer Fuel order that the station cannot currently
+-- prepare from recorded, unreserved stock. The later atomic reservation still
+-- owns the concurrency guarantee; this check prevents quoting an empty tank.
+do $patch$
+declare
+  function_sql text;
+  old_guard text;
+  new_guard text;
+begin
+  select pg_get_functiondef(
+    'public.create_fuel_order_with_quote(uuid,text,numeric,text,text,text,text,text,uuid,text,jsonb)'::regprocedure
+  ) into function_sql;
+
+  old_guard:=$old$  if not target_fulfillment_mode=any(offer_record.fulfillment_modes) then
+    raise exception using errcode='23514',message='The selected fulfilment mode is unavailable for this station and product';
+  end if;$old$;
+
+  new_guard:=$new$  if not target_fulfillment_mode=any(offer_record.fulfillment_modes) then
+    raise exception using errcode='23514',message='The selected fulfilment mode is unavailable for this station and product';
+  end if;
+
+  if coalesce((
+    select sum(greatest(
+      storage.physical_stock_litres
+      - storage.reserved_stock_litres
+      - storage.safety_reserve_litres,
+      0
+    ))
+    from public.fuel_station_storage_units storage
+    where storage.branch_id=target_branch_id
+      and storage.product_key=target_product_key
+      and storage.status='active'
+  ),0)<target_requested_litres then
+    raise exception using errcode='55000',message='This station does not currently have enough recorded fuel stock to accept the requested litres';
+  end if;$new$;
+
+  if position(old_guard in function_sql)=0 then
+    raise exception 'Fuel order availability guard changed; refusing an unsafe patch';
+  end if;
+  execute replace(function_sql,old_guard,new_guard);
+end;
+$patch$;
+
 commit;
