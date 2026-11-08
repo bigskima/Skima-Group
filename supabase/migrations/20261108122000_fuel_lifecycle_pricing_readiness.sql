@@ -335,4 +335,47 @@ begin
 end;
 $patch$;
 
+
+-- The existing LPG station workspace exposes its LPG station profile ID.
+-- Fuel offers use organization_branches.id. Resolve that boundary explicitly
+-- under the same station-inventory authorization used by the station app.
+create or replace function public.read_fuel_station_branch_context(
+  target_station_profile_id uuid
+)
+returns table(
+  station_profile_id uuid,
+  branch_id uuid,
+  organization_id uuid,
+  display_name text
+)
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+begin
+  if auth.uid() is null or target_station_profile_id is null then
+    raise exception using errcode='42501',message='Authenticated station profile context is required';
+  end if;
+
+  if not public.can_read_lpg_station_inventory(target_station_profile_id) then
+    raise exception using errcode='42501',message='You do not have access to this station inventory workspace';
+  end if;
+
+  return query
+  select station.id,branch.id,branch.organization_id,branch.display_name
+  from public.lpg_station_branches station
+  join public.organization_branches branch
+    on branch.id=station.branch_id
+   and branch.organization_id=station.organization_id
+   and branch.status='active'
+  where station.id=target_station_profile_id
+    and station.approval_status='approved'
+    and station.compliance_status='approved';
+end;
+$;
+
+revoke all on function public.read_fuel_station_branch_context(uuid) from public,anon;
+grant execute on function public.read_fuel_station_branch_context(uuid) to authenticated;
+
 commit;
