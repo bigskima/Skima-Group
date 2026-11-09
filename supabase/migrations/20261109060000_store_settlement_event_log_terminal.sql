@@ -333,7 +333,6 @@ begin
 
   return settlement_execution_id;
 end;
-$function$
-
+$function$;
 
 commit;
