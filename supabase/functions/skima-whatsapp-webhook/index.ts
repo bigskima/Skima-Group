@@ -462,7 +462,7 @@ async function handleLinkedMessage(
 
   if (stage === "support.active") {
     const reference = asText(state.supportReference, "");
-    if (!reference) return plan("Your support reference is no longer available. Reply 5 from the main menu to open a new support request.", "menu");
+    if (!reference) return plan("Your support reference is no longer available. Reply 9 from the main menu to open a new support request.", "menu");
     if (input.length > 4000) return plan("Please keep your support reply under 4,000 characters.", stage, state);
     const saved = await db.rpc("skima_whatsapp_reply_support_thread", {
       target_whatsapp_wa_id: whatsappWaId,
@@ -899,9 +899,41 @@ async function handleLinkedMessage(
       },
     };
     if (stage === "logistics.pickup.select") {
-      return plan("Enter the destination town, LGA or area in Nigeria.", "logistics.destination.search", { ...state, pickup: place });
+      return plan("Now enter the full pickup street address, area, landmark or building details. This helps the provider find the correct pickup point.", "logistics.pickup.address", { ...state, pickupGeography: place });
     }
-    return plan("What are you moving? Enter a short title, for example: Deliver a sofa and two chairs.", "logistics.title", { ...state, destination: place });
+    return plan("Now enter the full destination street address, area, landmark or building details.", "logistics.destination.address", { ...state, destinationGeography: place });
+  }
+
+  if (stage === "logistics.pickup.address") {
+    if (input.length < 5 || input.length > 500) return plan("Enter a more complete pickup address, including an area or landmark.", stage, state);
+    const geography = asRecord(state.pickupGeography);
+    const pickup = {
+      geography_id: geography.geography_id,
+      display_name: input,
+      address_snapshot: {
+        formatted_address: input,
+        geography_name: geography.display_name,
+        geography_hierarchy_path: asRecord(geography.address_snapshot).geography_hierarchy_path,
+        source: "whatsapp_customer_address",
+      },
+    };
+    return plan("Enter the destination town, LGA or area in Nigeria.", "logistics.destination.search", { ...state, pickup });
+  }
+
+  if (stage === "logistics.destination.address") {
+    if (input.length < 5 || input.length > 500) return plan("Enter a more complete destination address, including an area or landmark.", stage, state);
+    const geography = asRecord(state.destinationGeography);
+    const destination = {
+      geography_id: geography.geography_id,
+      display_name: input,
+      address_snapshot: {
+        formatted_address: input,
+        geography_name: geography.display_name,
+        geography_hierarchy_path: asRecord(geography.address_snapshot).geography_hierarchy_path,
+        source: "whatsapp_customer_address",
+      },
+    };
+    return plan("What are you moving? Enter a short title, for example: Deliver a sofa and two chairs.", "logistics.title", { ...state, destination });
   }
 
   if (stage === "logistics.title") {
@@ -1317,7 +1349,7 @@ async function handleLinkedMessage(
           `Amount reserved: ${money(numberValue(order.totalAmount) ?? numberValue(asRecord(state.quote).totalAmount) ?? 0, asText(order.currencyCode, "NGN"))}`,
           "SKIMA will update you through the app and this chat when order status changes if you message us.",
           "",
-          "Reply 4 to view your orders or MENU for other options.",
+          "Reply 8 to view your orders or MENU for other options.",
         ].join("\n"),
         "menu",
         {},
@@ -1355,7 +1387,7 @@ async function handleLinkedMessage(
     if (pendingResult.error) throw pendingResult.error;
     const pending = arrayOfRecords(pendingResult.data);
     if (pending.length === 0) {
-      return plan("I couldn't find a pending LPG order for your account. If you recently topped up, check the wallet balance in the app first. Reply 4 to check your orders or MENU.", "menu");
+      return plan("I couldn't find a pending LPG order for your account. If you recently topped up, check the wallet balance in the app first. Reply 8 to check your orders or MENU.", "menu");
     }
     if (pending.length === 1) {
       const onlyOrder = pending[0];
@@ -1378,31 +1410,73 @@ async function handleLinkedMessage(
     if (!selected) return plan("Reply with the number of one of the pending orders, or CANCEL to return to the menu.", stage, state);
     const payment = await attemptReservation(db, profileId, asText(selected.id, ""), item.id);
     if (payment.ok) {
-      return plan(`✅ Payment reserved. Order ${asText(selected.public_reference, asText(selected.id, ""))} is sent for dispatch. Reply 4 to view your orders or MENU.`, "menu");
+      return plan(`✅ Payment reserved. Order ${asText(selected.public_reference, asText(selected.id, ""))} is sent for dispatch. Reply 8 to view your orders or MENU.`, "menu");
     }
     return plan(`Payment is still pending for ${asText(selected.public_reference, "your order")}. ${payment.message} Reply PAY to try again after resolving the issue.`, "payment.pending", { orderId: selected.id, publicReference: selected.public_reference });
   }
 
   if (["8", "orders", "status", "track", "tracking"].includes(normalized)) {
-    const result = await db.from("lpg_refill_orders")
-      .select("id, public_reference, status, payment_status, total_amount, currency_code, created_at, tracking_session_id")
-      .eq("customer_user_id", profileId)
-      .order("created_at", { ascending: false })
-      .limit(5);
-    if (result.error) throw result.error;
-    const orders = arrayOfRecords(result.data);
-    if (orders.length === 0) return plan("No LPG orders were found for your linked SKIMA account yet. Reply 1 to start a refill or MENU for options.", "menu");
-    const lines: string[] = ["Your latest SKIMA LPG orders", ""];
-    for (const order of orders) {
-      lines.push(`• ${asText(order.public_reference, asText(order.id, "Order"))} — ${humanizeStatus(asText(order.status, "unknown"))} / payment ${humanizeStatus(asText(order.payment_status, "unknown"))} — ${money(numberValue(order.total_amount) ?? 0, asText(order.currency_code, "NGN"))}`);
+    const [lpgResult, utilityResult, logisticsJobsResult, logisticsBookingsResult, moduleResult] = await Promise.all([
+      db.from("lpg_refill_orders")
+        .select("id,public_reference,status,payment_status,total_amount,currency_code,created_at,tracking_session_id")
+        .eq("customer_user_id", profileId).order("created_at", { ascending: false }).limit(5),
+      db.from("utility_payment_requests")
+        .select("id,public_reference,status,total_amount,currency_code,created_at")
+        .eq("customer_user_id", profileId).order("created_at", { ascending: false }).limit(5),
+      db.from("logistics_job_requests")
+        .select("id,title,status,created_at")
+        .eq("requester_user_id", profileId).order("created_at", { ascending: false }).limit(5),
+      db.from("logistics_bookings")
+        .select("id,job_id,status,total_customer_charge,currency_code,created_at")
+        .eq("requester_user_id", profileId).order("created_at", { ascending: false }).limit(5),
+      db.from("business_modules").select("id,key").in("key", ["fuel", "store"]),
+    ]);
+    for (const result of [lpgResult, utilityResult, logisticsJobsResult, logisticsBookingsResult, moduleResult]) {
+      if (result.error) throw result.error;
+    }
+    const moduleIds = arrayOfRecords(moduleResult.data).map((row) => asText(row.id, "")).filter(Boolean);
+    let commercialOrders: Record<string, unknown>[] = [];
+    if (moduleIds.length) {
+      const result = await db.from("order_records")
+        .select("id,module_id,status,currency_code,total_amount,created_at")
+        .eq("requester_user_id", profileId).in("module_id", moduleIds)
+        .order("created_at", { ascending: false }).limit(10);
+      if (result.error) throw result.error;
+      const moduleKeys = new Map(arrayOfRecords(moduleResult.data).map((row) => [asText(row.id, ""), asText(row.key, "Order")]));
+      commercialOrders = arrayOfRecords(result.data).map((order) => ({ ...order, moduleKey: moduleKeys.get(asText(order.module_id, "")) ?? "Order" }));
+    }
+    const lines: string[] = ["Your latest SKIMA orders and requests", ""];
+    for (const order of arrayOfRecords(lpgResult.data)) {
+      lines.push("LPG " + asText(order.public_reference, asText(order.id, "Order")) + " — " +
+        humanizeStatus(asText(order.status, "unknown")) + " / payment " +
+        humanizeStatus(asText(order.payment_status, "unknown")) + " — " +
+        money(numberValue(order.total_amount) ?? 0, asText(order.currency_code, "NGN")));
       if (["payment_reserved", "assigned", "accepted", "en_route", "driver_arrived", "refilling", "returning", "delivery_arrived"].includes(asText(order.status, "").toLowerCase())) {
         const location = await latestDriverLocation(db, asText(order.id, ""));
-        if (location) {
-          lines.push(`  Latest driver location: https://www.google.com/maps?q=${location.latitude},${location.longitude} (updated ${formatDate(location.recorded_at)})`);
-        }
+        if (location) lines.push("  Latest LPG driver location: https://www.google.com/maps?q=" + location.latitude + "," + location.longitude + " (updated " + formatDate(location.recorded_at) + ")");
       }
     }
-    lines.push("", "For fresh status, reply 4 again. Reply 1 to start a refill or MENU for options.");
+    for (const order of commercialOrders) {
+      lines.push(asText(order.moduleKey, "Order").toUpperCase() + " " + asText(order.id, "").slice(0, 8).toUpperCase() +
+        " — " + humanizeStatus(asText(order.status, "unknown")) + " — " +
+        money(numberValue(order.total_amount) ?? 0, asText(order.currency_code, "NGN")));
+    }
+    for (const bill of arrayOfRecords(utilityResult.data)) {
+      lines.push("BILLS " + asText(bill.public_reference, asText(bill.id, "").slice(0, 8).toUpperCase()) +
+        " — " + humanizeStatus(asText(bill.status, "unknown")) + " — " +
+        money(numberValue(bill.total_amount) ?? 0, asText(bill.currency_code, "NGN")));
+    }
+    for (const job of arrayOfRecords(logisticsJobsResult.data)) {
+      lines.push("LOGISTICS request " + asText(job.id, "").slice(0, 8).toUpperCase() +
+        " · " + asText(job.title, "Transport request") + " — " + humanizeStatus(asText(job.status, "unknown")));
+    }
+    for (const booking of arrayOfRecords(logisticsBookingsResult.data)) {
+      lines.push("LOGISTICS booking " + asText(booking.id, "").slice(0, 8).toUpperCase() +
+        " — " + humanizeStatus(asText(booking.status, "unknown")) + " — " +
+        money(numberValue(booking.total_customer_charge) ?? 0, asText(booking.currency_code, "NGN")));
+    }
+    if (lines.length === 2) lines.push("No orders or requests were found for your linked SKIMA account yet.");
+    lines.push("", "Reply 8 again for fresh status, or MENU to use another SKIMA service.");
     return plan(lines.join("\n"), "menu");
   }
 
