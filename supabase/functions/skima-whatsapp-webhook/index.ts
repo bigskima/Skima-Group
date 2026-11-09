@@ -1,16 +1,23 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.110.9";
+import { validateUtilityCustomer } from "../_shared/utility-provider-runtime.ts";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const MENU = [
   "Welcome to SKIMA 👋",
   "",
-  "Reply with a number:",
-  "1 — Order an LPG refill",
-  "2 — Fund my SKIMA wallet",
-  "3 — Pay / retry a pending order",
-  "4 — Check and track my orders",
-  "5 — Help & customer support",
-  "6 — Enable LPG order updates",
+  "Choose a SKIMA service:",
+  "1 — LPG refill",
+  "2 — Petrol, diesel or kerosene",
+  "3 — Bills (airtime, data, electricity and more)",
+  "4 — Logistics booking",
+  "5 — SKIMA Store",
+  "6 — Fund my SKIMA wallet",
+  "7 — Retry a pending LPG payment",
+  "8 — Track my orders and requests",
+  "9 — Help & customer support",
+  "0 — Enable LPG order updates",
+  "",
+  "Reply MENU at any time to return here.",
 ].join("\n");
 
 type InboundMessage = {
@@ -311,6 +318,7 @@ async function handleLinkedMessage(
     if (preference.error) throw preference.error;
     return plan("WhatsApp order-status notifications are now off. You can still message SKIMA to check your orders. Reply 6 to opt in again.", "menu");
   }
+  if (normalized === "menu") return plan(MENU, "menu", {});
   if (["cancel", "restart"].includes(normalized)) {
     return plan("Cancelled the current step. No new order was created by that command.\n\n" + MENU, "menu");
   }
@@ -361,7 +369,7 @@ async function handleLinkedMessage(
     );
   }
 
-  if (stage === "menu" && ["5", "support", "help", "customer support", "help & support"].includes(normalized)) {
+  if (stage === "menu" && ["9", "support", "help", "customer support", "help & support"].includes(normalized)) {
     return plan([
       "Which SKIMA app do you need help with?",
       "",
@@ -466,8 +474,661 @@ async function handleLinkedMessage(
     return plan(`Your message has been added to support case ${reference}. A support agent can see the updated conversation.`, "support.active", state);
   }
 
+
+  // Fuel ordering follows the live Fuel product, station-offer, container,
+  // commercial quote and wallet reservation engines.
+  if (stage === "menu" && ["2", "fuel", "petrol", "diesel", "kerosene"].includes(normalized)) {
+    const [productsResult, offersResult, containersResult, choicesResult, wallets] = await Promise.all([
+      db.from("fuel_products").select("id,key,display_name,quantity_precision,status").eq("status", "enabled").order("key"),
+      db.from("fuel_branch_product_offers").select("id,branch_id,product_key,currency_code,price_per_litre,admin_override_price_per_litre,minimum_litres,maximum_litres,fulfillment_modes,status,effective_from,effective_until,branch:organization_branches(id,display_name,address)").eq("status", "active").order("updated_at", { ascending: false }),
+      db.from("fuel_container_types").select("id,key,display_name,nominal_capacity_litres,supported_product_keys,status").eq("status", "active").order("nominal_capacity_litres"),
+      db.rpc("read_skima_whatsapp_customer_choices", { target_whatsapp_wa_id: whatsappWaId }),
+      readWhatsAppCustomerWallets(db, profileId),
+    ]);
+    if (productsResult.error) throw productsResult.error;
+    if (offersResult.error) throw offersResult.error;
+    if (containersResult.error) throw containersResult.error;
+    if (choicesResult.error) throw choicesResult.error;
+    const locations = arrayOfRecords(asRecord(choicesResult.data).locations);
+    const products = arrayOfRecords(productsResult.data).filter((product) =>
+      ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(asText(product.key, ""))
+    );
+    const offers = arrayOfRecords(offersResult.data).filter((offer) =>
+      isCurrentlyEffective(offer.effective_from, offer.effective_until) &&
+      Array.isArray(offer.fulfillment_modes) && offer.fulfillment_modes.length > 0
+    );
+    const containers = arrayOfRecords(containersResult.data);
+    if (!wallets.length) return plan("To order Fuel, first create or fund your customer wallet in the SKIMA app. Then return here and reply 2.", "menu");
+    if (!locations.length) return plan("Add an active saved delivery address in your SKIMA account before ordering Fuel. Then reply MENU.", "menu");
+    const availableProducts = products.filter((product) => offers.some((offer) =>
+      asText(offer.product_key, "") === asText(product.key, "") &&
+      wallets.some((wallet) => asText(wallet.currencyCode, "") === asText(offer.currency_code, ""))
+    ));
+    if (!availableProducts.length) {
+      return plan("There is no enabled Fuel station offer in the currency of your active SKIMA wallet right now. Please check again later or contact support.", "menu");
+    }
+    return plan(
+      "Which product would you like?\n\n" + availableProducts.map((product, index) =>
+        (index + 1) + " — " + asText(product.display_name, asText(product.key, "Fuel"))
+      ).join("\n") + "\n\nPMS is petrol, AGO is diesel and DPK is kerosene. Reply with a number.",
+      "fuel.product",
+      { products: availableProducts, offers, containers, locations, wallets },
+    );
+  }
+
+  if (stage === "fuel.product") {
+    const products = arrayOfRecords(state.products);
+    const selected = selectNumber(input, products);
+    if (!selected) return plan("Choose a listed Fuel product by number, or reply MENU to cancel.", stage, state);
+    const productKey = asText(selected.key, "");
+    const wallets = arrayOfRecords(state.wallets);
+    const offers = arrayOfRecords(state.offers).filter((offer) =>
+      asText(offer.product_key, "") === productKey &&
+      wallets.some((wallet) => asText(wallet.currencyCode, "") === asText(offer.currency_code, ""))
+    );
+    const options = offers.map((offer) => {
+      const branch = asRecord(offer.branch);
+      const wallet = walletForCurrency(wallets, asText(offer.currency_code, ""));
+      return { ...offer, _branchName: asText(branch.display_name, "Fuel station"), _wallet: wallet };
+    }).filter((offer) => Boolean(offer._wallet));
+    if (!options.length) return plan("There is no active station offer for that product in your wallet currency. Choose another product or reply MENU.", "menu");
+    return plan(
+      "Choose a station and fulfilment option:\n\n" + formatFuelOfferChoices(options) + "\n\nReply with the number.",
+      "fuel.station",
+      { ...state, product: selected, stationOptions: options },
+    );
+  }
+
+  if (stage === "fuel.station") {
+    const options = arrayOfRecords(state.stationOptions);
+    const selected = selectNumber(input, options);
+    if (!selected) return plan("Choose one of the listed Fuel station offers, or reply MENU to cancel.", stage, state);
+    const modes = Array.isArray(selected.fulfillment_modes)
+      ? selected.fulfillment_modes.filter((value): value is string => typeof value === "string")
+      : [];
+    const modeOptions = modes.map((value) => ({
+      key: value,
+      label: value === "station_managed" ? "Station managed" :
+        value === "independent_driver" ? "Independent driver" :
+        value === "skima_managed" ? "SKIMA managed delivery" : value,
+    }));
+    if (!modeOptions.length) return plan("That station no longer has an available fulfilment mode. Reply MENU and choose another offer.", "menu");
+    return plan(
+      "How should this Fuel order be fulfilled?\n\n" + modeOptions.map((value, index) => (index + 1) + " — " + value.label).join("\n") + "\n\nReply with a number.",
+      "fuel.fulfillment",
+      { ...state, selectedOffer: selected, modeOptions },
+    );
+  }
+
+  if (stage === "fuel.fulfillment") {
+    const modes = arrayOfRecords(state.modeOptions);
+    const selected = selectNumber(input, modes);
+    if (!selected) return plan("Choose one of the listed fulfilment modes by number.", stage, state);
+    const offer = asRecord(state.selectedOffer);
+    const min = numberValue(offer.minimum_litres) ?? 1;
+    const max = numberValue(offer.maximum_litres);
+    return plan(
+      "How many litres do you need? The selected station accepts " + min + " to " + (max ?? "its configured maximum") + " litres. Reply with a number.",
+      "fuel.amount",
+      { ...state, fulfillmentMode: selected.key },
+    );
+  }
+
+  if (stage === "fuel.amount") {
+    const litres = Number(input.replace(/\s*(litres?|l)$/i, "").trim());
+    const offer = asRecord(state.selectedOffer);
+    const min = numberValue(offer.minimum_litres) ?? 1;
+    const max = numberValue(offer.maximum_litres);
+    if (!Number.isFinite(litres) || litres < min || (max !== null && litres > max)) {
+      return plan("Enter a valid litre quantity between " + min + " and " + (max ?? "the station maximum") + ".", stage, state);
+    }
+    return plan(
+      "Choose your container option:\n\n1 — Purchase a container\n2 — Rent a container",
+      "fuel.container-mode",
+      { ...state, requestedLitres: litres },
+    );
+  }
+
+  if (stage === "fuel.container-mode") {
+    const modes = [
+      { key: "purchase", label: "Purchase" },
+      { key: "rental", label: "Rental" },
+    ];
+    const selected = selectNumber(input, modes as unknown as Record<string, unknown>[]);
+    if (!selected) return plan("Reply 1 to purchase a container or 2 to rent one.", stage, state);
+    const product = asRecord(state.product);
+    const productKey = asText(product.key, "");
+    const containers = arrayOfRecords(state.containers).filter((container) =>
+      Array.isArray(container.supported_product_keys) && container.supported_product_keys.includes(productKey)
+    );
+    if (!containers.length) return plan("There is no active container type configured for this Fuel product. Please contact SKIMA support.", "menu");
+    return plan(
+      "Choose a container type:\n\n" + containers.map((container, index) =>
+        (index + 1) + " — " + asText(container.display_name, "Container") +
+        (numberValue(container.nominal_capacity_litres) === null ? "" : " (" + numberValue(container.nominal_capacity_litres) + " L)")
+      ).join("\n") + "\n\nReply with the number.",
+      "fuel.container-type",
+      { ...state, containerMode: selected.key, containerOptions: containers },
+    );
+  }
+
+  if (stage === "fuel.container-type") {
+    const containers = arrayOfRecords(state.containerOptions);
+    const selected = selectNumber(input, containers);
+    if (!selected) return plan("Choose a container type from the list, or reply MENU to cancel.", stage, state);
+    const locations = arrayOfRecords(state.locations);
+    return plan("Choose the saved delivery address for this Fuel order:\n\n" + formatLocations(locations), "fuel.location", {
+      ...state,
+      containerType: selected,
+    });
+  }
+
+  if (stage === "fuel.location") {
+    const locations = arrayOfRecords(state.locations);
+    const selected = selectNumber(input, locations);
+    if (!selected) return plan("Choose one of your saved delivery addresses by number.", stage, state);
+    const product = asRecord(state.product);
+    const offer = asRecord(state.selectedOffer);
+    const container = asRecord(state.containerType);
+    const created = await db.rpc("skima_whatsapp_create_fuel_order", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_branch_id: asText(offer.branch_id, ""),
+      target_product_key: asText(product.key, ""),
+      target_requested_litres: numberValue(state.requestedLitres),
+      target_container_mode: asText(state.containerMode, ""),
+      target_container_type_key: asText(container.key, ""),
+      target_fulfillment_mode: asText(state.fulfillmentMode, ""),
+      target_currency_code: asText(offer.currency_code, "NGN"),
+      target_delivery_location_id: asText(selected.id, ""),
+      target_delivery_instructions: null,
+      target_idempotency_key: await idempotencyKey("fuel-order", item.id),
+    });
+    if (created.error) return plan("SKIMA could not create this Fuel order: " + safeCustomerError(created.error.message) + ". No wallet payment was taken. Reply MENU to restart.", "menu");
+    const quote = asRecord(created.data);
+    const orderId = asText(quote.order_id, "");
+    const quoteId = asText(quote.price_quote_id, "");
+    const total = numberValue(quote.total_amount);
+    if (!orderId || !quoteId || total === null) throw new Error("Fuel quote response is missing its order, quote or total.");
+    const branch = asRecord(offer.branch);
+    const productName = asText(product.display_name, asText(product.key, "Fuel"));
+    const currency = asText(quote.currency_code, asText(offer.currency_code, "NGN"));
+    return plan([
+      "Your Fuel quote is ready — review it before payment.",
+      "",
+      "Product: " + productName,
+      "Station: " + asText(branch.display_name, asText(offer._branchName, "Selected station")),
+      "Quantity: " + state.requestedLitres + " litres",
+      "Container: " + asText(container.display_name, "Container") + " (" + asText(state.containerMode, "rental") + ")",
+      "Fulfilment: " + asText(state.fulfillmentMode, "not specified").replace(/_/g, " "),
+      "Subtotal: " + money(numberValue(quote.subtotal_amount) ?? 0, currency),
+      "Fees: " + money(numberValue(quote.fee_amount) ?? 0, currency),
+      "Tax: " + money(numberValue(quote.tax_amount) ?? 0, currency),
+      "TOTAL: " + money(total, currency),
+      "Quote expires: " + formatDate(quote.expires_at),
+      "",
+      "Reply CONFIRM to accept this quote and reserve payment from your SKIMA Wallet. No payment has been taken yet.",
+    ].join("\n"), "fuel.confirm", {
+      orderId,
+      quoteId,
+      totalAmount: total,
+      currencyCode: currency,
+      wallet: asRecord(offer._wallet),
+      productName,
+    });
+  }
+
+  if (stage === "fuel.confirm") {
+    if (!["confirm", "yes", "pay", "confirm and pay"].includes(normalized)) {
+      return plan("Reply CONFIRM to accept the Fuel quote and reserve wallet payment, or MENU to stop.", stage, state);
+    }
+    const result = await db.rpc("skima_whatsapp_pay_fuel_order", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_order_id: asText(state.orderId, ""),
+      target_price_quote_id: asText(state.quoteId, ""),
+      target_wallet_id: asText(asRecord(state.wallet).id, ""),
+      target_idempotency_key: await idempotencyKey("fuel-pay", asText(state.orderId, item.id)),
+    });
+    if (result.error) {
+      return plan("Fuel payment was not confirmed: " + safeCustomerError(result.error.message) + ". Top up your SKIMA Wallet if needed, then reply CONFIRM to retry this same quote.", stage, state);
+    }
+    const payment = asRecord(result.data);
+    if (asText(payment.status, "") !== "payment_reserved") {
+      return plan("SKIMA has not confirmed the Fuel wallet reservation yet. Please check your app before trying again.", stage, state);
+    }
+    return plan(
+      "✅ Fuel payment reserved successfully.\nOrder: " + asText(state.orderId, "") +
+      "\nAmount reserved: " + money(numberValue(payment.totalAmount) ?? numberValue(state.totalAmount) ?? 0, asText(payment.currencyCode, "NGN")) +
+      "\nYour station and fulfilment team will process the order. Reply 8 to track it or MENU for other services.",
+      "menu",
+      {},
+    );
+  }
+
+  // Bills are read from the live utility catalogue and validated through the
+  // configured provider adapter before the canonical utility request reserves funds.
+  if (stage === "menu" && ["3", "bills", "bill payment", "airtime", "data", "electricity"].includes(normalized)) {
+    const catalogResult = await db.rpc("read_utility_catalog");
+    if (catalogResult.error) throw catalogResult.error;
+    const products = arrayOfRecords(catalogResult.data).filter((product) =>
+      product.available === true && asText(product.amount_mode, "") !== "provider"
+    );
+    if (!products.length) return plan("SKIMA Bills is not offering a currently available bill service. Please try again later.", "menu");
+    return plan(
+      "Choose a bill service:\n\n" + products.slice(0, 10).map((product, index) =>
+        (index + 1) + " — " + asText(product.category_name, "Bills") + " / " +
+        asText(product.biller_name, "Provider") + " / " + asText(product.product_name, "Service")
+      ).join("\n") + "\n\nReply with the number.",
+      "bills.product",
+      { products },
+    );
+  }
+
+  if (stage === "bills.product") {
+    const products = arrayOfRecords(state.products);
+    const selected = selectNumber(input, products.slice(0, 10));
+    if (!selected) return plan("Choose one of the listed bill services by number.", stage, state);
+    const fixed = asText(selected.amount_mode, "") === "fixed";
+    const fixedAmount = numberValue(selected.fixed_amount);
+    if (fixed && fixedAmount === null) return plan("This bill service has no configured fixed amount and cannot be paid yet. Choose another service.", "menu");
+    return plan(
+      "Enter the customer number or account reference for " + asText(selected.biller_name, "this provider") +
+      ". " + asText(selected.customer_identifier_label, "Customer number") + " is required. Do not send your PIN or OTP.",
+      "bills.identifier",
+      { ...state, product: selected, fixedAmount },
+    );
+  }
+
+  if (stage === "bills.identifier") {
+    if (input.length < 3 || input.length > 100) return plan("Enter a valid customer number or account reference.", stage, state);
+    const product = asRecord(state.product);
+    const validationContextResult = await db.rpc("read_utility_customer_validation_context", {
+      target_product_id: asText(product.product_id, ""),
+    });
+    if (validationContextResult.error) return plan("SKIMA could not prepare the provider validation. No payment was taken. Please try again later.", "menu");
+    const validationContext = asRecord(validationContextResult.data);
+    const categoryKey = asText(validationContext.categoryKey, asText(product.category_key, ""));
+    if (!["airtime", "data"].includes(categoryKey)) {
+      const providerKey = asText(validationContext.providerKey, "");
+      const billerCode = asText(validationContext.providerBillerCode, "");
+      const itemCode = asText(validationContext.providerProductCode, "");
+      if (!providerKey || !billerCode || !itemCode) return plan("This bill provider is not configured for customer validation yet. No payment was taken.", "menu");
+      try {
+        await validateUtilityCustomer(db, {
+          providerKey,
+          billerCode,
+          itemCode,
+          customerIdentifier: input,
+        });
+      } catch (error) {
+        return plan("The provider could not validate that customer number. Check it and reply again. No payment was taken.", stage, state);
+      }
+    }
+    const productAmountMode = asText(product.amount_mode, "customer");
+    if (productAmountMode === "fixed") {
+      const fixedAmount = numberValue(product.fixed_amount);
+      if (fixedAmount === null) return plan("The fixed amount for this service is not configured.", "menu");
+      return plan(
+        "Please review your bill payment:\n" +
+        "Service: " + asText(product.product_name, "Bill service") +
+        "\nProvider: " + asText(product.biller_name, "Provider") +
+        "\nCustomer reference: " + maskCustomerIdentifier(input) +
+        "\nAmount: " + money(fixedAmount, asText(product.currency_code, "NGN")) +
+        "\n\nReply CONFIRM to reserve payment from your SKIMA Wallet. The provider purchase will then be processed.",
+        "bills.confirm",
+        { ...state, customerIdentifier: input, amount: fixedAmount },
+      );
+    }
+    return plan(
+      "Customer number validated. Enter the amount you want to pay in " + asText(product.currency_code, "NGN") + ".",
+      "bills.amount",
+      { ...state, customerIdentifier: input },
+    );
+  }
+
+  if (stage === "bills.amount") {
+    const amount = Number(input.replace(/,/g, "").replace(/₦/g, "").trim());
+    const product = asRecord(state.product);
+    const minimum = numberValue(product.minimum_amount);
+    const maximum = numberValue(product.maximum_amount);
+    if (!Number.isFinite(amount) || amount <= 0 || (minimum !== null && amount < minimum) || (maximum !== null && amount > maximum)) {
+      return plan("Enter a valid amount" + (minimum === null ? "" : " not below " + money(minimum, asText(product.currency_code, "NGN"))) +
+        (maximum === null ? "" : " and not above " + money(maximum, asText(product.currency_code, "NGN"))) + ".", stage, state);
+    }
+    return plan(
+      "Please review your bill payment:\n" +
+      "Service: " + asText(product.product_name, "Bill service") +
+      "\nProvider: " + asText(product.biller_name, "Provider") +
+      "\nCustomer reference: " + maskCustomerIdentifier(asText(state.customerIdentifier, "")) +
+      "\nAmount: " + money(amount, asText(product.currency_code, "NGN")) +
+      "\n\nReply CONFIRM to reserve payment from your SKIMA Wallet. The provider purchase will then be processed.",
+      "bills.confirm",
+      { ...state, amount },
+    );
+  }
+
+  if (stage === "bills.confirm") {
+    if (!["confirm", "yes", "pay", "confirm payment"].includes(normalized)) {
+      return plan("Reply CONFIRM to reserve this bill payment, or MENU to cancel. No payment is taken before confirmation.", stage, state);
+    }
+    const product = asRecord(state.product);
+    const wallets = await readWhatsAppCustomerWallets(db, profileId);
+    const wallet = walletForCurrency(wallets, asText(product.currency_code, ""));
+    if (!wallet) return plan("An active customer wallet in " + asText(product.currency_code, "the bill currency") + " is required. Fund your wallet in the SKIMA app, then reply CONFIRM again.", stage, state);
+    const paid = await db.rpc("skima_whatsapp_create_utility_payment", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_product_id: asText(product.product_id, ""),
+      target_wallet_id: asText(wallet.id, ""),
+      target_customer_identifier: asText(state.customerIdentifier, ""),
+      target_amount: numberValue(state.amount),
+      target_recipient_phone: null,
+      target_idempotency_key: await idempotencyKey("utility-payment", asText(item.id, "")),
+    });
+    if (paid.error) return plan("SKIMA could not reserve this bill payment: " + safeCustomerError(paid.error.message) + ". No bill purchase is confirmed. Top up if needed and start again from MENU.", "menu");
+    const bill = asRecord(paid.data);
+    return plan(
+      "✅ Your bill payment has been reserved.\nReference: " + asText(bill.publicReference, asText(bill.requestId, "")) +
+      "\nAmount: " + money(numberValue(bill.totalAmount) ?? numberValue(state.amount) ?? 0, asText(bill.currencyCode, asText(product.currency_code, "NGN"))) +
+      "\nStatus: " + humanizeStatus(asText(bill.status, "payment reserved")) +
+      "\nThe configured provider will process the service. This message confirms wallet reservation, not provider completion. Reply 8 to check status.",
+      "menu",
+      {},
+    );
+  }
+
+  // Logistics uses the canonical category/geography/job/offer/booking model.
+  // A job is not described as booked until a provider offer is selected and escrow is funded.
+  if (stage === "menu" && ["4", "logistics", "delivery", "transport", "haulage"].includes(normalized)) {
+    const [categoriesResult, choicesResult, wallets] = await Promise.all([
+      db.from("logistics_service_categories").select("id,key,display_name,description,status,sort_order").eq("status", "active").order("sort_order"),
+      db.rpc("read_skima_whatsapp_customer_choices", { target_whatsapp_wa_id: whatsappWaId }),
+      readWhatsAppCustomerWallets(db, profileId),
+    ]);
+    if (categoriesResult.error) throw categoriesResult.error;
+    if (choicesResult.error) throw choicesResult.error;
+    const categories = arrayOfRecords(categoriesResult.data);
+    if (!categories.length) return plan("SKIMA Logistics has no active customer service categories at the moment.", "menu");
+    return plan(
+      "What do you need moved?\n\n" + categories.slice(0, 8).map((category, index) =>
+        (index + 1) + " — " + asText(category.display_name, asText(category.key, "Logistics service"))
+      ).join("\n") + "\n\nReply with the number.",
+      "logistics.category",
+      { categories, locations: arrayOfRecords(asRecord(choicesResult.data).locations), wallets },
+    );
+  }
+
+  if (stage === "logistics.category") {
+    const categories = arrayOfRecords(state.categories);
+    const selected = selectNumber(input, categories.slice(0, 8));
+    if (!selected) return plan("Choose a logistics service category by number.", stage, state);
+    return plan("Enter the pickup town, LGA or area in Nigeria. I will look it up in SKIMA's active location catalogue.", "logistics.pickup.search", { ...state, category: selected });
+  }
+
+  if (stage === "logistics.pickup.search" || stage === "logistics.destination.search") {
+    const found = await db.rpc("search_logistics_geographies", {
+      target_search: input,
+      target_country_code: "NG",
+      target_parent_id: null,
+      target_limit: 8,
+    });
+    if (found.error) return plan("I could not search SKIMA's location catalogue. Try a shorter town or LGA name.", stage, state);
+    const candidates = arrayOfRecords(found.data);
+    if (!candidates.length) return plan("No active SKIMA location matched that name. Try a nearby town or LGA, using at least two characters.", stage, state);
+    const nextStage = stage === "logistics.pickup.search" ? "logistics.pickup.select" : "logistics.destination.select";
+    return plan(
+      "Choose the correct location:\n\n" + candidates.map((place, index) =>
+        (index + 1) + " — " + asText(place.canonical_name, "Area") +
+        (asText(place.hierarchy_path, "") ? " (" + asText(place.hierarchy_path, "") + ")" : "")
+      ).join("\n") + "\n\nReply with the number.",
+      nextStage,
+      { ...state, geographyOptions: candidates },
+    );
+  }
+
+  if (stage === "logistics.pickup.select" || stage === "logistics.destination.select") {
+    const candidates = arrayOfRecords(state.geographyOptions);
+    const selected = selectNumber(input, candidates);
+    if (!selected) return plan("Choose one of the listed locations by number.", stage, state);
+    const place = {
+      geography_id: selected.id,
+      display_name: selected.canonical_name,
+      address_snapshot: {
+        formatted_address: selected.canonical_name,
+        geography_name: selected.canonical_name,
+        geography_hierarchy_path: selected.hierarchy_path,
+        source: "geography_catalogue",
+      },
+    };
+    if (stage === "logistics.pickup.select") {
+      return plan("Enter the destination town, LGA or area in Nigeria.", "logistics.destination.search", { ...state, pickup: place });
+    }
+    return plan("What are you moving? Enter a short title, for example: Deliver a sofa and two chairs.", "logistics.title", { ...state, destination: place });
+  }
+
+  if (stage === "logistics.title") {
+    if (input.length < 3 || input.length > 180) return plan("Enter a short description between 3 and 180 characters.", stage, state);
+    return plan("Add any extra details about the item or job, or reply SKIP.", "logistics.description", { ...state, title: input });
+  }
+
+  if (stage === "logistics.description") {
+    const description = ["skip", "none", "no"].includes(normalized) ? "" : input;
+    return plan("What name should the logistics provider contact?", "logistics.contact.name", { ...state, description });
+  }
+
+  if (stage === "logistics.contact.name") {
+    if (input.length < 2 || input.length > 120) return plan("Enter a valid contact name.", stage, state);
+    return plan("Enter a phone number the logistics provider can reach, including country code where possible.", "logistics.contact.phone", { ...state, contactName: input });
+  }
+
+  if (stage === "logistics.contact.phone") {
+    if (!/^\+?[0-9][0-9 ()-]{6,22}$/.test(input)) return plan("Enter a valid phone number, for example +234 800 000 0000.", stage, state);
+    const category = asRecord(state.category);
+    const payload = {
+      category_key: asText(category.key, ""),
+      service_key: asText(category.key, ""),
+      title: asText(state.title, ""),
+      description: asText(state.description, "") || null,
+      pickup: asRecord(state.pickup),
+      destination: asRecord(state.destination),
+      cargo: { cargo_type_keys: [] as string[] },
+      customer_contact: { name: asText(state.contactName, ""), phone: input },
+      instructions: null,
+      metadata: { channel: "whatsapp", customer_app: "logistics" },
+    };
+    const created = await db.rpc("skima_whatsapp_create_logistics_job", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_payload: payload,
+      target_idempotency_key: await idempotencyKey("logistics-job", item.id),
+    });
+    if (created.error) return plan("SKIMA could not publish this Logistics request: " + safeCustomerError(created.error.message) + ". No booking or payment was created. Reply MENU to try again.", "menu");
+    const jobId = asText(created.data, "");
+    return plan(
+      "✅ Your Logistics request has been published to eligible providers.\nRequest: " + jobId +
+      "\nPickup: " + asText(asRecord(state.pickup).display_name, "Selected pickup") +
+      "\nDestination: " + asText(asRecord(state.destination).display_name, "Selected destination") +
+      "\n\nProviders can now send offers. Reply CHECK to look for offers later. A request is not a booking until you select an offer and confirm payment.",
+      "logistics.offers.wait",
+      { jobId, wallets: state.wallets },
+    );
+  }
+
+  if (stage === "logistics.offers.wait" && ["check", "offers", "status", "refresh"].includes(normalized)) {
+    const offers = await readWhatsAppLogisticsOffers(db, profileId, asText(state.jobId, ""));
+    if (!offers.length) return plan("There are no active provider offers for this Logistics request yet. Providers may still be preparing a response. Reply CHECK again later or MENU.", stage, state);
+    return plan("Available provider offers:\n\n" + formatLogisticsOfferChoices(offers) + "\n\nReply with the number of the offer you want to book.", "logistics.offer.select", { ...state, offers });
+  }
+
+  if (stage === "logistics.offer.select") {
+    const offers = arrayOfRecords(state.offers);
+    const selected = selectNumber(input, offers);
+    if (!selected) return plan("Choose one of the listed Logistics offers by number, or reply CHECK to refresh.", stage, state);
+    const booking = await db.rpc("skima_whatsapp_create_logistics_booking", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_offer_id: asText(selected.id, ""),
+      target_idempotency_key: await idempotencyKey("logistics-booking", asText(selected.id, item.id)),
+    });
+    if (booking.error) return plan("That provider offer could not be booked: " + safeCustomerError(booking.error.message) + ". Reply CHECK to refresh the available offers.", "logistics.offers.wait", { jobId: state.jobId, wallets: state.wallets });
+    const details = asRecord(booking.data);
+    return plan(
+      "Provider offer selected. Review the final booking amount:\nProvider: " + asText(selected.providerName, "Selected provider") +
+      "\nDelivery: " + money(numberValue(details.deliveryAmount) ?? 0, asText(details.currencyCode, "NGN")) +
+      "\nSKIMA booking fee: " + money(numberValue(details.customerBookingFeeAmount) ?? 0, asText(details.currencyCode, "NGN")) +
+      "\nTOTAL: " + money(numberValue(details.totalCustomerCharge) ?? 0, asText(details.currencyCode, "NGN")) +
+      "\n\nReply CONFIRM to reserve this amount from your SKIMA Wallet. The booking is not funded yet.",
+      "logistics.booking.confirm",
+      { ...state, bookingId: details.bookingId, currencyCode: details.currencyCode, totalAmount: details.totalCustomerCharge },
+    );
+  }
+
+  if (stage === "logistics.booking.confirm") {
+    if (!["confirm", "yes", "pay", "confirm booking"].includes(normalized)) {
+      return plan("Reply CONFIRM to reserve payment for this Logistics booking. No payment has been taken yet.", stage, state);
+    }
+    const wallets = await readWhatsAppCustomerWallets(db, profileId);
+    const wallet = walletForCurrency(wallets, asText(state.currencyCode, ""));
+    if (!wallet) return plan("An active customer wallet in " + asText(state.currencyCode, "the booking currency") + " is required. Fund your wallet in the SKIMA app, then reply CONFIRM again.", stage, state);
+    const payment = await db.rpc("skima_whatsapp_pay_logistics_booking", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_booking_id: asText(state.bookingId, ""),
+      target_wallet_id: asText(wallet.id, ""),
+      target_idempotency_key: await idempotencyKey("logistics-payment", asText(state.bookingId, item.id)),
+    });
+    if (payment.error) return plan("The Logistics booking remains unpaid: " + safeCustomerError(payment.error.message) + ". Top up if needed and reply CONFIRM to retry.", stage, state);
+    const result = asRecord(payment.data);
+    if (asText(result.status, "") !== "payment_reserved") return plan("SKIMA has not confirmed the Logistics escrow reservation. Check the SKIMA app before trying again.", stage, state);
+    return plan("✅ Logistics booking funded. Amount reserved: " + money(numberValue(result.totalAmount) ?? numberValue(state.totalAmount) ?? 0, asText(result.currencyCode, "NGN")) + ". Your provider can now accept and fulfil the booking. Reply 8 to track it or MENU.", "menu", {});
+  }
+
+  // Store catalogue and checkout read the same active SKIMA Store catalogue,
+  // effective prices, stock/availability rules and saved fulfilment locations.
+  if (stage === "menu" && ["5", "store", "shop", "buy"].includes(normalized)) {
+    const [catalog, choices, wallets] = await Promise.all([
+      readWhatsAppStoreCatalogue(db),
+      db.rpc("read_skima_whatsapp_customer_choices", { target_whatsapp_wa_id: whatsappWaId }),
+      readWhatsAppCustomerWallets(db, profileId),
+    ]);
+    if (choices.error) throw choices.error;
+    const locations = arrayOfRecords(asRecord(choices.data).locations);
+    if (!catalog.products.length) return plan("SKIMA Store has no purchasable products available right now. Please check again later.", "menu");
+    if (!walletForCurrency(wallets, catalog.currencyCode)) return plan("An active " + catalog.currencyCode + " customer wallet is required for SKIMA Store checkout. Create or fund your wallet in the SKIMA app, then reply MENU.", "menu");
+    return plan(
+      "Browse available SKIMA Store products:\n\n" + formatStoreProductChoices(catalog.products) + "\n\nReply with the number of the product you want.",
+      "store.product",
+      { products: catalog.products, settings: catalog.settings, locations, wallets, cart: [] },
+    );
+  }
+
+  if (stage === "store.product") {
+    const products = arrayOfRecords(state.products);
+    const selected = selectNumber(input, products.slice(0, 10));
+    if (!selected) return plan("Choose a Store product by number, or reply MENU to cancel.", stage, state);
+    return plan(
+      "How many units of " + asText(selected.name, "this product") + " would you like? " +
+      (numberValue(selected.stock) === null ? "" : "Available stock: " + numberValue(selected.stock) + ". ") +
+      "Reply with a whole number.",
+      "store.quantity",
+      { ...state, selectedProduct: selected },
+    );
+  }
+
+  if (stage === "store.quantity") {
+    const quantity = Number(input.trim());
+    const product = asRecord(state.selectedProduct);
+    const stock = numberValue(product.stock);
+    const minQuantity = numberValue(product.minQuantity) ?? 1;
+    const maxQuantity = numberValue(product.maxQuantity);
+    if (!Number.isInteger(quantity) || quantity < minQuantity || (maxQuantity !== null && quantity > maxQuantity) || (stock !== null && quantity > stock)) {
+      return plan("Enter a whole-number quantity from " + minQuantity + " to " + (Math.min(maxQuantity ?? Number.MAX_SAFE_INTEGER, stock ?? Number.MAX_SAFE_INTEGER) === Number.MAX_SAFE_INTEGER ? "the available limit" : Math.min(maxQuantity ?? Number.MAX_SAFE_INTEGER, stock ?? Number.MAX_SAFE_INTEGER)) + ".", stage, state);
+    }
+    const cart = arrayOfRecords(state.cart);
+    cart.push({
+      itemId: product.itemId,
+      variantId: product.variantId ?? null,
+      name: product.name,
+      variantName: product.variantName,
+      quantity,
+      unitAmount: product.amount,
+      currencyCode: product.currencyCode,
+      stock: product.stock,
+    });
+    return plan(
+      "Added " + quantity + " × " + asText(product.name, "product") +
+      " to your basket.\n\nReply ADD to add another product, or CHECKOUT to continue.",
+      "store.cart",
+      { ...state, cart },
+    );
+  }
+
+  if (stage === "store.cart") {
+    if (["add", "more", "another"].includes(normalized)) {
+      return plan("Choose another product:\n\n" + formatStoreProductChoices(arrayOfRecords(state.products)) + "\n\nReply with a number.", "store.product", state);
+    }
+    if (["checkout", "done", "finish", "basket"].includes(normalized)) {
+      const settings = asRecord(state.settings);
+      const methods = Array.isArray(settings.fulfillment_methods) ? settings.fulfillment_methods : [];
+      const options = [
+        ...(methods.includes("delivery") ? ["1 — Delivery"] : []),
+        ...(methods.includes("pickup") ? ["2 — Pickup"] : []),
+      ];
+      if (!options.length) return plan("Store fulfilment has not been configured. Please contact SKIMA support.", "menu");
+      return plan("How should you receive your Store order?\n\n" + options.join("\n") + "\n\nReply with a number.", "store.fulfillment", state);
+    }
+    return plan("Reply ADD for another product or CHECKOUT to continue.", stage, state);
+  }
+
+  if (stage === "store.fulfillment") {
+    const settings = asRecord(state.settings);
+    const methods = Array.isArray(settings.fulfillment_methods) ? settings.fulfillment_methods : [];
+    const fulfillment = input === "1" ? "delivery" : input === "2" ? "pickup" : "";
+    if (!fulfillment || !methods.includes(fulfillment)) return plan("Choose an available Store fulfilment method: 1 for delivery or 2 for pickup.", stage, state);
+    if (fulfillment === "delivery") {
+      const locations = arrayOfRecords(state.locations);
+      if (!locations.length) return plan("Add a saved delivery address in the SKIMA app, or reply MENU and choose Store pickup if available.", stage, state);
+      return plan("Choose your Store delivery address:\n\n" + formatLocations(locations), "store.location", { ...state, fulfillmentMethod: fulfillment });
+    }
+    return await prepareWhatsAppStoreCheckout(db, whatsappWaId, item.id, state, "pickup", null);
+  }
+
+  if (stage === "store.location") {
+    const locations = arrayOfRecords(state.locations);
+    const selected = selectNumber(input, locations);
+    if (!selected) return plan("Choose one of your saved delivery addresses by number.", stage, state);
+    return await prepareWhatsAppStoreCheckout(db, whatsappWaId, item.id, state, "delivery", selected);
+  }
+
+  if (stage === "store.payment") {
+    if (!["pay", "confirm", "yes", "confirm payment"].includes(normalized)) {
+      return plan("Reply PAY to reserve the confirmed Store total from your SKIMA Wallet, or MENU to stop.", stage, state);
+    }
+    const paid = await db.rpc("skima_whatsapp_store_checkout", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_line_items: state.lineItems,
+      target_wallet_id: asText(state.walletId, ""),
+      target_fulfillment_method: asText(state.fulfillmentMethod, ""),
+      target_delivery_location_id: asText(state.deliveryLocationId, "") || null,
+      target_customer_note: null,
+      target_idempotency_key: asText(state.checkoutKey, ""),
+      target_expected_total: numberValue(state.expectedTotal),
+      target_confirm_payment: true,
+    });
+    if (paid.error) return plan("SKIMA could not reserve Store payment: " + safeCustomerError(paid.error.message) + ". The checkout remains unpaid. Top up your wallet if needed, then reply PAY to retry.", stage, state);
+    const result = asRecord(paid.data);
+    if (result.requiresConfirmation === true || asText(result.status, "") === "awaiting_confirmation") {
+      const revisedTotal = numberValue(result.totalAmount);
+      return plan("The Store total has changed after a live checkout check. Please review the new total: " + money(revisedTotal ?? 0, asText(result.currencyCode, "NGN")) + ". Reply PAY to approve this updated amount.", stage, { ...state, expectedTotal: revisedTotal, currencyCode: result.currencyCode });
+    }
+    if (asText(result.status, "") !== "payment_reserved") return plan("The Store order has not reached a confirmed payment-reserved state. Check the app before retrying.", stage, state);
+    return plan(
+      "✅ Your SKIMA Store order is confirmed and payment is held securely.\nOrder: " + asText(result.orderId, "") +
+      "\nTotal reserved: " + money(numberValue(result.totalAmount) ?? 0, asText(result.currencyCode, "NGN")) +
+      "\nFulfilment: " + asText(state.fulfillmentMethod, "delivery") +
+      "\nSKIMA Store will update your order as it is accepted and prepared. Reply 8 to track it or MENU.",
+      "menu",
+      {},
+    );
+  }
+
   if (
-    (stage === "menu" && normalized === "6") ||
+    (stage === "menu" && normalized === "0") ||
     ["notifications", "order notifications", "enable notifications", "enable order updates"].includes(normalized)
   ) {
     const preference = await db.rpc("set_skima_whatsapp_order_notifications", {
@@ -498,7 +1159,7 @@ async function handleLinkedMessage(
     const cylinders = arrayOfRecords(choices.cylinders);
     const locations = arrayOfRecords(choices.locations);
     if (cylinders.length === 0) {
-      return plan("There is no eligible saved LPG cylinder linked to this account. Add or verify a cylinder in SKIMA app, then reply MENU.", "menu");
+      return plan("There is no eligible saved LPG cylinder linked to this account. Add or verify a cylinder in the SKIMA app, then reply MENU.", "menu");
     }
     if (locations.length === 0) {
       return plan("Add at least one active saved pickup/delivery location with map coordinates in the SKIMA app. Then reply MENU to start a refill.", "menu");
@@ -677,14 +1338,14 @@ async function handleLinkedMessage(
     );
   }
 
-  if (["2", "fund", "top up", "topup", "wallet"].includes(normalized)) {
+  if (["6", "fund", "top up", "topup", "wallet"].includes(normalized)) {
     return plan(
       "To fund your wallet securely, open the SKIMA app → Wallet → Top up and complete checkout through the payment provider configured in SKIMA. Return here and reply PAY after the funds show in your wallet. This chat cannot accept payment screenshots, card details, bank PINs or OTPs.",
       "menu",
     );
   }
 
-  if (["3", "pay", "retry payment", "payment"].includes(normalized)) {
+  if (["7", "pay", "retry payment", "payment"].includes(normalized)) {
     const pendingResult = await db.from("lpg_refill_orders")
       .select("id, public_reference, status, payment_status, total_amount, currency_code, created_at")
       .eq("customer_user_id", profileId)
@@ -722,7 +1383,7 @@ async function handleLinkedMessage(
     return plan(`Payment is still pending for ${asText(selected.public_reference, "your order")}. ${payment.message} Reply PAY to try again after resolving the issue.`, "payment.pending", { orderId: selected.id, publicReference: selected.public_reference });
   }
 
-  if (["4", "orders", "status", "track", "tracking"].includes(normalized)) {
+  if (["8", "orders", "status", "track", "tracking"].includes(normalized)) {
     const result = await db.from("lpg_refill_orders")
       .select("id, public_reference, status, payment_status, total_amount, currency_code, created_at, tracking_session_id")
       .eq("customer_user_id", profileId)
@@ -754,6 +1415,274 @@ async function handleLinkedMessage(
 
   if (stage === "menu" || stage === "payment.pending") return plan("I didn't recognise that choice. Reply with 1, 2, 3, 4 or 5, or MENU to see all options.", "menu");
   return plan("I couldn't match that response to the current step. Reply MENU to restart the ordering flow; no payment is confirmed by this message.", "menu");
+}
+
+
+async function readWhatsAppCustomerWallets(
+  db: SupabaseClient,
+  profileId: string,
+): Promise<Record<string, unknown>[]> {
+  const balances = await db.from("wallet_balances")
+    .select("wallet_id,currency_code,balance")
+    .order("wallet_id", { ascending: true });
+  if (balances.error) throw balances.error;
+  const balanceRows = arrayOfRecords(balances.data);
+  const walletIds = balanceRows.map((row) => asText(row.wallet_id, "")).filter(Boolean);
+  if (!walletIds.length) return [];
+  const wallets = await db.from("wallet_accounts")
+    .select("id,wallet_type,owner_entity_type,owner_entity_id,currency_code,status")
+    .in("id", walletIds)
+    .eq("wallet_type", "customer")
+    .eq("owner_entity_type", "user")
+    .eq("owner_entity_id", profileId)
+    .eq("status", "active");
+  if (wallets.error) throw wallets.error;
+  const balanceById = new Map(balanceRows.map((row) => [asText(row.wallet_id, ""), row]));
+  return arrayOfRecords(wallets.data).map((wallet) => {
+    const balance = balanceById.get(asText(wallet.id, ""));
+    return {
+      ...wallet,
+      currencyCode: asText(wallet.currency_code, "NGN"),
+      balance: numberValue(balance?.balance) ?? 0,
+    };
+  }).sort((left, right) => (numberValue(right.balance) ?? 0) - (numberValue(left.balance) ?? 0));
+}
+
+function walletForCurrency(wallets: Record<string, unknown>[], currencyCode: string): Record<string, unknown> | null {
+  return wallets.find((wallet) => asText(wallet.currencyCode, "") === currencyCode) ?? null;
+}
+
+function isCurrentlyEffective(start: unknown, end: unknown): boolean {
+  const now = Date.now();
+  const startsAt = typeof start === "string" ? Date.parse(start) : NaN;
+  const endsAt = typeof end === "string" ? Date.parse(end) : NaN;
+  return (!Number.isFinite(startsAt) || startsAt <= now) && (!Number.isFinite(endsAt) || endsAt > now);
+}
+
+function formatFuelOfferChoices(offers: Record<string, unknown>[]): string {
+  return offers.slice(0, 8).map((offer, index) => {
+    const branch = asRecord(offer.branch);
+    const price = numberValue(offer.admin_override_price_per_litre) ?? numberValue(offer.price_per_litre);
+    const currency = asText(offer.currency_code, "NGN");
+    const modes = Array.isArray(offer.fulfillment_modes) ? offer.fulfillment_modes.join(", ").replace(/_/g, " ") : "";
+    const range = (numberValue(offer.minimum_litres) ?? 1) + "–" + (numberValue(offer.maximum_litres) ?? "configured maximum") + " L";
+    return (index + 1) + ". " + asText(branch.display_name, asText(offer._branchName, "Fuel station")) +
+      (price === null ? "" : " — indicative " + money(price, currency) + "/L") +
+      "\n   " + range + (modes ? " · " + modes : "");
+  }).join("\n");
+}
+
+function maskCustomerIdentifier(value: string): string {
+  const compact = value.replace(/\s/g, "");
+  if (compact.length <= 4) return "••••";
+  return "••••" + compact.slice(-4);
+}
+
+function safeCustomerError(message: string): string {
+  const sanitized = (message ?? "").replace(/[\r\n]+/g, " ").replace(/(?:bearer\s+)[a-z0-9._-]+/ig, "[redacted]").slice(0, 220);
+  if (/insufficient/i.test(sanitized)) return "Your SKIMA Wallet balance is insufficient";
+  if (/expired/i.test(sanitized)) return "The quote has expired; please request a fresh quote";
+  if (/not available|unavailable|not enabled/i.test(sanitized)) return "This service is not currently available";
+  return sanitized || "Please check your details and try again";
+}
+
+async function readWhatsAppStoreCatalogue(
+  db: SupabaseClient,
+): Promise<{ settings: Record<string, unknown>; currencyCode: string; products: Record<string, unknown>[] }> {
+  const moduleResult = await db.from("business_modules").select("id,key,status").eq("key", "store").eq("status", "active").maybeSingle();
+  if (moduleResult.error) throw moduleResult.error;
+  if (!moduleResult.data) return { settings: {}, currencyCode: "NGN", products: [] };
+  const settingsResult = await db.from("storefront_settings")
+    .select("id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,minimum_order_amount,delivery_base_fee_amount,free_delivery_minimum_amount,pickup_location_label,pickup_formatted_address,pickup_instructions")
+    .eq("module_id", moduleResult.data.id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (settingsResult.error) throw settingsResult.error;
+  if (!settingsResult.data) return { settings: {}, currencyCode: "NGN", products: [] };
+  const settings = settingsResult.data as Record<string, unknown>;
+  const itemResult = await db.from("catalog_items")
+    .select("id,organization_id,module_id,category_id,display_name,description,min_quantity,max_quantity,fulfillment_methods,status,metadata")
+    .eq("module_id", moduleResult.data.id)
+    .eq("organization_id", settings.organization_id)
+    .eq("status", "active");
+  if (itemResult.error) throw itemResult.error;
+  const items = arrayOfRecords(itemResult.data).filter((item) => asText(asRecord(item.metadata).sales_channel, "") === "skima_store");
+  if (!items.length) return { settings, currencyCode: asText(settings.currency_code, "NGN"), products: [] };
+  const itemIds = items.map((item) => asText(item.id, "")).filter(Boolean);
+  const currencyCode = asText(settings.currency_code, "NGN");
+  const [variantsResult, pricesResult, availabilityResult] = await Promise.all([
+    db.from("catalog_item_variants").select("id,item_id,display_name,status").in("item_id", itemIds).eq("status", "active"),
+    db.from("catalog_prices").select("id,item_id,variant_id,currency_code,amount,status,effective_from,effective_until").in("item_id", itemIds).eq("currency_code", currencyCode).eq("status", "active"),
+    db.from("catalog_availability_rules").select("id,item_id,variant_id,availability_status,stock_quantity,reserved_quantity,status,effective_from,effective_until").in("item_id", itemIds).eq("status", "active"),
+  ]);
+  if (variantsResult.error) throw variantsResult.error;
+  if (pricesResult.error) throw pricesResult.error;
+  if (availabilityResult.error) throw availabilityResult.error;
+  const variants = arrayOfRecords(variantsResult.data);
+  const prices = arrayOfRecords(pricesResult.data).filter((price) => isCurrentlyEffective(price.effective_from, price.effective_until));
+  const availability = arrayOfRecords(availabilityResult.data).filter((rule) => isCurrentlyEffective(rule.effective_from, rule.effective_until));
+  const allowedMethods = Array.isArray(settings.fulfillment_methods) ? settings.fulfillment_methods : [];
+  const products: Record<string, unknown>[] = [];
+  for (const item of items) {
+    const itemId = asText(item.id, "");
+    const itemMethods = Array.isArray(item.fulfillment_methods) ? item.fulfillment_methods : [];
+    if (itemMethods.length && !allowedMethods.some((method) => itemMethods.includes(method))) continue;
+    const itemVariants = variants.filter((variant) => asText(variant.item_id, "") === itemId);
+    const variantOptions: (Record<string, unknown> | null)[] = itemVariants.length ? itemVariants : [null];
+    for (const variant of variantOptions) {
+      const variantId = variant ? asText(variant.id, "") : "";
+      const price = prices.find((candidate) => asText(candidate.item_id, "") === itemId && asText(candidate.variant_id, "") === variantId) ??
+        prices.find((candidate) => asText(candidate.item_id, "") === itemId && !asText(candidate.variant_id, ""));
+      const stockRule = availability.find((candidate) => asText(candidate.item_id, "") === itemId && asText(candidate.variant_id, "") === variantId) ??
+        availability.find((candidate) => asText(candidate.item_id, "") === itemId && !asText(candidate.variant_id, ""));
+      if (!price || !stockRule || asText(stockRule.availability_status, "") !== "available") continue;
+      const amount = numberValue(price.amount);
+      if (amount === null || amount <= 0) continue;
+      const quantity = numberValue(stockRule.stock_quantity);
+      const reserved = numberValue(stockRule.reserved_quantity) ?? 0;
+      const remaining = quantity === null ? null : Math.max(0, quantity - reserved);
+      if (remaining !== null && remaining <= 0) continue;
+      const maximum = numberValue(item.max_quantity);
+      const maximumQuantity = maximum === null ? remaining : remaining === null ? maximum : Math.min(maximum, remaining);
+      products.push({
+        itemId,
+        variantId: variantId || null,
+        name: asText(item.display_name, "Store item"),
+        variantName: variant ? asText(variant.display_name, "") : "",
+        description: asText(item.description, ""),
+        amount,
+        currencyCode,
+        stock: remaining,
+        minQuantity: numberValue(item.min_quantity) ?? 1,
+        maxQuantity: maximumQuantity,
+      });
+    }
+  }
+  return { settings, currencyCode, products: products.slice(0, 50) };
+}
+
+function formatStoreProductChoices(products: Record<string, unknown>[]): string {
+  return products.slice(0, 10).map((product, index) =>
+    (index + 1) + ". " + asText(product.name, "Store item") +
+    (asText(product.variantName, "") ? " — " + asText(product.variantName, "") : "") +
+    " · " + money(numberValue(product.amount) ?? 0, asText(product.currencyCode, "NGN")) +
+    (numberValue(product.stock) === null ? "" : " · " + numberValue(product.stock) + " available")
+  ).join("\n");
+}
+
+async function prepareWhatsAppStoreCheckout(
+  db: SupabaseClient,
+  whatsappWaId: string,
+  providerMessageId: string,
+  state: Record<string, unknown>,
+  fulfillmentMethod: string,
+  deliveryLocation: Record<string, unknown> | null,
+): Promise<ReplyPlan> {
+  const cart = arrayOfRecords(state.cart);
+  if (!cart.length) return plan("Your Store basket is empty. Reply MENU to browse products again.", "menu");
+  const settings = asRecord(state.settings);
+  const currencyCode = asText(settings.currency_code, "NGN");
+  const wallet = walletForCurrency(arrayOfRecords(state.wallets), currencyCode);
+  if (!wallet) return plan("An active " + currencyCode + " customer wallet is required. Fund your wallet in the SKIMA app and restart checkout.", "menu");
+  const subtotal = cart.reduce((sum, item) =>
+    sum + (numberValue(item.unitAmount) ?? 0) * (numberValue(item.quantity) ?? 0), 0);
+  const freeThreshold = numberValue(settings.free_delivery_minimum_amount);
+  const deliveryFee = fulfillmentMethod === "delivery" &&
+    !(freeThreshold !== null && subtotal >= freeThreshold)
+      ? numberValue(settings.delivery_base_fee_amount) ?? 0
+      : 0;
+  const estimatedTotal = Math.round((subtotal + deliveryFee) * 100) / 100;
+  const minimum = numberValue(settings.minimum_order_amount) ?? 0;
+  if (subtotal < minimum) return plan("Your basket is below the current SKIMA Store minimum order of " + money(minimum, currencyCode) + ". Add more products before checkout.", "store.cart", state);
+  const lineItems = cart.map((item) => ({
+    itemId: asText(item.itemId, ""),
+    variantId: asText(item.variantId, "") || null,
+    quantity: numberValue(item.quantity) ?? 0,
+  }));
+  const checkoutKey = await idempotencyKey("store-checkout", providerMessageId);
+  const preview = await db.rpc("skima_whatsapp_store_checkout", {
+    target_whatsapp_wa_id: whatsappWaId,
+    target_line_items: lineItems,
+    target_wallet_id: asText(wallet.id, ""),
+    target_fulfillment_method: fulfillmentMethod,
+    target_delivery_location_id: deliveryLocation ? asText(deliveryLocation.id, "") : null,
+    target_customer_note: null,
+    target_idempotency_key: checkoutKey,
+    target_expected_total: estimatedTotal,
+    target_confirm_payment: false,
+  });
+  if (preview.error) return plan("SKIMA could not prepare Store checkout: " + safeCustomerError(preview.error.message) + ". No wallet payment was taken.", "menu");
+  const result = asRecord(preview.data);
+  const total = numberValue(result.totalAmount);
+  if (total === null || !asText(result.orderId, "")) throw new Error("Store checkout preview did not return the canonical order and total.");
+  return plan(
+    "Your Store basket is ready. Please review the live checkout total:\n\n" +
+    cart.map((line) => asText(line.name, "Item") + " × " + numberValue(line.quantity) + " — " +
+      money((numberValue(line.unitAmount) ?? 0) * (numberValue(line.quantity) ?? 0), currencyCode)).join("\n") +
+    "\nSubtotal: " + money(numberValue(result.subtotalAmount) ?? subtotal, currencyCode) +
+    "\nDelivery: " + money(numberValue(result.deliveryFeeAmount) ?? deliveryFee, currencyCode) +
+    "\nTOTAL: " + money(total, currencyCode) +
+    "\nFulfilment: " + fulfillmentMethod +
+    "\nTo: " + (deliveryLocation ? asText(deliveryLocation.address, asText(deliveryLocation.formatted_address, "Saved address")) : asText(settings.pickup_formatted_address, "Store pickup")) +
+    "\n\nReply PAY to reserve this exact amount from your SKIMA Wallet. No payment has been taken yet.",
+    "store.payment",
+    {
+      lineItems,
+      walletId: wallet.id,
+      fulfillmentMethod,
+      deliveryLocationId: deliveryLocation ? deliveryLocation.id : null,
+      checkoutKey,
+      expectedTotal: total,
+      currencyCode,
+    },
+  );
+}
+
+async function readWhatsAppLogisticsOffers(
+  db: SupabaseClient,
+  profileId: string,
+  jobId: string,
+): Promise<Record<string, unknown>[]> {
+  const job = await db.from("logistics_job_requests")
+    .select("id,requester_user_id")
+    .eq("id", jobId)
+    .eq("requester_user_id", profileId)
+    .maybeSingle();
+  if (job.error) throw job.error;
+  if (!job.data) return [];
+  const offersResult = await db.from("logistics_offers")
+    .select("id,job_id,organization_id,currency_code,delivery_price_minor,estimated_duration_minutes,status,expires_at,terms")
+    .eq("job_id", jobId)
+    .in("status", ["submitted", "countered"])
+    .order("created_at", { ascending: true });
+  if (offersResult.error) throw offersResult.error;
+  const offers = arrayOfRecords(offersResult.data).filter((offer) => isCurrentlyEffective(null, offer.expires_at));
+  const organizationIds = [...new Set(offers.map((offer) => asText(offer.organization_id, "")).filter(Boolean))];
+  const currencyCodes = [...new Set(offers.map((offer) => asText(offer.currency_code, "")).filter(Boolean))];
+  const [orgResult, currencyResult] = await Promise.all([
+    organizationIds.length ? db.from("organizations").select("id,display_name,legal_name").in("id", organizationIds) : Promise.resolve({ data: [], error: null }),
+    currencyCodes.length ? db.from("currency_definitions").select("code,decimal_places").in("code", currencyCodes) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (orgResult.error) throw orgResult.error;
+  if (currencyResult.error) throw currencyResult.error;
+  const orgs = new Map(arrayOfRecords(orgResult.data).map((organization) => [asText(organization.id, ""), organization]));
+  const decimals = new Map(arrayOfRecords(currencyResult.data).map((currency) => [asText(currency.code, ""), numberValue(currency.decimal_places) ?? 2]));
+  return offers.map((offer) => {
+    const organization = orgs.get(asText(offer.organization_id, "")) ?? {};
+    const currency = asText(offer.currency_code, "NGN");
+    const places = decimals.get(currency) ?? 2;
+    const amount = (numberValue(offer.delivery_price_minor) ?? 0) / Math.pow(10, places);
+    return { ...offer, providerName: asText(organization.display_name, asText(organization.legal_name, "Logistics provider")), deliveryAmount: amount };
+  });
+}
+
+function formatLogisticsOfferChoices(offers: Record<string, unknown>[]): string {
+  return offers.slice(0, 8).map((offer, index) =>
+    (index + 1) + ". " + asText(offer.providerName, "Provider") +
+    " — " + money(numberValue(offer.deliveryAmount) ?? 0, asText(offer.currency_code, "NGN")) +
+    (numberValue(offer.estimated_duration_minutes) === null ? "" : " · about " + numberValue(offer.estimated_duration_minutes) + " minutes") +
+    (asText(offer.expires_at, "") ? " · expires " + formatDate(offer.expires_at) : "")
+  ).join("\n");
 }
 
 async function requestCanonicalQuote(args: {
