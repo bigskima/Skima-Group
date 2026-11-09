@@ -166,7 +166,7 @@ Deno.test("WhatsApp ordering reuses the live Fuel, Bills, Logistics and Store do
   // Store checkout uses shared catalogue pricing/stock checks and the common ledger.
   assertIncludes(ordering, "public.create_order_from_catalog(");
   assertIncludes(ordering, "public.fund_order_from_wallet(");
-  assertIncludes(ordering, "public.store_checkout_snapshot");
+  assertIncludes(ordering, "store_checkout_snapshot");
   assertIncludes(store, "'store.order.acceptance.manual.v1'");
   assertIncludes(ordering, "target_confirm_payment");
 
