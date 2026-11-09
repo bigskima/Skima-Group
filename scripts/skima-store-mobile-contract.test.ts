@@ -270,7 +270,7 @@ Deno.test("Logistics admin exposes settings and accepts shared policy families",
 
 
 Deno.test("Store settlement audit events are processed without becoming workflow commands", async () => {
-  const migration = await read("supabase/migrations/20261109060000_store_settlement_event_log_terminal.sql");
+  const migration = await read("supabase/migrations/20261109053653_store_settlement_event_log_terminal.sql");
   requireText(migration, "update public.event_log", "Store settlement event log terminal handling");
   requireText(migration, "set status = 'processed'", "Store settlement event processed status");
   requireText(migration, "where id = service_request_event_id", "Store settlement event identity");
