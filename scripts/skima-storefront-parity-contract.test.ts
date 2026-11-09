@@ -63,6 +63,8 @@ Deno.test("Fuel order contacts are permission checked and returned to customer, 
   const runtime = await read("supabase/functions/fuel-runtime/index.ts");
   const customer = await read("apps/lpg-mobile/src/native/ui/FuelOrderDetailsScreen.tsx");
   const driver = await read("apps/lpg-mobile/src/native/ui/FuelDriverJobsScreen.tsx");
+  const station = await read("apps/lpg-mobile/src/native/ui/FuelStationOperationsScreen.tsx");
+  const fuelAdmin = await read("apps/admin/src/features/services/FuelAdminWorkspace.tsx");
   assertIncludes(migration, "public.can_read_fuel_order(target_order_id)", "Fuel contact read permission");
   assertIncludes(migration, "assignment.status = 'active'", "Fuel assigned-driver access check");
   assertIncludes(runtime, "scope === \"driver\"", "Fuel driver order scope");
@@ -71,6 +73,11 @@ Deno.test("Fuel order contacts are permission checked and returned to customer, 
   assertIncludes(customer, "Contact and delivery details", "Fuel customer order detail");
   assertIncludes(driver, "Customer delivery address", "Fuel driver order detail");
   assertIncludes(driver, "Call customer", "Fuel driver contact action");
+  assertIncludes(station, "CUSTOMER DELIVERY DETAILS", "Fuel station selected order contact");
+  assertIncludes(station, "Delivery address not recorded", "Fuel station missing-address state");
+  assertIncludes(station, "Call customer", "Fuel station customer contact action");
+  assertIncludes(fuelAdmin, "Deliver to: {customerAddress}", "Fuel admin dispatch customer address");
+  assertIncludes(fuelAdmin, "Customer: {customerName}", "Fuel admin dispatch contact name and phone");
 });
 
 Deno.test("LPG and Logistics Store card JSX has no stale closing wrapper from the shared-card conversion", async () => {
