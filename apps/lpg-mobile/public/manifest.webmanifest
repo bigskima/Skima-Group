@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "SKIMA LPG",
+  "short_name": "SKIMA LPG",
+  "description": "Order LPG refills and manage your SKIMA fulfilment.",
+  "lang": "en-NG",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "theme_color": "#ED1C2E",
+  "background_color": "#FFFFFF",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/skima-app-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

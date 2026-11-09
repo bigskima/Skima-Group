@@ -16,7 +16,7 @@ const iosBundleIdentifier=process.env.SKIMA_BILLS_IOS_BUNDLE_ID?.trim()||"com.sk
 export default ({config}:ConfigContext):ExpoConfig=>({
  ...config,name:"SKIMA Bills",slug:"skima-bills",scheme:"skima-bills",version:"1.0.0",icon:brandImage,
  orientation:"default",userInterfaceStyle:"automatic",newArchEnabled:true,experiments:{typedRoutes:true},
- web:{bundler:"metro",output:"single",name:"SKIMA Bills",shortName:"SKIMA Bills",themeColor:"#E21D2F",backgroundColor:"#F7F7F8"},
+ web:{bundler:"metro",output:"single",name:"SKIMA Bills",shortName:"SKIMA Bills",description:"Pay everyday bills and manage your SKIMA payment history.",themeColor:"#E21D2E",backgroundColor:"#FFFFFF",favicon:brandImage},
  android:{package:androidPackage,...(googleServicesFile?{googleServicesFile}:{}),adaptiveIcon:{foregroundImage:brandImage,backgroundColor:"#F7F7F8"},permissions:["POST_NOTIFICATIONS"]},
  ios:{bundleIdentifier:iosBundleIdentifier,supportsTablet:true},
  plugins:["expo-router","expo-secure-store",["expo-notifications",{defaultChannel:"bills",color:"#E21D2E",enableRemoteNotifications:true}],["expo-splash-screen",{image:brandImage,imageWidth:180,backgroundColor:"#F7F7F8",resizeMode:"contain",dark:{backgroundColor:"#111113",image:brandImage}}]],

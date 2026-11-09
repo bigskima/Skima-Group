@@ -33,9 +33,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundler: "metro",
     output: "single",
     name: "SKIMA Logistics",
-    shortName: "SKIMA Logistics",
-    themeColor: "#E21D2F",
-    backgroundColor: "#F7F7F8"
+    shortName: "SKIMA Logi",
+    description: "Book delivery services and manage SKIMA Logistics fulfilment.",
+    themeColor: "#E21D2E",
+    backgroundColor: "#FFFFFF",
+    favicon: brandImage
   },
   android: {
     package: "com.skima.logistics",
