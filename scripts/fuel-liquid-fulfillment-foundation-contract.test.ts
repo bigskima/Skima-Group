@@ -6,6 +6,7 @@ const historyPolicy = JSON.parse(
 ) as {
   remoteHeadVersion: string;
   businessModuleMigrations: string[];
+  staleAliases: Record<string, string>;
 };
 
 function requireIncludes(source: string, fragment: string, message: string): void {
