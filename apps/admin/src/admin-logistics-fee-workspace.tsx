@@ -9,8 +9,11 @@ import { useSessionState } from "./session";
 import "./admin-logistics-fee-workspace.css";
 
 const ConfigurationSchema = z.object({
-  fixed_amount: z.coerce.number().nonnegative(),
-  percentage_basis_points: z.coerce.number().int().min(0).max(10000),
+  // The endpoint returns every financial-policy family. LPG, Fuel and wallet
+  // policies use their own configuration keys; only Logistics fee cards read
+  // these two fields, so unrelated policies must remain valid records.
+  fixed_amount: z.coerce.number().nonnegative().optional().default(0),
+  percentage_basis_points: z.coerce.number().int().min(0).max(10000).optional().default(0),
 }).passthrough();
 
 const PolicyVersionSchema = z.object({
