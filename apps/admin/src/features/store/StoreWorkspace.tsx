@@ -42,6 +42,29 @@ const StoreOriginGeocodeSchema = z.object({
 }).passthrough();
 const MediaAssetSchema = z.union([z.string(), z.record(z.unknown())]);
 
+function storeRecord(value: unknown): CatalogRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as CatalogRecord : {};
+}
+
+function storeOrderDestination(order: CatalogRecord, settings: CatalogRecord | null) {
+  const payload = storeRecord(order.order_payload);
+  const snapshot = storeRecord(payload.store_checkout_snapshot);
+  const method = catalogText(order, "fulfillment_method") || catalogText(payload, "fulfillment_method") || "delivery";
+  const isPickup = method === "pickup";
+  const location = storeRecord(isPickup ? snapshot.pickupLocation : snapshot.deliveryLocation);
+  return {
+    method: isPickup ? "Customer pickup" : "Home delivery",
+    address: catalogText(location, "formattedAddress", "formatted_address", "address") ||
+      (isPickup ? catalogText(settings, "pickup_formatted_address") : ""),
+    label: catalogText(location, "label") || (isPickup ? catalogText(settings, "pickup_location_label") : ""),
+    contactName: catalogText(location, "contactName", "contact_name"),
+    contactPhone: catalogText(location, "contactPhone", "contact_phone"),
+    landmark: catalogText(location, "landmark"),
+    instructions: catalogText(location, "deliveryInstructions", "delivery_instructions", "instructions") ||
+      catalogText(payload, "customer_note"),
+  };
+}
+
 const storeCancellationReasons = [
   { value: "coverage_unavailable", label: "Delivery coverage unavailable", reason: "Delivery coverage is unavailable for your location, so SKIMA cannot safely fulfil this order." },
   { value: "item_unavailable", label: "Item unavailable", reason: "One or more items in this order are no longer available." },
@@ -400,6 +423,25 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   const orderColumns: TableColumn<CatalogRecord>[] = [
     { key: "order", header: "Order", render: (order) => <><strong>{catalogText(order, "id").slice(0, 8).toUpperCase()}</strong><br /><small>{new Date(String(order.created_at ?? "")).toLocaleString()}</small></> },
     { key: "customer", header: "Customer", render: (order) => catalogText(order, "requester_user_id") || "Customer" },
+    { key: "destination", header: "Delivery / pickup address", render: (order) => {
+      const destination = storeOrderDestination(order, savedSettings);
+      const missing = !destination.address;
+      return (
+        <div className="store-workspace__order-destination">
+          <strong>{destination.method}</strong>
+          {destination.label ? <small>{destination.label}</small> : null}
+          <span className={missing ? "store-workspace__order-destination-warning" : undefined}>
+            {destination.address || (destination.method === "Customer pickup"
+              ? "Pickup location missing — confirm with the customer before hand-off."
+              : "Delivery address missing — do not dispatch until confirmed.")}
+          </span>
+          {destination.contactName ? <small>Contact: {destination.contactName}</small> : null}
+          {destination.contactPhone ? <small>Phone: {destination.contactPhone}</small> : null}
+          {destination.landmark ? <small>Landmark: {destination.landmark}</small> : null}
+          {destination.instructions ? <small>Instructions: {destination.instructions}</small> : null}
+        </div>
+      );
+    } },
     { key: "total", header: "Total", render: (order) => formatMoney(numberValue(order.total_amount), catalogText(order, "currency_code") || "NGN") },
     { key: "status", header: "Status", render: (order) => <StatusBadge tone={["completed", "fulfilled"].includes(catalogText(order, "status")) ? "success" : "warning"}>{normalizeStatusLabel(catalogText(order, "status") || "received")}</StatusBadge> },
     { key: "action", header: "Next action", render: (order) => {

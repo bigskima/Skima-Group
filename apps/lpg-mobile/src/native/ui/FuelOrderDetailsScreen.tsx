@@ -1,11 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, Fuel, KeyRound, Package, RotateCcw, ShieldCheck, Truck } from "lucide-react-native";
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from "react-native";
+import { CheckCircle2, Fuel, KeyRound, MapPin, Package, PhoneCall, RotateCcw, ShieldCheck, Truck } from "lucide-react-native";
+import { ActivityIndicator, Linking, StyleSheet, Text, TextInput, View } from "react-native";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
-import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString } from "../api/records";
+import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString, nestedRecord } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -139,6 +139,10 @@ export function FuelOrderDetailsScreen() {
   };
 
   const order = operations.data?.[0] ?? null;
+  const customerContact = nestedRecord(order, "customer_contact");
+  const assignedDriver = nestedRecord(order, "assigned_driver");
+  const customerPhone = firstString(customerContact, ["phone"]);
+  const driverPhone = firstString(assignedDriver, ["phone"]);
   const productKey = firstString(order, ["product_key"]) ?? "";
   const productRecord = (products.data ?? []).find((item) => firstString(item, ["key"]) === productKey);
   const product = (firstString(productRecord, ["display_name"]) ?? productKey) || "Fuel";
@@ -204,6 +208,16 @@ export function FuelOrderDetailsScreen() {
               </View>
             </Card>
           ) : null}
+
+          <Card title="Contact and delivery details" description="Use these saved order details to coordinate the hand-off if needed.">
+            <DetailRow icon={<MapPin color={palette.brand} size={18} />} label="Delivery address" value={firstString(customerContact, ["address", "label"]) ?? "Address not recorded"} />
+            {firstString(customerContact, ["landmark"]) ? <DetailRow icon={<MapPin color={palette.brand} size={18} />} label="Landmark" value={firstString(customerContact, ["landmark"]) ?? ""} /> : null}
+            {firstString(customerContact, ["instructions"]) ? <DetailRow icon={<MapPin color={palette.brand} size={18} />} label="Delivery instructions" value={firstString(customerContact, ["instructions"]) ?? ""} /> : null}
+            <DetailRow icon={<PhoneCall color={palette.brand} size={18} />} label="Customer contact" value={customerPhone ?? "Not available"} />
+            <DetailRow icon={<Truck color={palette.brand} size={18} />} label="Assigned driver" value={firstString(assignedDriver, ["name"]) ?? "Awaiting assignment"} />
+            <DetailRow icon={<PhoneCall color={palette.brand} size={18} />} label="Driver phone" value={driverPhone ?? "Not available yet"} />
+            {driverPhone ? <AppButton label={"Call assigned driver · " + driverPhone} fullWidth onPress={() => void Linking.openURL("tel:" + driverPhone).catch(() => undefined)} /> : null}
+          </Card>
 
           <Card title="Order details">
             <DetailRow icon={<Fuel color={palette.brand} size={18} />} label="Fuel product" value={product} />

@@ -42,6 +42,7 @@ import { idempotencyKey } from "../../src/native/utilities/idempotency";
 import { selectWorkspaceWallet, walletRecordId } from "../../src/native/utilities/financeWallet";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
 import { borders, radii, spacing, typography } from "../../src/native/theme/tokens";
+import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
 
 type StoreCartLine = {
   itemId: string;
@@ -484,16 +485,7 @@ export default function StoreScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.hero, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <View style={styles.heroCopy}>
-                <Text style={[styles.heroEyebrow, { color: palette.brand }]}>SKIMA STORE</Text>
-                <Text style={[styles.heroTitle, { color: palette.ink }]}>Shop essentials.</Text>
-                <Text style={[styles.heroBody, { color: palette.muted }]}>Cylinders and more, all in one store.</Text>
-              </View>
-              <View style={[styles.heroIcon, { backgroundColor: palette.brandSoft }]}>
-                <ShoppingBag color={palette.brand} size={31} />
-              </View>
-            </View>
+            <StorefrontHero palette={palette} walletValue={formatMoney(walletBalance, currencyCode)} basketCount={cartCount} basketSubtotal={formatMoney(cartTotal, currencyCode)} onBasketPress={() => setCartOpen(true)} disabled={!cart.length} />
 
             <View style={[styles.searchBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <Search color={palette.muted} size={19} />
@@ -509,10 +501,10 @@ export default function StoreScreen() {
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-              <CategoryChip label="All products" active={categoryKey === "all"} onPress={() => setCategoryKey("all")} />
+              <StorefrontCategoryChip palette={palette} label="All products" active={categoryKey === "all"} onPress={() => setCategoryKey("all")} />
               {categories.map((category) => {
                 const key = recordString(category, "id");
-                return <CategoryChip key={key} label={recordString(category, "display_name")} active={categoryKey === key} onPress={() => setCategoryKey(key)} />;
+                return <StorefrontCategoryChip key={key} palette={palette} label={recordString(category, "display_name")} active={categoryKey === key} onPress={() => setCategoryKey(key)} />;
               })}
             </ScrollView>
 
@@ -540,33 +532,21 @@ export default function StoreScreen() {
                     ? Math.round((1 - amount / compareAt) * 100)
                     : 0;
                   return (
-                    <Pressable
+                    <StorefrontProductCard
                       key={item._id}
-                      onPress={() => openProduct(item)}
-                      style={[styles.productCard, { backgroundColor: palette.surface, borderColor: palette.border }]}
-                    >
-                      <View style={styles.productImage}>
-                        {item._imageAssetId
-                          ? <RuntimeMediaImage assetId={item._imageAssetId} label={recordString(item, "display_name")} variant="card" />
-                          : <View style={[styles.imagePlaceholder, { backgroundColor: palette.surfaceSubtle }]}><ShoppingBag color={palette.muted} size={30} /></View>}
-                        {salePercent > 0 ? <View style={[styles.discountBadge, { backgroundColor: palette.brand }]}><Text style={styles.discountText}>{salePercent}% OFF</Text></View> : null}
-                      </View>
-                      <View style={styles.productCopy}>
-                        {category ? <Text style={[styles.productCategory, { color: palette.muted }]}>{recordString(category, "display_name")}</Text> : null}
-                        <Text numberOfLines={2} style={[styles.productName, { color: palette.ink }]}>{recordString(item, "display_name")}</Text>
-                        <View style={styles.productPriceRow}>
-                          <Text style={[styles.productPrice, { color: palette.ink }]}>{formatMoney(amount, currencyCode)}</Text>
-                          {compareAt && compareAt > amount ? <Text style={[styles.comparePrice, { color: palette.muted }]}>{formatMoney(compareAt, currencyCode)}</Text> : null}
-                        </View>
-                        <Pressable
-                          onPress={() => openProduct(item)}
-                          style={[styles.addButton, { backgroundColor: palette.brandSoft }]}
-                        >
-                          <Plus color={palette.brand} size={16} />
-                          <Text style={[styles.addButtonText, { color: palette.brand }]}>{item._variants.length ? "Select options" : "Add to basket"}</Text>
-                        </Pressable>
-                      </View>
-                    </Pressable>
+                      palette={palette}
+                      media={item._imageAssetId
+                        ? <RuntimeMediaImage assetId={item._imageAssetId} label={recordString(item, "display_name")} variant="card" />
+                        : <View style={[styles.imagePlaceholder, { backgroundColor: palette.surfaceSubtle }]}><ShoppingBag color={palette.muted} size={30} /></View>}
+                      categoryLabel={category ? recordString(category, "display_name") : "SKIMA Store"}
+                      name={recordString(item, "display_name")}
+                      priceLabel={formatMoney(amount, currencyCode)}
+                      compareAtLabel={compareAt && compareAt > amount ? formatMoney(compareAt, currencyCode) : null}
+                      stockLabel="Available"
+                      onDetails={() => openProduct(item)}
+                      onAdd={() => openProduct(item)}
+                    />
+                  );                    </Pressable>
                   );
                 })}
               </View>
@@ -681,19 +661,16 @@ export default function StoreScreen() {
             </View>
             <ScrollView contentContainerStyle={styles.cartLines}>
               {cart.length ? cart.map((line) => (
-                <View key={`${line.itemId}:${line.variantId ?? "base"}`} style={[styles.cartLine, { borderBottomColor: palette.border }]}>
-                  <View style={styles.cartLineCopy}>
-                    <Text style={[styles.cartItemName, { color: palette.ink }]}>{line.itemName}</Text>
-                    {line.variantName ? <Text style={[styles.sectionSubtitle, { color: palette.muted }]}>{line.variantName}</Text> : null}
-                    <Text style={[styles.cartItemPrice, { color: palette.ink }]}>{formatMoney(line.unitAmount, line.currencyCode)} each</Text>
-                  </View>
-                  <View style={styles.cartLineActions}>
-                    <Pressable onPress={() => adjustCartLine(line.itemId, line.variantId, -1)} style={[styles.quantityButton, { borderColor: palette.border }]}><Minus color={palette.ink} size={14} /></Pressable>
-                    <Text style={[styles.quantityValue, { color: palette.ink }]}>{line.quantity}</Text>
-                    <Pressable onPress={() => adjustCartLine(line.itemId, line.variantId, 1)} style={[styles.quantityButton, { borderColor: palette.border }]}><Plus color={palette.ink} size={14} /></Pressable>
-                    <Pressable onPress={() => setCart((current) => current.filter((candidate) => candidate.itemId !== line.itemId || candidate.variantId !== line.variantId))} style={styles.removeLine}><Trash2 color={palette.danger} size={16} /></Pressable>
-                  </View>
-                </View>
+                <StorefrontBasketLine
+                  key={`${line.itemId}:${line.variantId ?? "base"}`}
+                  palette={palette}
+                  name={line.itemName}
+                  variantName={line.variantName}
+                  quantity={line.quantity}
+                  amountLabel={`${formatMoney(line.unitAmount * line.quantity, line.currencyCode)} · ${formatMoney(line.unitAmount, line.currencyCode)} each`}
+                  onDecrease={() => adjustCartLine(line.itemId, line.variantId, -1)}
+                  onIncrease={() => adjustCartLine(line.itemId, line.variantId, 1)}
+                />
               )) : (
                 <View style={styles.centerState}>
                   <ShoppingCart color={palette.muted} size={30} />

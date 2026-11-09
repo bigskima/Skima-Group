@@ -107,3 +107,32 @@
   align-items: center;
   gap: 6px;
 }
+
+
+.store-workspace__order-destination {
+  display: grid;
+  gap: 4px;
+  min-width: 230px;
+  max-width: 360px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.store-workspace__order-destination strong {
+  color: var(--sk-color-text, inherit);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.store-workspace__order-destination span {
+  color: var(--sk-color-text, inherit);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.store-workspace__order-destination small {
+  color: var(--sk-color-muted, #777);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+.store-workspace__order-destination .store-workspace__order-destination-warning {
+  color: var(--sk-color-danger, #b42318);
+  font-weight: 750;
+}

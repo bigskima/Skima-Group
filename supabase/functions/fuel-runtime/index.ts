@@ -725,7 +725,32 @@ async function handleFuelRuntimeRequest(
     }
     if (branchId) query = query.eq("station_branch_id", branchId);
     if (orderId) query = query.eq("order_id", orderId);
-    return selectRecords(query, id);
+    const { data: operationRows, error: operationError } = await query;
+    if (operationError) return databaseError(operationError as { readonly message: string; readonly code?: string }, id);
+    const rows = Array.isArray(operationRows) ? operationRows as Record<string, unknown>[] : [];
+    if (!(orderId || scope === "customer" || scope === "driver") || rows.length === 0) {
+      return jsonResponse({ ok: true, data: rows, requestId: id });
+    }
+    const enrichedRows = await Promise.all(rows.map(async (row) => {
+      const contactResult = await supabase.rpc("read_fuel_order_contact_details", {
+        target_order_id: row.order_id,
+      });
+      return { row, contact: contactResult.data, error: contactResult.error };
+    }));
+    const contactFailure = enrichedRows.find((entry) => entry.error);
+    if (contactFailure?.error) {
+      return databaseError(contactFailure.error as { readonly message: string; readonly code?: string }, id);
+    }
+    return jsonResponse({
+      ok: true,
+      data: enrichedRows.map(({ row, contact }) => ({
+        ...row,
+        ...(contact && typeof contact === "object" && !Array.isArray(contact)
+          ? contact as Record<string, unknown>
+          : {}),
+      })),
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/fuel/orders/events" && request.method === "GET") {
