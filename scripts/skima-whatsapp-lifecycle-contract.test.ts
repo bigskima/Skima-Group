@@ -172,6 +172,10 @@ Deno.test("WhatsApp ordering reuses the live Fuel, Bills, Logistics and Store do
 
   assertIncludes(ordering, "from public,anon,authenticated");
   assertIncludes(ordering, "to service_role");
+  assertIncludes(ordering, "public.has_accepted_current_policy('policy.customer.terms',null)");
+  assertIncludes(ordering, "public.has_accepted_current_policy('policy.customer.bills.terms',null)");
+  assertIncludes(ordering, "public.has_accepted_current_policy('policy.customer.logistics.terms',null)");
+  assertIncludes(ordering, "public.has_accepted_current_policy('policy.customer.store.terms',null)");
   const history = JSON.parse(historyText) as { businessModuleMigrations: string[] };
   if (!history.businessModuleMigrations.includes("20261109153000_skima_whatsapp_four_app_ordering.sql")) {
     throw new Error("The four-app WhatsApp ordering migration must be tracked in migration-history-policy.json.");
