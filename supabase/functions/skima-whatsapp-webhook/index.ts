@@ -480,7 +480,7 @@ async function handleLinkedMessage(
   if (stage === "menu" && ["2", "fuel", "petrol", "diesel", "kerosene"].includes(normalized)) {
     const [productsResult, offersResult, containersResult, choicesResult, wallets] = await Promise.all([
       db.from("fuel_products").select("id,key,display_name,quantity_precision,status").eq("status", "enabled").order("key"),
-      db.from("fuel_branch_product_offers").select("id,branch_id,product_key,currency_code,price_per_litre,admin_override_price_per_litre,minimum_litres,maximum_litres,fulfillment_modes,status,effective_from,effective_until,branch:organization_branches(id,display_name,address)").eq("status", "active").order("updated_at", { ascending: false }),
+      db.from("fuel_branch_product_offers").select("id,branch_id,product_key,currency_code,price_per_litre,admin_override_price_per_litre,minimum_litres,maximum_litres,fulfillment_modes,status,effective_from,effective_until,branch:organization_branches(id,display_name,address)").eq("status", "active").order("updated_at", { ascending: false }).limit(50),
       db.from("fuel_container_types").select("id,key,display_name,nominal_capacity_litres,supported_product_keys,status").eq("status", "active").order("nominal_capacity_litres"),
       db.rpc("read_skima_whatsapp_customer_choices", { target_whatsapp_wa_id: whatsappWaId }),
       readWhatsAppCustomerWallets(db, profileId),
@@ -530,7 +530,7 @@ async function handleLinkedMessage(
       const branch = asRecord(offer.branch);
       const wallet = walletForCurrency(wallets, asText(offer.currency_code, ""));
       return { ...offer, _branchName: asText(branch.display_name, "Fuel station"), _wallet: wallet };
-    }).filter((offer) => Boolean(offer._wallet));
+    }).filter((offer) => Boolean(offer._wallet)).slice(0, 8);
     if (!options.length) return plan("There is no active station offer for that product in your wallet currency. Choose another product or reply MENU.", "menu");
     return plan(
       "Choose a station and fulfilment option:\n\n" + formatFuelOfferChoices(options) + "\n\nReply with the number.",
@@ -600,7 +600,7 @@ async function handleLinkedMessage(
     const productKey = asText(product.key, "");
     const containers = arrayOfRecords(state.containers).filter((container) =>
       Array.isArray(container.supported_product_keys) && container.supported_product_keys.includes(productKey)
-    );
+    ).slice(0, 8);
     if (!containers.length) return plan("There is no active container type configured for this Fuel product. Please contact SKIMA support.", "menu");
     return plan(
       "Choose a container type:\n\n" + containers.map((container, index) =>
@@ -1727,10 +1727,10 @@ async function readWhatsAppLogisticsOffers(
   const offersResult = await db.from("logistics_offers")
     .select("id,job_id,organization_id,currency_code,delivery_price_minor,estimated_duration_minutes,status,expires_at,terms")
     .eq("job_id", jobId)
-    .in("status", ["submitted", "countered"])
+    .eq("status", "submitted")
     .order("created_at", { ascending: true });
   if (offersResult.error) throw offersResult.error;
-  const offers = arrayOfRecords(offersResult.data).filter((offer) => isCurrentlyEffective(null, offer.expires_at));
+  const offers = arrayOfRecords(offersResult.data).filter((offer) => isCurrentlyEffective(null, offer.expires_at)).slice(0, 8);
   const organizationIds = [...new Set(offers.map((offer) => asText(offer.organization_id, "")).filter(Boolean))];
   const currencyCodes = [...new Set(offers.map((offer) => asText(offer.currency_code, "")).filter(Boolean))];
   const [orgResult, currencyResult] = await Promise.all([
