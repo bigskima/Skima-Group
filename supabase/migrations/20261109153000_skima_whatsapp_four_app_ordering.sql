@@ -56,6 +56,10 @@ begin
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',contact_record.profile_id::text,'role','service_role')::text,true);
 
+  if not public.has_accepted_current_policy('policy.customer.terms',null) then
+    raise exception using errcode='55000',message='review and accept the current SKIMA Customer Terms in the Refill app before ordering Fuel';
+  end if;
+
   order_result:=public.create_fuel_order_with_quote(
     target_branch_id,
     target_product_key,
@@ -115,6 +119,10 @@ begin
   perform set_config('request.jwt.claim.sub',contact_record.profile_id::text,true);
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',contact_record.profile_id::text,'role','service_role')::text,true);
+
+  if not public.has_accepted_current_policy('policy.customer.terms',null) then
+    raise exception using errcode='55000',message='review and accept the current SKIMA Customer Terms in the Refill app before paying for Fuel';
+  end if;
 
   select o.* into order_record
   from public.order_records o
@@ -229,6 +237,10 @@ begin
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',contact_record.profile_id::text,'role','service_role')::text,true);
 
+  if not public.has_accepted_current_policy('policy.customer.bills.terms',null) then
+    raise exception using errcode='55000',message='review and accept the current SKIMA Bills Customer Terms in the Bills app before making a bill payment';
+  end if;
+
   request_id:=public.create_utility_payment_request(
     target_product_id,
     target_wallet_id,
@@ -307,6 +319,10 @@ begin
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',contact_record.profile_id::text,'role','service_role')::text,true);
 
+  if not public.has_accepted_current_policy('policy.customer.logistics.terms',null) then
+    raise exception using errcode='55000',message='review and accept the current SKIMA Logistics Customer Terms in the Logistics app before publishing a request';
+  end if;
+
   job_id:=public.create_logistics_job(
     target_payload||jsonb_build_object(
       'metadata',coalesce(target_payload->'metadata','{}'::jsonb)||jsonb_build_object('channel','whatsapp','origin','official_skima_whatsapp')
@@ -364,6 +380,10 @@ begin
       and (offer.expires_at is null or offer.expires_at>timezone('utc',now()))
   ) then
     raise exception using errcode='42501',message='that provider offer is not available for this linked customer's request';
+  end if;
+
+  if not public.has_accepted_current_policy('policy.customer.logistics.terms',null) then
+    raise exception using errcode='55000',message='review and accept the current SKIMA Logistics Customer Terms in the Logistics app before booking a provider';
   end if;
 
   booking_id:=public.create_logistics_booking_for_offer(
@@ -444,6 +464,10 @@ begin
       and w.status='active'
   ) then
     raise exception using errcode='42501',message='an active customer wallet in the booking currency is required';
+  end if;
+
+  if not public.has_accepted_current_policy('policy.customer.logistics.terms',null) then
+    raise exception using errcode='55000',message='review and accept the current SKIMA Logistics Customer Terms in the Logistics app before paying for this booking';
   end if;
 
   reservation:=public.reserve_logistics_booking_online_payment(
@@ -570,6 +594,10 @@ begin
   perform set_config('request.jwt.claim.sub',contact_record.profile_id::text,true);
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',contact_record.profile_id::text,'role','service_role')::text,true);
+
+  if not public.has_accepted_current_policy('policy.customer.store.terms',null) then
+    raise exception using errcode='55000',message='review and accept the current SKIMA Store Customer Terms in the Store app before checkout';
+  end if;
 
   select m.id into module_id
   from public.business_modules m
