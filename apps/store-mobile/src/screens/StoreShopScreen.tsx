@@ -99,10 +99,10 @@ export function StoreShopScreen(){
      <Text style={{fontSize:11,color:"rgba(255,255,255,.88)",lineHeight:17}}>Shop everyday essentials from trusted sellers, all in one place.</Text>
      <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:5}}>
       <View style={{gap:2}}><Text style={{fontSize:9,color:"rgba(255,255,255,.72)",fontWeight:"800"}}>YOUR SKIMA WALLET</Text><Text style={{fontSize:15,color:"#fff",fontWeight:"900"}}>{money(balance,currency)}</Text></View>
-      <Pressable onPress={()=>setCheckoutStep("basket")} disabled={!cart.length} style={{backgroundColor:"#fff",borderRadius:15,paddingHorizontal:13,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:8,opacity:cart.length?1:.55}}>
+      <GuideTarget page="shop" targetKey="store.shop.basket"><Pressable onPress={()=>setCheckoutStep("basket")} disabled={!cart.length} style={{backgroundColor:"#fff",borderRadius:15,paddingHorizontal:13,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:8,opacity:cart.length?1:.55}}>
        <ShoppingCart size={16} color={palette.brand}/>
        <View><Text style={{color:palette.brand,fontSize:10,fontWeight:"900"}}>{cart.length?"View basket · "+itemCount:"Basket empty"}</Text>{cart.length?<Text style={{color:palette.brand,fontSize:9,fontWeight:"700"}}>{money(subtotal,currency)}</Text>:null}</View>
-      </Pressable>
+      </Pressable></GuideTarget>
      </View>
     </Card>
    </GuideTarget>
