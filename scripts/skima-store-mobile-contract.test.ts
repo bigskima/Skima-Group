@@ -197,3 +197,35 @@ Deno.test("Store management distinguishes cancelled orders without a wallet debi
   requireText(management, "No payment was captured for this checkout", "Store app no-payment notice");
   requireText(admin, 'orderMetadata.store_refund_status === "not_required"', "Admin no-payment refund state");
 });
+
+
+Deno.test("Store customer receipt settlement records the release without advancing its shared workflow twice", async () => {
+  const migration = await read("supabase/migrations/20261109043700_store_settlement_shared_workflow_handoff.sql");
+  requireText(migration, "store_order.workflow_instance_id = request_record.workflow_instance_id", "Store settlement shared-workflow guard");
+  requireText(migration, "service_request_event_id := public.record_platform_event", "Store settlement event recording");
+  requireText(migration, "store.order.complete", "Store-specific receipt completion remains the workflow advancement");
+  requireText(migration, "service_request_event_id,", "Settlement event remains linked to service-request history");
+});
+
+Deno.test("Store shopping separates browsing, basket, fulfilment and payment review", async () => {
+  const shop = await read("apps/store-mobile/src/screens/StoreShopScreen.tsx");
+  requireText(shop, '"browse"|"basket"|"fulfillment"|"review"', "Store progressive checkout state");
+  requireText(shop, 'checkoutStep==="basket"', "Dedicated basket stage");
+  requireText(shop, 'checkoutStep==="fulfillment"', "Dedicated delivery/pickup stage");
+  requireText(shop, 'checkoutStep==="review"', "Dedicated order review stage");
+  requireText(shop, "Continue to delivery", "Basket progression");
+  requireText(shop, "Review order", "Delivery progression");
+  requireText(shop, "Pay securely", "Final secure payment action");
+});
+
+Deno.test("Admin Logistics settings and fee policies have valid routes and cross-module response parsing", async () => {
+  const [navigation, workspace, fees] = await Promise.all([
+    read("apps/admin/src/app/admin-v2-navigation.ts"),
+    read("apps/admin/src/features/logistics/LogisticsWorkspace.tsx"),
+    read("apps/admin/src/admin-logistics-fee-workspace.tsx"),
+  ]);
+  requireText(navigation, 'href: "/logistics/settings"', "Logistics Settings navigation");
+  requireText(workspace, 'props.route === "/logistics/settings"', "Logistics Settings route");
+  requireText(workspace, '"/money/pricing/logistics"', "Logistics fee settings destination");
+  requireText(fees, "percentage_basis_points: z.coerce.number().int().min(0).max(10000).optional().default(0)", "Non-Logistics financial policy compatibility");
+});
