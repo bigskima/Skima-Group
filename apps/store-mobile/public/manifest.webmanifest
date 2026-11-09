@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "SKIMA Store",
+  "short_name": "SKIMA Store",
+  "description": "Shop products and manage your SKIMA Store orders.",
+  "lang": "en-NG",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "theme_color": "#E21D2E",
+  "background_color": "#FFFFFF",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/skima-app-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
