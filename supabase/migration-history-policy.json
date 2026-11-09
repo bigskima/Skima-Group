@@ -164,6 +164,7 @@
     "20261108152629_store_geography_coverage_integrity.sql",
     "20261109045831_store_settlement_shared_workflow_handoff.sql",
     "20261109053653_store_settlement_event_log_terminal.sql",
-    "20261109120000_skima_whatsapp_support_handoff.sql"
+    "20261109120000_skima_whatsapp_support_handoff.sql",
+    "20261109153000_skima_whatsapp_four_app_ordering.sql"
   ]
 }
