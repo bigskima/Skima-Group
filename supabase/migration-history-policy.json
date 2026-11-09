@@ -161,6 +161,7 @@
     "20261108095432_logistics_company_identity_and_revision_runtime.sql",
     "20261108125346_fuel_lifecycle_pricing_readiness.sql",
     "20261108152629_store_geography_coverage_integrity.sql",
-    "20261109045831_store_settlement_shared_workflow_handoff.sql"
+    "20261109045831_store_settlement_shared_workflow_handoff.sql",
+    "20261109060000_store_settlement_event_log_terminal.sql"
   ]
 }
