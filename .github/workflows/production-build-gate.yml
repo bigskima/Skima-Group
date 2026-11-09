@@ -28,6 +28,7 @@ on:
       - "deno.json"
       - "supabase/migration-history-policy.json"
       - "scripts/verify-migration-history.ts"
+      - "scripts/verify-skima-native-assets.mjs"
       - "scripts/validate-foundation.ts"
       - "scripts/verify-financial-policy-governance.ts"
       - "scripts/skima-whatsapp-lifecycle-contract.test.ts"
@@ -74,6 +75,8 @@ jobs:
         run: npm run migration-history:verify
       - name: Validate migration foundation
         run: npm run validate
+      - name: Verify four-app native branding assets and Android profiles
+        run: npm run native:assets:verify
       - name: Verify financial policy governance
         run: npm run financial-governance:verify
       - name: Verify AI runtime contracts

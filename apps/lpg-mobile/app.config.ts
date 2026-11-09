@@ -12,6 +12,11 @@ loadEnvironment({
 const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || "dfa8a21f-0a5c-4d9c-b0ef-49c9ebe2da66";
 const googleServicesCandidate = process.env.SKIMA_REFILL_GOOGLE_SERVICES_FILE?.trim() || "./google-services.json";
 const googleServicesFile = existsSync(resolve(__dirname, googleServicesCandidate)) ? googleServicesCandidate : undefined;
+const brandImage = "./assets/skima-splash-logo.png";
+const brandImagePath = resolve(__dirname, brandImage);
+if (!existsSync(brandImagePath)) {
+  throw new Error(`SKIMA native branding asset is missing: ${brandImagePath}`);
+}
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -19,7 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "skima-lpg",
   scheme: "skima-lpg",
   version: "1.0.0",
-  icon: "./assets/skima-splash-logo.png",
+  icon: brandImage,
   orientation: "default",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
@@ -30,7 +35,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // so a browser refresh on /orders/:id is routed back through Expo Router.
     output: "single",
     splash: {
-      image: "./assets/skima-splash-logo.png",
+      image: brandImage,
       backgroundColor: "#0B1510",
       resizeMode: "contain",
     },
@@ -38,6 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: "com.skima.lpg",
     ...(googleServicesFile ? { googleServicesFile } : {}),
+    adaptiveIcon: { foregroundImage: brandImage, backgroundColor: "#0B1510" },
     blockedPermissions: ["android.permission.RECORD_AUDIO"],
     permissions: [
       "CAMERA",
@@ -97,12 +103,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "expo-splash-screen",
       {
         backgroundColor: "#0B1510",
-        image: "./assets/skima-splash-logo.png",
+        image: brandImage,
         imageWidth: 220,
         resizeMode: "contain",
         dark: {
           backgroundColor: "#0B1510",
-          image: "./assets/skima-splash-logo.png",
+          image: brandImage,
         },
       },
     ],

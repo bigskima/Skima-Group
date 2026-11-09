@@ -12,6 +12,11 @@ loadEnvironment({
 const easProjectId = process.env.EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID?.trim();
 const googleServicesCandidate = process.env.SKIMA_LOGISTICS_GOOGLE_SERVICES_FILE?.trim() || "./google-services.json";
 const googleServicesFile = existsSync(resolve(__dirname, googleServicesCandidate)) ? googleServicesCandidate : undefined;
+const brandImage = "./assets/skima-splash-logo.png";
+const brandImagePath = resolve(__dirname, brandImage);
+if (!existsSync(brandImagePath)) {
+  throw new Error(`SKIMA native branding asset is missing: ${brandImagePath}`);
+}
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -19,6 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "skima-logistics",
   scheme: "skima-logistics",
   version: "1.0.0",
+  icon: brandImage,
   orientation: "default",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
@@ -33,6 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: "com.skima.logistics",
+    adaptiveIcon: { foregroundImage: brandImage, backgroundColor: "#F7F7F8" },
     permissions: ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"],
     ...(googleServicesFile ? { googleServicesFile } : {})
   },
@@ -54,6 +61,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         "Allow SKIMA Logistics to share your location with the customer while you fulfil an active delivery."
     }],
     ["expo-splash-screen", {
+      image: brandImage,
       backgroundColor: "#F7F7F8",
       imageWidth: 180,
       resizeMode: "contain"

@@ -4,6 +4,11 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 loadEnvironment({ path: resolve(__dirname, "../../.env"), override: false, quiet: true });
+const brandImage = "./assets/skima-splash-logo.png";
+const brandImagePath = resolve(__dirname, brandImage);
+if (!existsSync(brandImagePath)) {
+  throw new Error(`SKIMA native branding asset is missing: ${brandImagePath}`);
+}
 
 const easProjectId = process.env.EXPO_PUBLIC_STORE_EAS_PROJECT_ID?.trim();
 const googleServicesCandidate = process.env.SKIMA_STORE_GOOGLE_SERVICES_FILE?.trim() || "./google-services.json";
@@ -17,15 +22,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "skima-store",
   scheme: "skima-store",
   version: "1.0.0",
-  icon: "./assets/skima-splash-logo.png",
+  icon: brandImage,
   orientation: "default",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   experiments: { typedRoutes: true },
   web: { bundler: "metro", output: "single", name: "SKIMA Store", shortName: "SKIMA Store", themeColor: "#E21D2F", backgroundColor: "#F7F7F8" },
-  android: { package: androidPackage, ...(googleServicesFile ? { googleServicesFile } : {}), adaptiveIcon: { foregroundImage: "./assets/skima-splash-logo.png", backgroundColor: "#F7F7F8" }, permissions: ["POST_NOTIFICATIONS"] },
+  android: { package: androidPackage, ...(googleServicesFile ? { googleServicesFile } : {}), adaptiveIcon: { foregroundImage: brandImage, backgroundColor: "#F7F7F8" }, permissions: ["POST_NOTIFICATIONS"] },
   ios: { bundleIdentifier: iosBundleIdentifier, supportsTablet: true },
-  plugins: ["expo-router", "expo-secure-store", ["expo-notifications", { defaultChannel: "store", color: "#E21D2E", enableRemoteNotifications: true }], ["expo-splash-screen", { image: "./assets/skima-splash-logo.png", imageWidth: 180, backgroundColor: "#F7F7F8", resizeMode: "contain", dark: { backgroundColor: "#111113", image: "./assets/skima-splash-logo.png" } }]],
+  plugins: ["expo-router", "expo-secure-store", ["expo-notifications", { defaultChannel: "store", color: "#E21D2E", enableRemoteNotifications: true }], ["expo-splash-screen", { image: brandImage, imageWidth: 180, backgroundColor: "#F7F7F8", resizeMode: "contain", dark: { backgroundColor: "#111113", image: brandImage } }]],
   extra: {
     apiGatewayUrl: process.env.EXPO_PUBLIC_API_GATEWAY_URL,
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
