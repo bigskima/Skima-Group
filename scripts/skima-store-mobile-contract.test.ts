@@ -236,7 +236,7 @@ Deno.test("Store customer receipt settlement preserves the shared order workflow
   requireText(migration, "store_order.workflow_instance_id = request_record.workflow_instance_id", "Shared Store workflow detection");
   requireText(migration, "service_request_event_id := public.record_platform_event", "Settlement event is still recorded");
   requireText(migration, "service_request_event_id := public.process_service_request_event", "Non-Store service requests retain normal settlement workflow advancement");
-  requireText(migration, "Store customer receipt action (store.order.complete)", "Store receipt action owns the final order transition");
+  requireText(migration, "action (store.order.complete) advance", "Store receipt action owns the final order transition");
   requireText(migration, "service_request_event_id,", "Settlement history points to the recorded event");
 });
 
@@ -246,6 +246,7 @@ Deno.test("Store shopping follows separate browse, basket, delivery and review s
     requireText(shop, '"' + step + '"', "Store progressive shopping step " + step);
   }
   requireText(shop, "Picked for everyday", "Store browse landing experience");
+  requireText(shop, "Browse products from participating sellers", "Store customer category caption");
   requireText(shop, "Your basket", "Dedicated basket stage");
   requireText(shop, "Continue to delivery", "Basket-to-fulfilment progression");
   requireText(shop, "Review order", "Fulfilment-to-review progression");
