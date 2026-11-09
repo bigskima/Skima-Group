@@ -23,6 +23,13 @@ Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () =
   assertIncludes(webhook, "requestCanonicalQuote(");
   assertIncludes(webhook, "_lastReplyText");
   assertIncludes(webhook, 'db.rpc("set_skima_whatsapp_order_notifications"');
+  assertIncludes(webhook, 'stage === "menu" && normalized === "6"');
+  assertIncludes(webhook, 'eq("order_status_notifications_opt_in", true)');
+  const consentGuardIndex = webhook.indexOf('const consentResult = await db.from("skima_whatsapp_contacts")');
+  const notificationSendIndex = webhook.indexOf("const result = await sendWhatsAppTemplate", consentGuardIndex);
+  if (consentGuardIndex < 0 || notificationSendIndex <= consentGuardIndex) {
+    throw new Error("Notification consent must be rechecked before every provider send.");
+  }
   assertIncludes(webhook, "SKIMA_WHATSAPP_DISPATCH_SECRET");
   assertIncludes(webhook, "sendWhatsAppTemplate");
   assertIncludes(webhook, "extractStatuses");
