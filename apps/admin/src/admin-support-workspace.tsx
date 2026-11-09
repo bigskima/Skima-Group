@@ -55,6 +55,9 @@ export function AdminSupportWorkspace(props: {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<SupportFilter>("active");
   const [legacySelectedId, setLegacySelectedId] = useState<string | null>(null);
+  const [whatsAppLinkPending, setWhatsAppLinkPending] = useState(false);
+  const [whatsAppLinkCode, setWhatsAppLinkCode] = useState("");
+  const [whatsAppLinkError, setWhatsAppLinkError] = useState("");
   const controlledRoute = props.route ? parseSupportRecordRoute(props.route) : null;
   const selectedThreadId = controlledRoute?.kind === "thread"
     ? controlledRoute.threadId
@@ -99,6 +102,34 @@ export function AdminSupportWorkspace(props: {
       return;
     }
     setLegacySelectedId(threadId);
+  };
+  
+  const linkWhatsAppAccount = async () => {
+    if (whatsAppLinkPending) return;
+    setWhatsAppLinkPending(true);
+    setWhatsAppLinkError("");
+    setWhatsAppLinkCode("");
+    try {
+      const { data, error } = await supabase.rpc("issue_skima_whatsapp_link_code");
+      if (error) throw error;
+      if (typeof data !== "string" || !/^[A-Fa-f0-9]{16}$/.test(data)) {
+        throw new Error("SKIMA returned an invalid linking code. Please try again.");
+      }
+      setWhatsAppLinkCode(data.toUpperCase());
+    } catch (cause) {
+      setWhatsAppLinkError(cause instanceof Error ? cause.message : "WhatsApp linking could not be started.");
+    } finally {
+      setWhatsAppLinkPending(false);
+    }
+  };
+
+  const copyWhatsAppLinkCode = async () => {
+    if (!whatsAppLinkCode) return;
+    try {
+      await navigator.clipboard.writeText(whatsAppLinkCode);
+    } catch {
+      setWhatsAppLinkError("Clipboard access is unavailable. Select and copy the code manually.");
+    }
   };
 
   const respond = useMutation({
@@ -176,11 +207,30 @@ export function AdminSupportWorkspace(props: {
         title="Support inbox"
         description="See messages from customers, drivers, and stations, reply to them, and close issues when they are resolved."
         actions={(
-          <Button icon={RefreshCcw} variant="outline" onClick={() => void queue.refetch()}>
-            Refresh
-          </Button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button variant="outline" isLoading={whatsAppLinkPending} onClick={() => void linkWhatsAppAccount()}>
+              Link my WhatsApp
+            </Button>
+            <Button icon={RefreshCcw} variant="outline" onClick={() => void queue.refetch()}>
+              Refresh
+            </Button>
+          </div>
         )}
       />
+
+      {whatsAppLinkCode ? (
+        <section className="admin-notice">
+          <strong>Link your support-agent WhatsApp number</strong>
+          <p>From the WhatsApp number you will use for support, send this one-time code to SKIMA's official WhatsApp number within 10 minutes. The code links that number to your signed-in SKIMA staff account.</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <code style={{ fontSize: 20, fontWeight: 900, letterSpacing: 2 }}>{whatsAppLinkCode}</code>
+            <Button size="sm" variant="outline" onClick={() => void copyWhatsAppLinkCode()}>Copy code</Button>
+          </div>
+          <p>After linking, send <code>AGENT HELP</code> for commands. Use <code>CLAIM SK-XXXXXXXX</code> to take an unassigned case, <code>REPLY SK-XXXXXXXX your message</code> to answer the customer, or <code>NOTE SK-XXXXXXXX your note</code> for a private note.</p>
+        </section>
+      ) : null}
+      {whatsAppLinkError ? <div className="admin-notice is-error" role="alert">{whatsAppLinkError}</div> : null}
+
       <section className="skima-grid skima-grid--compact">
         <MetricTile
           label="Needs attention"
