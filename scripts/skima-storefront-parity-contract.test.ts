@@ -68,6 +68,8 @@ Deno.test("Fuel order contacts are permission checked and returned to customer, 
   assertIncludes(migration, "public.can_read_fuel_order(target_order_id)", "Fuel contact read permission");
   assertIncludes(migration, "assignment.status = 'active'", "Fuel assigned-driver access check");
   assertIncludes(runtime, "scope === \"driver\"", "Fuel driver order scope");
+  assertIncludes(runtime, "SUPABASE_SERVICE_ROLE_KEY", "Fuel driver assignment lookup service client");
+  assertIncludes(runtime, "query.in(\"order_id\", driverOrderIds)", "Fuel driver operations restricted to active assigned order IDs");
   assertIncludes(runtime, "branchId || stage || scope === \"customer\"", "Fuel station branch contact enrichment");
   assertIncludes(runtime, "read_fuel_order_contact_details", "Fuel runtime contact read model");
   assertIncludes(customer, "Contact and delivery details", "Fuel customer order detail");

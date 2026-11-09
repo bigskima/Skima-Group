@@ -694,15 +694,44 @@ async function handleFuelRuntimeRequest(
   }
 
   if (routePath === "/runtime/fuel/orders/operations" && request.method === "GET") {
-    let query = supabase
-      .from("fuel_order_operations")
-      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,container_type_id,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,delivery_challenge_id,delivery_verified_at,return_received_at,completed_at,settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,deposit_refund_amount,deposit_refunded_at,metadata,created_at,updated_at,order:order_records(currency_code,subtotal_amount,fee_amount,discount_amount,tax_amount,total_amount)")
-      .order("created_at", { ascending: false });
     const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
     const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
     const stage = optionalString(url.searchParams.get("stage"));
     const fulfillmentMode = optionalString(url.searchParams.get("fulfillmentMode"));
     const scope = optionalString(url.searchParams.get("scope"));
+    let queryClient = supabase;
+    let driverOrderIds: string[] = [];
+    if (scope === "driver") {
+      // Driver identity and station-managed driver records are intentionally
+      // hidden behind RLS. Use the service client only to resolve assignments,
+      // then constrain the operation read to IDs verified for this user.
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceRoleKey) {
+        return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+      }
+      queryClient = createServiceClient(supabaseUrl, serviceRoleKey);
+      const assigned = await queryClient
+        .from("order_assignments")
+        .select("order_id,participant_role,entity_type,entity_id,status")
+        .eq("participant_role", "driver")
+        .eq("status", "active");
+      if (assigned.error) return databaseError(assigned.error, id);
+      const resolvedOrderIds = await resolveFuelAssignedOrderIdsForUser(
+        queryClient,
+        assigned.data ?? [],
+        authResult.user.id,
+      );
+      if (resolvedOrderIds.error) return databaseError(resolvedOrderIds.error, id);
+      if (resolvedOrderIds.orderIds.length === 0) {
+        return jsonResponse({ ok: true, data: [], requestId: id });
+      }
+      driverOrderIds = [...resolvedOrderIds.orderIds];
+    }
+
+    let query = queryClient
+      .from("fuel_order_operations")
+      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,container_type_id,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,delivery_challenge_id,delivery_verified_at,return_received_at,completed_at,settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,deposit_refund_amount,deposit_refunded_at,metadata,created_at,updated_at,order:order_records(currency_code,subtotal_amount,fee_amount,discount_amount,tax_amount,total_amount)")
+      .order("created_at", { ascending: false });
     if (stage) query = query.eq("stage_key", stage);
     if (fulfillmentMode) {
       if (!["station_managed", "independent_driver", "skima_managed"].includes(fulfillmentMode)) {
@@ -711,18 +740,7 @@ async function handleFuelRuntimeRequest(
       query = query.eq("fulfillment_mode", fulfillmentMode);
     }
     if (scope === "customer") query = query.eq("customer_user_id", authResult.user.id);
-    if (scope === "driver") {
-      const assigned = await supabase
-        .from("order_assignments")
-        .select("order_id,participant_role,entity_type,entity_id,status")
-        .eq("participant_role", "driver")
-        .eq("status", "active");
-      if (assigned.error) return databaseError(assigned.error, id);
-      const resolvedOrderIds = await resolveFuelAssignedOrderIdsForUser(supabase, assigned.data ?? [], authResult.user.id);
-      if (resolvedOrderIds.error) return databaseError(resolvedOrderIds.error, id);
-      if (resolvedOrderIds.orderIds.length === 0) return jsonResponse({ ok: true, data: [], requestId: id });
-      query = query.in("order_id", resolvedOrderIds.orderIds);
-    }
+    if (scope === "driver") query = query.in("order_id", driverOrderIds);
     if (branchId) query = query.eq("station_branch_id", branchId);
     if (orderId) query = query.eq("order_id", orderId);
     const { data: operationRows, error: operationError } = await query;
