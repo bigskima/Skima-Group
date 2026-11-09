@@ -27,7 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   experiments: { typedRoutes: true },
-  web: { bundler: "metro", output: "single", name: "SKIMA Store", shortName: "SKIMA Store", themeColor: "#E21D2F", backgroundColor: "#F7F7F8" },
+  web: { bundler: "metro", output: "single", name: "SKIMA Store", shortName: "SKIMA Store", description: "Shop products and manage your SKIMA Store orders.", themeColor: "#E21D2E", backgroundColor: "#FFFFFF", favicon: brandImage },
   android: { package: androidPackage, ...(googleServicesFile ? { googleServicesFile } : {}), adaptiveIcon: { foregroundImage: brandImage, backgroundColor: "#F7F7F8" }, permissions: ["POST_NOTIFICATIONS"] },
   ios: { bundleIdentifier: iosBundleIdentifier, supportsTablet: true },
   plugins: ["expo-router", "expo-secure-store", ["expo-notifications", { defaultChannel: "store", color: "#E21D2E", enableRemoteNotifications: true }], ["expo-splash-screen", { image: brandImage, imageWidth: 180, backgroundColor: "#F7F7F8", resizeMode: "contain", dark: { backgroundColor: "#111113", image: brandImage } }]],
