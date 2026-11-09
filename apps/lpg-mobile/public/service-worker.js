@@ -1,5 +1,5 @@
 const CACHE_NAME = "skima-refill-pwa-shell-v1";
-const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icons/skima-app-icon.png"];
+const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icons/skima-app-icon.png", "/icons/skima-app-icon-180.png", "/icons/skima-app-icon-192.png", "/icons/skima-app-icon-512.png"];
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
 });

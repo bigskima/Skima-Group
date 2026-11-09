@@ -15,7 +15,7 @@ export default function RootHtml({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-title" content="SKIMA Logistics" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="icon" type="image/png" href="/icons/skima-app-icon.png" />
-        <link rel="apple-touch-icon" href="/icons/skima-app-icon.png" />
+        <link rel="apple-touch-icon" href="/icons/skima-app-icon-180.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <title>SKIMA Logistics</title>
         <script dangerouslySetInnerHTML={{ __html: pwaInstallScript }} />

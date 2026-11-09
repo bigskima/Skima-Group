@@ -30,6 +30,7 @@ on:
       - "scripts/verify-migration-history.ts"
       - "scripts/verify-skima-native-assets.mjs"
       - "scripts/verify-skima-pwa.mjs"
+      - "scripts/generate-skima-pwa-icons.mjs"
       - "scripts/validate-foundation.ts"
       - "scripts/verify-financial-policy-governance.ts"
       - "scripts/skima-whatsapp-lifecycle-contract.test.ts"
