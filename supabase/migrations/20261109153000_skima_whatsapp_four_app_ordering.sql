@@ -379,7 +379,7 @@ begin
       and offer.status='submitted'
       and (offer.expires_at is null or offer.expires_at>timezone('utc',now()))
   ) then
-    raise exception using errcode='42501',message='that provider offer is not available for this linked customer's request';
+    raise exception using errcode='42501',message='that provider offer is not available for this linked customer''s request';
   end if;
 
   if not public.has_accepted_current_policy('policy.customer.logistics.terms',null) then
