@@ -169,6 +169,15 @@ Deno.test("WhatsApp ordering reuses the live Fuel, Bills, Logistics and Store do
   assertIncludes(ordering, "store_checkout_snapshot");
   assertIncludes(store, "'store.order.acceptance.manual.v1'");
   assertIncludes(ordering, "target_confirm_payment");
+  assertIncludes(ordering, "linked customer''s request");
+  // Wallet discovery must not depend on a balance-view row existing yet.
+  assertIncludes(webhook, 'db.from("wallet_accounts")');
+  assertIncludes(webhook, 'db.from("wallet_balances")');
+  // Store accepts owned saved street addresses even when map coordinates are absent.
+  assertIncludes(webhook, 'db.from("lpg_customer_locations")');
+  assertIncludes(webhook, '.eq("owner_user_id", profileId)');
+  assertIncludes(webhook, '.eq("status", "active")');
+  assertIncludes(webhook, 'asText(location.formatted_address, "")');
 
   assertIncludes(ordering, "from public,anon,authenticated");
   assertIncludes(ordering, "to service_role");
