@@ -45,7 +45,7 @@ Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () =
   assertIncludes(supportMigration, "public.reply_to_my_support_app_thread(");
   assertIncludes(supportMigration, "public.respond_to_support_app_thread(");
   assertIncludes(supportMigration, "public.assign_support_app_thread(");
-  assertIncludes(supportMigration, "not coalesce(new.is_internal,false)");
+  assertIncludes(supportMigration, "or coalesce(new.is_internal,false)");
   assertIncludes(supportMigration, "interval '24 hours'");
   assertIncludes(supportMigration, "for update of n skip locked");
   assertIncludes(supportMigration, "to service_role");
