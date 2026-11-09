@@ -725,7 +725,29 @@ async function handleFuelRuntimeRequest(
     }
     if (branchId) query = query.eq("station_branch_id", branchId);
     if (orderId) query = query.eq("order_id", orderId);
-    return selectRecords(query, id);
+    const result = await query;
+    if (result.error) return databaseError(result.error, id);
+    const operations = Array.isArray(result.data)
+      ? result.data as Record<string, unknown>[]
+      : [];
+    const enriched: Record<string, unknown>[] = [];
+    for (const operation of operations) {
+      const targetOrderId = stringOrNull(operation.order_id);
+      if (!targetOrderId) {
+        enriched.push(operation);
+        continue;
+      }
+      const contactResult = await supabase.rpc("read_fuel_order_contact_details", {
+        target_order_id: targetOrderId,
+      });
+      if (contactResult.error) return databaseError(contactResult.error, id);
+      const contactDetails = contactResult.data && typeof contactResult.data === "object"
+        && !Array.isArray(contactResult.data)
+        ? contactResult.data as Record<string, unknown>
+        : {};
+      enriched.push({ ...operation, ...contactDetails });
+    }
+    return jsonResponse({ ok: true, data: enriched, requestId: id });
   }
 
   if (routePath === "/runtime/fuel/orders/events" && request.method === "GET") {
