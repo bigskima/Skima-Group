@@ -97,3 +97,83 @@ function assertIncludes(source: string, fragment: string): void {
 function assertNotIncludes(source: string, fragment: string): void {
   if (source.includes(fragment)) throw new Error(`Expected source not to include: ${fragment}`);
 }
+
+
+Deno.test("WhatsApp ordering reuses the live Fuel, Bills, Logistics and Store domain lifecycles", async () => {
+  const [webhook, ordering, fuel, logistics, utility, store, historyText] = await Promise.all([
+    read("supabase/functions/skima-whatsapp-webhook/index.ts"),
+    read("supabase/migrations/20261109153000_skima_whatsapp_four_app_ordering.sql"),
+    read("supabase/migrations/20261101202600_fuel_order_creation_and_driver_qualification.sql"),
+    read("supabase/migrations/20261103143845_logistics_booking_and_payment_modes.sql"),
+    read("supabase/migrations/20260909033000_utility_financial_fulfillment_runtime.sql"),
+    read("supabase/migrations/20261102112220_skima_store_foundation.sql"),
+    read("supabase/migration-history-policy.json"),
+  ]);
+
+  // Customer-facing state machines must exist for each service; all order creation
+  // and payment confirmation is routed through linked-account guarded database wrappers.
+  for (const stage of [
+    'stage === "fuel.product"',
+    'stage === "fuel.station"',
+    'stage === "fuel.confirm"',
+    'stage === "bills.product"',
+    'stage === "bills.identifier"',
+    'stage === "bills.confirm"',
+    'stage === "logistics.category"',
+    'stage === "logistics.pickup.address"',
+    'stage === "logistics.destination.address"',
+    'stage === "logistics.offer.select"',
+    'stage === "logistics.booking.confirm"',
+    'stage === "store.product"',
+    'stage === "store.payment"',
+  ]) assertIncludes(webhook, stage);
+
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_create_fuel_order"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_pay_fuel_order"');
+  assertIncludes(webhook, 'db.rpc("read_utility_catalog"');
+  assertIncludes(webhook, "validateUtilityCustomer(db");
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_create_utility_payment"');
+  assertIncludes(webhook, 'db.rpc("search_logistics_geographies"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_create_logistics_job"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_create_logistics_booking"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_pay_logistics_booking"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_store_checkout"');
+  assertIncludes(webhook, "readWhatsAppStoreCatalogue(db)");
+  assertIncludes(webhook, "readWhatsAppLogisticsOffers(db, profileId");
+  assertIncludes(webhook, 'eq("requester_user_id", profileId)');
+  assertIncludes(webhook, 'Reply 8 again for fresh status');
+
+  // Fuel must use the same quote/accept/wallet reservation engine as the app.
+  assertIncludes(fuel, "public.create_fuel_order_with_quote(");
+  assertIncludes(fuel, "public.create_fuel_commercial_quote(");
+  assertIncludes(ordering, "public.create_fuel_order_with_quote(");
+  assertIncludes(ordering, "public.accept_price_quote(");
+  assertIncludes(ordering, "public.fund_order_from_wallet(");
+
+  // Bills must use live catalogue/provider validation and the existing utility hold.
+  assertIncludes(ordering, "public.create_utility_payment_request(");
+  assertIncludes(ordering, "public.reserve_utility_payment_request(");
+  assertIncludes(utility, "create or replace function public.reserve_utility_payment_request");
+
+  // Logistics requests, offer booking, online-wallet escrow and safe cancellation
+  // must remain the shared logistics network's canonical domain operations.
+  assertIncludes(ordering, "public.create_logistics_job(");
+  assertIncludes(ordering, "public.create_logistics_booking_for_offer(");
+  assertIncludes(ordering, "public.reserve_logistics_booking_online_payment(");
+  assertIncludes(ordering, "public.cancel_logistics_booking_before_payment(");
+  assertIncludes(logistics, "create or replace function public.create_logistics_booking_for_offer");
+
+  // Store checkout uses shared catalogue pricing/stock checks and the common ledger.
+  assertIncludes(ordering, "public.create_order_from_catalog(");
+  assertIncludes(ordering, "public.fund_order_from_wallet(");
+  assertIncludes(ordering, "public.store_checkout_snapshot");
+  assertIncludes(store, "'store.order.acceptance.manual.v1'");
+  assertIncludes(ordering, "target_confirm_payment");
+
+  assertIncludes(ordering, "from public,anon,authenticated");
+  assertIncludes(ordering, "to service_role");
+  const history = JSON.parse(historyText) as { businessModuleMigrations: string[] };
+  if (!history.businessModuleMigrations.includes("20261109153000_skima_whatsapp_four_app_ordering.sql")) {
+    throw new Error("The four-app WhatsApp ordering migration must be tracked in migration-history-policy.json.");
+  }
+});
