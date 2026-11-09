@@ -23,7 +23,7 @@ Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () =
   assertIncludes(webhook, "requestCanonicalQuote(");
   assertIncludes(webhook, "_lastReplyText");
   assertIncludes(webhook, 'db.rpc("set_skima_whatsapp_order_notifications"');
-  assertIncludes(webhook, 'stage === "menu" && normalized === "6"');
+  assertIncludes(webhook, 'stage === "menu" && normalized === "0"');
   assertIncludes(webhook, 'eq("order_status_notifications_opt_in", true)');
   assertIncludes(webhook, 'db.rpc("skima_whatsapp_create_support_thread"');
   assertIncludes(webhook, 'db.rpc("skima_whatsapp_reply_support_thread"');
