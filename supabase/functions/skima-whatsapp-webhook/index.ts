@@ -369,7 +369,7 @@ async function handleLinkedMessage(
     );
   }
 
-  if (stage === "menu" && ["9", "support", "help", "customer support", "help & support"].includes(normalized)) {
+  if (["9", "support", "help", "customer support", "help & support"].includes(normalized)) {
     return plan([
       "Which SKIMA app do you need help with?",
       "",
@@ -1426,7 +1426,7 @@ async function handleLinkedMessage(
       const onlyOrder = pending[0];
       const payment = await attemptReservation(db, profileId, asText(onlyOrder.id, ""), item.id);
       if (payment.ok) {
-        return plan(`✅ Payment reserved. Order ${asText(onlyOrder.public_reference, asText(onlyOrder.id, ""))} is sent for dispatch. Reply 4 to view your orders or MENU for options.`, "menu");
+        return plan(`✅ Payment reserved. Order ${asText(onlyOrder.public_reference, asText(onlyOrder.id, ""))} is sent for dispatch. Reply 8 to view your orders or MENU for options.`, "menu");
       }
       return plan(`Payment is still pending for ${asText(onlyOrder.public_reference, "your order")}. ${payment.message} After resolving the wallet balance or dispatch issue, reply PAY to try again.`, "payment.pending", { orderId: onlyOrder.id });
     }
@@ -1513,14 +1513,7 @@ async function handleLinkedMessage(
     return plan(lines.join("\n"), "menu");
   }
 
-  if (["5", "help", "support"].includes(normalized)) {
-    return plan(
-      "SKIMA LPG support can help with orders, deliveries and account linking. Describe the issue in a message. Never send your password, wallet PIN, bank/card details or payment OTP. For any payment issue, quote your SKIMA order reference.",
-      "menu",
-    );
-  }
-
-  if (stage === "menu" || stage === "payment.pending") return plan("I didn't recognise that choice. Reply with 1, 2, 3, 4 or 5, or MENU to see all options.", "menu");
+  if (stage === "menu" || stage === "payment.pending") return plan("I didn't recognise that choice. Reply MENU to see all SKIMA services, or 9 for support.", "menu");
   return plan("I couldn't match that response to the current step. Reply MENU to restart the ordering flow; no payment is confirmed by this message.", "menu");
 }
 
