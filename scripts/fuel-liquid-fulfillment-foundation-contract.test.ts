@@ -159,14 +159,17 @@ Deno.test("fuel event ledgers are append-only and product data is permission-sco
 });
 
 Deno.test("fuel migration history records the verified production head", () => {
-  if (historyPolicy.remoteHeadVersion !== "20261109045831") {
-    throw new Error("The migration policy must match the verified production head after Store, Managed Driver geography and Fuel lifecycle deployments.");
+  if (historyPolicy.remoteHeadVersion !== "20261109053653") {
+    throw new Error("The migration policy must match the verified production head after Store, Managed Driver geography, Fuel lifecycle and Store settlement event-log deployments.");
   }
   if (!historyPolicy.businessModuleMigrations.includes("20261109045831_store_settlement_shared_workflow_handoff.sql")) {
     throw new Error("The canonical Store settlement migration must be tracked in migration-history-policy.json.");
   }
   if (historyPolicy.staleAliases["20261109045830_store_settlement_shared_workflow_handoff.sql"] !== "20261109045831_store_settlement_shared_workflow_handoff.sql") {
     throw new Error("The earlier duplicate production entry must resolve to the canonical Store settlement migration.");
+  }
+  if (!historyPolicy.businessModuleMigrations.includes("20261109053653_store_settlement_event_log_terminal.sql")) {
+    throw new Error("The processed Store settlement event migration must be tracked at its applied production version.");
   }
   if (!historyPolicy.businessModuleMigrations.includes("20261101202000_fuel_liquid_fulfillment_foundation.sql")) {
     throw new Error("The fuel foundation migration must be tracked in migration-history-policy.json.");
