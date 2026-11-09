@@ -3,10 +3,16 @@ name: Android EAS build
 on:
   push:
     branches: [main]
+    # Only native-affecting Refill changes run the Expo validation job.
+    # Web-only PWA assets, HTML shells and web export script edits do not.
     paths:
-      - "apps/lpg-mobile/**"
+      - "apps/lpg-mobile/app.config.ts"
+      - "apps/lpg-mobile/eas.json"
+      - "apps/lpg-mobile/package-lock.json"
+      - "apps/lpg-mobile/assets/**"
+      - "apps/lpg-mobile/src/native/**"
+      - "apps/lpg-mobile/scripts/**"
       - "packages/frontend-core/**"
-      - ".github/workflows/android-production-apk.yml"
   workflow_dispatch:
     inputs:
       build_profile:
