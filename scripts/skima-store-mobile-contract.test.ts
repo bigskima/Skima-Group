@@ -200,7 +200,7 @@ Deno.test("Store management distinguishes cancelled orders without a wallet debi
 
 
 Deno.test("Store customer receipt settlement records the release without advancing its shared workflow twice", async () => {
-  const migration = await read("supabase/migrations/20261109043700_store_settlement_shared_workflow_handoff.sql");
+  const migration = await read("supabase/migrations/20261109045830_store_settlement_shared_workflow_handoff.sql");
   requireText(migration, "store_order.workflow_instance_id = request_record.workflow_instance_id", "Store settlement shared-workflow guard");
   requireText(migration, "service_request_event_id := public.record_platform_event", "Store settlement event recording");
   requireText(migration, "store.order.complete", "Store-specific receipt completion remains the workflow advancement");
@@ -232,7 +232,7 @@ Deno.test("Admin Logistics settings and fee policies have valid routes and cross
 
 
 Deno.test("Store customer receipt settlement preserves the shared order workflow", async () => {
-  const migration = await read("supabase/migrations/20261109043700_store_settlement_shared_workflow_handoff.sql");
+  const migration = await read("supabase/migrations/20261109045830_store_settlement_shared_workflow_handoff.sql");
   requireText(migration, "store_order.workflow_instance_id = request_record.workflow_instance_id", "Shared Store workflow detection");
   requireText(migration, "service_request_event_id := public.record_platform_event", "Settlement event is still recorded");
   requireText(migration, "service_request_event_id := public.process_service_request_event", "Non-Store service requests retain normal settlement workflow advancement");
