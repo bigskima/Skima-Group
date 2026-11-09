@@ -197,3 +197,82 @@ Deno.test("Store management distinguishes cancelled orders without a wallet debi
   requireText(management, "No payment was captured for this checkout", "Store app no-payment notice");
   requireText(admin, 'orderMetadata.store_refund_status === "not_required"', "Admin no-payment refund state");
 });
+
+
+Deno.test("Store customer receipt settlement records the release without advancing its shared workflow twice", async () => {
+  const migration = await read("supabase/migrations/20261109045831_store_settlement_shared_workflow_handoff.sql");
+  requireText(migration, "store_order.workflow_instance_id = request_record.workflow_instance_id", "Store settlement shared-workflow guard");
+  requireText(migration, "service_request_event_id := public.record_platform_event", "Store settlement event recording");
+  requireText(migration, "store.order.complete", "Store-specific receipt completion remains the workflow advancement");
+  requireText(migration, "service_request_event_id,", "Settlement event remains linked to service-request history");
+});
+
+Deno.test("Store shopping separates browsing, basket, fulfilment and payment review", async () => {
+  const shop = await read("apps/store-mobile/src/screens/StoreShopScreen.tsx");
+  requireText(shop, '"browse"|"basket"|"fulfillment"|"review"', "Store progressive checkout state");
+  requireText(shop, 'checkoutStep==="basket"', "Dedicated basket stage");
+  requireText(shop, 'checkoutStep==="fulfillment"', "Dedicated delivery/pickup stage");
+  requireText(shop, 'checkoutStep==="review"', "Dedicated order review stage");
+  requireText(shop, "Continue to delivery", "Basket progression");
+  requireText(shop, "Review order", "Delivery progression");
+  requireText(shop, "Pay securely", "Final secure payment action");
+});
+
+Deno.test("Admin Logistics settings and fee policies have valid routes and cross-module response parsing", async () => {
+  const [navigation, workspace, fees] = await Promise.all([
+    read("apps/admin/src/app/admin-v2-navigation.ts"),
+    read("apps/admin/src/features/logistics/LogisticsWorkspace.tsx"),
+    read("apps/admin/src/admin-logistics-fee-workspace.tsx"),
+  ]);
+  requireText(navigation, 'href: "/logistics/settings"', "Logistics Settings navigation");
+  requireText(workspace, 'props.route === "/logistics/settings"', "Logistics Settings route");
+  requireText(workspace, '"/money/pricing/logistics"', "Logistics fee settings destination");
+  requireText(fees, "percentage_basis_points: z.coerce.number().int().min(0).max(10000).optional().default(0)", "Non-Logistics financial policy compatibility");
+});
+
+
+Deno.test("Store customer receipt settlement preserves the shared order workflow", async () => {
+  const migration = await read("supabase/migrations/20261109045831_store_settlement_shared_workflow_handoff.sql");
+  requireText(migration, "store_order.workflow_instance_id = request_record.workflow_instance_id", "Shared Store workflow detection");
+  requireText(migration, "service_request_event_id := public.record_platform_event", "Settlement event is still recorded");
+  requireText(migration, "service_request_event_id := public.process_service_request_event", "Non-Store service requests retain normal settlement workflow advancement");
+  requireText(migration, "action (store.order.complete) advance", "Store receipt action owns the final order transition");
+  requireText(migration, "service_request_event_id,", "Settlement history points to the recorded event");
+});
+
+Deno.test("Store shopping follows separate browse, basket, delivery and review steps", async () => {
+  const shop = await read("apps/store-mobile/src/screens/StoreShopScreen.tsx");
+  for (const step of ["browse", "basket", "fulfillment", "review"]) {
+    requireText(shop, '"' + step + '"', "Store progressive shopping step " + step);
+  }
+  requireText(shop, "Picked for everyday", "Store browse landing experience");
+  requireText(shop, "Browse products from participating sellers", "Store customer category caption");
+  requireText(shop, "Your basket", "Dedicated basket stage");
+  requireText(shop, "Continue to delivery", "Basket-to-fulfilment progression");
+  requireText(shop, "Review order", "Fulfilment-to-review progression");
+  requireText(shop, "Pay securely", "Final explicit wallet payment step");
+  requireText(shop, "AsyncStorage.setItem(cartKey", "Customer basket persists between visits");
+  rejectText(shop, "Your Store orders", "Order tracking belongs on the Orders screen, not the browsing home");
+});
+
+Deno.test("Logistics admin exposes settings and accepts shared policy families", async () => {
+  const [navigation, logistics, fees] = await Promise.all([
+    read("apps/admin/src/app/admin-v2-navigation.ts"),
+    read("apps/admin/src/features/logistics/LogisticsWorkspace.tsx"),
+    read("apps/admin/src/admin-logistics-fee-workspace.tsx"),
+  ]);
+  requireText(navigation, 'href: "/logistics/settings"', "Logistics settings navigation");
+  requireText(logistics, 'props.route === "/logistics/settings"', "Logistics settings route");
+  requireText(logistics, 'props.onNavigate("/money/pricing/logistics")', "Logistics settings fee-policy destination");
+  requireText(fees, "fixed_amount: z.coerce.number().nonnegative().optional().default(0)", "Non-Logistics policy fixed-amount compatibility");
+  requireText(fees, "percentage_basis_points: z.coerce.number().int().min(0).max(10000).optional().default(0)", "Non-Logistics policy percentage compatibility");
+});
+
+
+Deno.test("Store settlement audit events are processed without becoming workflow commands", async () => {
+  const migration = await read("supabase/migrations/20261109053653_store_settlement_event_log_terminal.sql");
+  requireText(migration, "update public.event_log", "Store settlement event log terminal handling");
+  requireText(migration, "set status = 'processed'", "Store settlement event processed status");
+  requireText(migration, "where id = service_request_event_id", "Store settlement event identity");
+  requireText(migration, "status in ('received', 'validated', 'processing')", "Store settlement event status guard");
+});

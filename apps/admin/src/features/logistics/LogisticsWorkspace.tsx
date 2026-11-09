@@ -292,7 +292,8 @@ export function LogisticsWorkspace(props: {
     : props.route === "/logistics/categories" ? "categories"
       : props.route === "/logistics/bookings" ? "bookings"
         : props.route === "/logistics/incidents" ? "incidents"
-          : props.route === "/logistics/disputes" ? "disputes" : "overview";
+          : props.route === "/logistics/disputes" ? "disputes"
+            : props.route === "/logistics/settings" ? "settings" : "overview";
 
   if (status === "loading") {
     return <div className="logistics-admin"><div className="logistics-admin__loading">Loading your SKIMA administrator session…</div></div>;
@@ -315,7 +316,8 @@ export function LogisticsWorkspace(props: {
     : page === "categories" ? "Service categories"
       : page === "bookings" ? "Bookings & dispatch"
         : page === "incidents" ? "Incidents & cargo recovery"
-          : page === "disputes" ? "Customer disputes" : "Logistics overview";
+          : page === "disputes" ? "Customer disputes"
+            : page === "settings" ? "Logistics settings" : "Logistics overview";
   const description = page === "overview"
     ? "Monitor the nationwide marketplace, provider readiness, active bookings, delivery exceptions and financial disputes."
     : page === "providers"
@@ -326,7 +328,51 @@ export function LogisticsWorkspace(props: {
           ? "Inspect customer bookings, fulfilment status, payment mode and driver assignment."
           : page === "incidents"
             ? "Monitor driver-reported delivery exceptions and cargo custody before any recovery or settlement."
-            : "Review non-delivery, partial delivery, damage and recipient disputes with escrow-safe decisions.";
+            : page === "disputes"
+              ? "Review non-delivery, partial delivery, damage and recipient disputes with escrow-safe decisions."
+              : "Open the governed settings for marketplace services, coverage and Logistics commercial fees.";
+
+  if (page === "settings") {
+    return (
+      <div className="logistics-admin">
+        <AdminV2PageHeader
+          eyebrow="LOGISTICS NETWORK · SETTINGS"
+          title="Logistics settings"
+          description="Manage the network's service catalogue, launch coverage and approved fee policies from their authoritative workspaces."
+        />
+        <div className="logistics-admin__grid">
+          <section className="logistics-admin__panel">
+            <div className="logistics-admin__panel-heading">
+              <div><h2>Marketplace services</h2><p>Control which services are offered and matched to verified providers.</p></div>
+            </div>
+            <div className="logistics-admin__actions">
+              <button type="button" className="logistics-admin__button logistics-admin__button--primary" onClick={() => props.onNavigate("/logistics/categories")}>Manage service categories</button>
+              <button type="button" className="logistics-admin__button" onClick={() => props.onNavigate("/logistics/providers")}>Review provider companies</button>
+            </div>
+          </section>
+          <section className="logistics-admin__panel">
+            <div className="logistics-admin__panel-heading">
+              <div><h2>Service coverage</h2><p>Control launch areas and where Logistics requests can be fulfilled.</p></div>
+            </div>
+            <div className="logistics-admin__actions">
+              <button type="button" className="logistics-admin__button logistics-admin__button--primary" onClick={() => props.onNavigate("/operations/coverage")}>Open service coverage</button>
+            </div>
+          </section>
+          <section className="logistics-admin__panel logistics-admin__panel--wide">
+            <div className="logistics-admin__panel-heading">
+              <div><h2>Fees & settlement</h2><p>Set the customer booking charge, offline company fee and SKIMA's online settlement percentage. Independent approval is required before a proposal becomes active.</p></div>
+            </div>
+            <div className="logistics-admin__notice">
+              Existing bookings keep their captured fee snapshot. Providers do not pay to unlock opportunities; company fees apply only at their configured booking or settlement stage.
+            </div>
+            <div className="logistics-admin__actions">
+              <button type="button" className="logistics-admin__button logistics-admin__button--primary" onClick={() => props.onNavigate("/money/pricing/logistics")}>Open Logistics fee settings</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   const bookingTable = (rows: Row[]) => (
     <TableFrame headers={["Booking", "Service", "Status", "Cargo custody", "Payment", "Customer charge", "Created"]}>

@@ -446,6 +446,7 @@ function buildLogisticsWorkspaceNavigation(items: readonly NavigationItem[]): re
     { ...root, key: "logistics-incidents", label: "Incidents & recovery", href: "/logistics/incidents" },
     { ...root, key: "logistics-disputes", label: "Customer disputes", href: "/logistics/disputes" },
     { ...root, key: "logistics-categories", label: "Service categories", href: "/logistics/categories" },
+    { ...root, key: "logistics-settings", label: "Settings", href: "/logistics/settings" },
   ];
 }
 
