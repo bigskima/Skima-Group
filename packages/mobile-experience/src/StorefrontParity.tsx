@@ -195,7 +195,7 @@ export function StorefrontDetailSheet({
             <Text style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: "900", color: palette.ink, textAlign: "right" }} numberOfLines={2}>{title}</Text>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 12 }}>
-            {media ? <View style={{ minHeight: 150, maxHeight: 230, borderRadius: 16, overflow: "hidden", backgroundColor: palette.surfaceSubtle }}>{media}</View> : null}
+            {media ? <View style={{ height: 190, borderRadius: 16, overflow: "hidden", backgroundColor: palette.surfaceSubtle }}>{media}</View> : null}
             {categoryLabel ? <Text style={{ color: palette.muted, fontSize: 10, fontWeight: "700" }}>{categoryLabel}</Text> : null}
             {description ? <Text style={{ color: palette.ink, fontSize: 12, lineHeight: 19 }}>{description}</Text> : null}
             {priceLabel ? (

@@ -46,6 +46,15 @@ function storeRecord(value: unknown): CatalogRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as CatalogRecord : {};
 }
 
+function firstStoreText(value: unknown, ...keys: string[]): string {
+  const record = storeRecord(value);
+  for (const key of keys) {
+    const result = catalogText(record, key);
+    if (result) return result;
+  }
+  return "";
+}
+
 function storeOrderDestination(order: CatalogRecord, settings: CatalogRecord | null) {
   const payload = storeRecord(order.order_payload);
   const snapshot = storeRecord(payload.store_checkout_snapshot);
@@ -54,13 +63,13 @@ function storeOrderDestination(order: CatalogRecord, settings: CatalogRecord | n
   const location = storeRecord(isPickup ? snapshot.pickupLocation : snapshot.deliveryLocation);
   return {
     method: isPickup ? "Customer pickup" : "Home delivery",
-    address: catalogText(location, "formattedAddress", "formatted_address", "address") ||
+    address: firstStoreText(location, "formattedAddress", "formatted_address", "address") ||
       (isPickup ? catalogText(settings, "pickup_formatted_address") : ""),
-    label: catalogText(location, "label") || (isPickup ? catalogText(settings, "pickup_location_label") : ""),
-    contactName: catalogText(location, "contactName", "contact_name"),
-    contactPhone: catalogText(location, "contactPhone", "contact_phone"),
+    label: firstStoreText(location, "label") || (isPickup ? catalogText(settings, "pickup_location_label") : ""),
+    contactName: firstStoreText(location, "contactName", "contact_name"),
+    contactPhone: firstStoreText(location, "contactPhone", "contact_phone"),
     landmark: catalogText(location, "landmark"),
-    instructions: catalogText(location, "deliveryInstructions", "delivery_instructions", "instructions") ||
+    instructions: firstStoreText(location, "deliveryInstructions", "delivery_instructions", "instructions") ||
       catalogText(payload, "customer_note"),
   };
 }

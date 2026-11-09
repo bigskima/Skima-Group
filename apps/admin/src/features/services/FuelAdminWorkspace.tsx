@@ -659,7 +659,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
                 : {};
               const customerName = catalogText(customerContact, "name") || "Customer";
               const customerPhone = catalogText(customerContact, "phone") || "Phone unavailable";
-              const customerAddress = catalogText(customerContact, "address", "label") || "Delivery address not recorded";
+              const customerAddress = catalogText(customerContact, "address") || catalogText(customerContact, "label") || "Delivery address not recorded";
               const eligible = (qualifications.data ?? []).filter((qualification) =>
                 catalogText(qualification, "fulfillment_mode") === mode &&
                 catalogText(qualification, "status") === "approved" &&

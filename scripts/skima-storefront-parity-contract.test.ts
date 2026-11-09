@@ -38,8 +38,8 @@ Deno.test("shared detail sheet owns the same Back to Store navigation on every a
 Deno.test("Store admin displays the order destination and warns before blind dispatch", async () => {
   const source = await read("apps/admin/src/features/store/StoreWorkspace.tsx");
   assertIncludes(source, "Delivery / pickup address", "Store admin order table");
-  assertIncludes(source, "delivery address missing", "Store admin missing-address warning");
-  assertIncludes(source, "pickup location missing", "Store admin missing-pickup warning");
+  assertIncludes(source, "Delivery address missing", "Store admin missing-address warning");
+  assertIncludes(source, "Pickup location missing", "Store admin missing-pickup warning");
   assertIncludes(source, "contactPhone", "Store admin order contact");
   assertIncludes(source, "deliveryInstructions", "Store admin order instructions");
 });
@@ -68,7 +68,7 @@ Deno.test("Fuel order contacts are permission checked and returned to customer, 
   assertIncludes(migration, "public.can_read_fuel_order(target_order_id)", "Fuel contact read permission");
   assertIncludes(migration, "assignment.status = 'active'", "Fuel assigned-driver access check");
   assertIncludes(runtime, "scope === \"driver\"", "Fuel driver order scope");
-  assertIncludes(runtime, "branchId || scope === \"customer\"", "Fuel station branch contact enrichment");
+  assertIncludes(runtime, "branchId || stage || scope === \"customer\"", "Fuel station branch contact enrichment");
   assertIncludes(runtime, "read_fuel_order_contact_details", "Fuel runtime contact read model");
   assertIncludes(customer, "Contact and delivery details", "Fuel customer order detail");
   assertIncludes(driver, "Customer delivery address", "Fuel driver order detail");
