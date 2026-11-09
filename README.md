@@ -145,6 +145,6 @@ App and admin clients authenticate through Supabase Auth with the client-safe he
 `packages/auth`. Real Supabase Auth users are provisioned into `public.profiles` by the foundation
 database trigger.
 
-Admin access is not hardcoded. The platform has one service-role-bootstrapped super admin/general
-manager and supports multiple role-based admins through `public.platform_admins`, `public.roles`,
-and `public.user_roles`.
+Admin access is not hardcoded. The platform supports multiple service-role-bootstrapped Super
+Admins alongside role-based admins through `public.platform_admins`, `public.roles`, and
+`public.user_roles`.
