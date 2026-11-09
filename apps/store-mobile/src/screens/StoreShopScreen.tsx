@@ -109,7 +109,7 @@ export function StoreShopScreen(){
    <StorePromotionBanner />
    <GuideTarget page="shop" targetKey="store.shop.categories"><View style={{gap:10}}>
     <View style={[styles.search,{borderColor:palette.border,backgroundColor:palette.surface}]}><Search size={16} color={palette.muted}/><TextInput value={search} onChangeText={setSearch} placeholder="Search products" placeholderTextColor={palette.muted} style={{flex:1,color:palette.ink,fontSize:12}}/>{search?<Pressable onPress={()=>setSearch("")}><X size={16} color={palette.muted}/></Pressable>:null}</View>
-    <SectionTitle title="Explore categories" caption="Find what you need, without the clutter."/>
+    <SectionTitle title="Explore categories" caption="Browse products from participating sellers."/>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}><CategoryChip title="All" selected={category==="all"} onPress={()=>setCategory("all")}/>{categories.map(c=><CategoryChip key={asString(c,"id")??""} title={asString(c,"display_name","name")??"Category"} selected={category===asString(c,"id")} onPress={()=>setCategory(asString(c,"id")??"all")}/>)}</ScrollView>
    </View></GuideTarget>
    <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:10}}>
