@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Alert, Pressable, ScrollView, Text,
+  ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text,
   TextInput, View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -107,6 +107,7 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
   const [internalNote, setInternalNote] = useState(false);
   const [nextStatus, setNextStatus] = useState("in_progress");
   const [attachment, setAttachment] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [whatsAppLinking, setWhatsAppLinking] = useState(false);
 
   const readThreads = useCallback(async () => {
     const { data, error: queryError } = await supabase.rpc("read_my_support_app_threads", {
@@ -340,6 +341,42 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
   const openThread = (thread: SupportThread) => {
     setActiveThread(thread); setView("thread"); setError(""); setReply(""); setAttachment(null);
   };
+
+  const connectWhatsApp = async () => {
+    if (whatsAppLinking || workspace !== "customer") return;
+    setWhatsAppLinking(true);
+    try {
+      const { data, error: linkError } = await supabase.rpc("issue_skima_whatsapp_link_code");
+      if (linkError) throw linkError;
+      if (typeof data !== "string" || !/^[A-Fa-f0-9]{16}$/.test(data)) {
+        throw new Error("SKIMA returned an invalid linking code. Please try again.");
+      }
+      const code = data.toUpperCase();
+      const publicNumber = (process.env.EXPO_PUBLIC_SKIMA_WHATSAPP_NUMBER ?? "").replace(/\\D/g, "");
+      const message = "Send this one-time code to the official SKIMA WhatsApp number within 10 minutes:\\n\\n" +
+        code + "\\n\\nNever share this code with another person.";
+      if (publicNumber.length >= 6 && publicNumber.length <= 20) {
+        Alert.alert("Connect SKIMA to WhatsApp", message, [
+          { text: "Close", style: "cancel" },
+          {
+            text: "Open WhatsApp",
+            onPress: () => {
+              const url = "https://wa.me/" + publicNumber + "?text=" + encodeURIComponent(code);
+              void Linking.openURL(url).catch(() => {
+                Alert.alert("Could not open WhatsApp", "Copy the one-time code and send it to the official SKIMA WhatsApp number.");
+              });
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("Connect SKIMA to WhatsApp", message);
+      }
+    } catch (cause) {
+      Alert.alert("WhatsApp linking unavailable", cause instanceof Error ? cause.message : "Please try again.");
+    } finally {
+      setWhatsAppLinking(false);
+    }
+  };
   const statusColor = (status?: string) => status === "resolved" || status === "closed" ? palette.success : palette.brand;
 
   return (
@@ -367,6 +404,22 @@ export function SupportCenter({ appKey, workspace, supabase, palette, canManage 
                 <Text style={{ color: palette.muted, fontSize: 10, lineHeight: 15 }}>Move away from danger and seek emergency help immediately.</Text>
               </View>
             </View>
+          ) : null}
+
+          {workspace === "customer" ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={whatsAppLinking}
+              onPress={() => void connectWhatsApp()}
+              style={{ minHeight: 54, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, opacity: whatsAppLinking ? 0.6 : 1 }}
+            >
+              <MessageCircle size={19} color={palette.brand} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: palette.ink, fontSize: 12, fontWeight: "900" }}>Connect WhatsApp</Text>
+                <Text style={{ color: palette.muted, fontSize: 10 }}>Use your SKIMA account for support in one conversation</Text>
+              </View>
+              {whatsAppLinking ? <ActivityIndicator color={palette.brand} /> : <ChevronRight size={17} color={palette.muted} />}
+            </Pressable>
           ) : null}
 
           {canManage ? (
