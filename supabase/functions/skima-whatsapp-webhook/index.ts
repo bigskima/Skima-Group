@@ -327,7 +327,7 @@ async function handleLinkedMessage(
     ].join("\n"), "menu");
   }
 
-  const agentCommand = /^(REPLY|NOTE|CLAIM)\\s+(SK-[A-F0-9]{8})(?:\\s+([\\s\\S]+))?$/i.exec(input);
+  const agentCommand = /^(REPLY|NOTE|CLAIM)\s+(SK-[A-F0-9]{8})(?:\s+([\s\S]+))?$/i.exec(input);
   if (agentCommand) {
     const command = agentCommand[1].toUpperCase();
     const reference = agentCommand[2].toUpperCase();
@@ -1024,7 +1024,7 @@ async function dispatchWhatsAppOutboxes(request: Request): Promise<Response> {
 
 async function dispatchSupportOutbox(request: Request): Promise<Response> {
   const expectedSecret = Deno.env.get("SKIMA_WHATSAPP_DISPATCH_SECRET") ?? "";
-  const suppliedSecret = /^Bearer\\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? "";
+  const suppliedSecret = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? "";
   if (!expectedSecret || !timingSafeEqual(expectedSecret, suppliedSecret)) {
     return json({ ok: false, error: "unauthorized" }, 401);
   }
