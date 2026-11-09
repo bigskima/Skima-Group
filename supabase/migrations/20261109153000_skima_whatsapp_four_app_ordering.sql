@@ -33,7 +33,7 @@ begin
   if coalesce(btrim(target_whatsapp_wa_id),'') !~ '^[0-9]{6,20}$'
     or coalesce(btrim(target_idempotency_key),'')=''
     or target_branch_id is null
-    or target_product_key not in ('fuel.pms','fuel.ago','fuel.dpk')
+    or target_product_key is null or target_product_key not in ('fuel.pms','fuel.ago','fuel.dpk')
     or target_requested_litres is null or target_requested_litres<=0
     or target_currency_code is null
     or target_delivery_location_id is null then
@@ -360,7 +360,7 @@ begin
     join public.logistics_job_requests job on job.id=offer.job_id
     where offer.id=target_offer_id
       and job.requester_user_id=contact_record.profile_id
-      and offer.status in ('submitted','countered')
+      and offer.status='submitted'
       and (offer.expires_at is null or offer.expires_at>timezone('utc',now()))
   ) then
     raise exception using errcode='42501',message='that provider offer is not available for this linked customer's request';
