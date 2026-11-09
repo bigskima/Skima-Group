@@ -475,6 +475,21 @@ begin
     and n.locked_at < timezone('utc',now()) - interval '5 minutes'
     and n.attempt_count>=8;
 
+  update public.skima_whatsapp_support_outbox n
+  set status='cancelled',
+      last_error_code='whatsapp_service_window_expired_or_contact_unlinked',
+      locked_at=null,
+      updated_at=timezone('utc',now())
+  from public.skima_whatsapp_contacts c
+  where c.id=n.contact_id
+    and n.status in ('queued','processing')
+    and (
+      c.link_status<>'linked'
+      or c.whatsapp_wa_id<>n.whatsapp_wa_id
+      or c.last_inbound_at is null
+      or c.last_inbound_at < timezone('utc',now()) - interval '24 hours'
+    );
+
   return query
   with due as (
     select n.id
