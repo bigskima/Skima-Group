@@ -480,7 +480,7 @@ async function handleLinkedMessage(
   if (stage === "menu" && ["2", "fuel", "petrol", "diesel", "kerosene"].includes(normalized)) {
     const [productsResult, offersResult, containersResult, choicesResult, wallets] = await Promise.all([
       db.from("fuel_products").select("id,key,display_name,quantity_precision,status").eq("status", "enabled").order("key"),
-      db.from("fuel_branch_product_offers").select("id,branch_id,product_key,currency_code,price_per_litre,admin_override_price_per_litre,minimum_litres,maximum_litres,fulfillment_modes,status,effective_from,effective_until,branch:organization_branches(id,display_name,address)").eq("status", "active").order("updated_at", { ascending: false }).limit(50),
+      db.from("fuel_branch_product_offers").select("id,branch_id,product_key,currency_code,price_per_litre,minimum_litres,maximum_litres,fulfillment_modes,status,effective_from,effective_until,branch:organization_branches(id,display_name,address)").eq("status", "active").order("updated_at", { ascending: false }).limit(50),
       db.from("fuel_container_types").select("id,key,display_name,nominal_capacity_litres,supported_product_keys,status").eq("status", "active").order("nominal_capacity_litres"),
       db.rpc("read_skima_whatsapp_customer_choices", { target_whatsapp_wa_id: whatsappWaId }),
       readWhatsAppCustomerWallets(db, profileId),
@@ -1569,7 +1569,7 @@ function isCurrentlyEffective(start: unknown, end: unknown): boolean {
 function formatFuelOfferChoices(offers: Record<string, unknown>[]): string {
   return offers.slice(0, 8).map((offer, index) => {
     const branch = asRecord(offer.branch);
-    const price = numberValue(offer.admin_override_price_per_litre) ?? numberValue(offer.price_per_litre);
+    const price = numberValue(offer.price_per_litre);
     const currency = asText(offer.currency_code, "NGN");
     const modes = Array.isArray(offer.fulfillment_modes) ? offer.fulfillment_modes.join(", ").replace(/_/g, " ") : "";
     const range = (numberValue(offer.minimum_litres) ?? 1) + "–" + (numberValue(offer.maximum_litres) ?? "configured maximum") + " L";
