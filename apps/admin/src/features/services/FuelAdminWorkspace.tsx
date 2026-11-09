@@ -653,6 +653,13 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
               const productKey = catalogText(order, "product_key");
               const branchId = catalogText(order, "station_branch_id");
               const load = catalogNumber(order, "requested_litres");
+              const rawCustomerContact = order.customer_contact;
+              const customerContact = rawCustomerContact && typeof rawCustomerContact === "object" && !Array.isArray(rawCustomerContact)
+                ? rawCustomerContact as CatalogRecord
+                : {};
+              const customerName = catalogText(customerContact, "name") || "Customer";
+              const customerPhone = catalogText(customerContact, "phone") || "Phone unavailable";
+              const customerAddress = catalogText(customerContact, "address") || catalogText(customerContact, "label") || "Delivery address not recorded";
               const eligible = (qualifications.data ?? []).filter((qualification) =>
                 catalogText(qualification, "fulfillment_mode") === mode &&
                 catalogText(qualification, "status") === "approved" &&
@@ -670,6 +677,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
                   <div>
                     <strong>{productName(productKey, productRows)} · {load} L</strong>
                     <small>{formatMode(mode)} · {branchName(branches.data ?? [], branchId)} · Order {orderId.slice(0, 8).toUpperCase()}</small>
+                    <small>Customer: {customerName} · {customerPhone}</small>
+                    <small>Deliver to: {customerAddress}</small>
                   </div>
                   <div className="fuel-admin-dispatch-actions">
                     <SelectInput

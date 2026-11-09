@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { CheckCircle2, Fuel, Package, ShieldCheck, Truck } from "lucide-react-native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2, Fuel, MapPin, Package, PhoneCall, ShieldCheck, Truck } from "lucide-react-native";
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 
 import { domainQueries, useStationInventory } from "../api/domains";
@@ -217,6 +217,7 @@ export function FuelStationOperationsScreen() {
   const focusedMode = focusedOrder ? firstString(focusedOrder, ["container_mode"]) ?? "rental" : "rental";
   const focusedContainerTypeId = focusedOrder ? firstString(focusedOrder, ["container_type_id"]) ?? "" : "";
   const focusedStage = focusedOrder ? firstString(focusedOrder, ["stage_key"]) ?? "" : "";
+  const focusedCustomerContact = nestedRecord(focusedOrder, "customer_contact");
   const focusedSettlementExecutionId = firstString(focusedOrder, ["settlement_execution_id"]);
   const focusedSettlementStatementId = firstString(focusedOrder, ["settlement_statement_id"]);
   const focusedSettledAt = firstString(focusedOrder, ["settled_at"]);
@@ -987,12 +988,18 @@ export function FuelStationOperationsScreen() {
                   const orderId = firstString(order, ["order_id"]) ?? "";
                   const productKey = firstString(order, ["product_key"]) ?? "";
                   const stage = firstString(order, ["stage_key"]) ?? "unknown";
+                  const customerContact = nestedRecord(order, "customer_contact");
+                  const customerName = firstString(customerContact, ["name"]) ?? "Customer contact unavailable";
+                  const customerPhone = firstString(customerContact, ["phone"]);
+                  const customerAddress = firstString(customerContact, ["address", "label"]) ?? "Delivery address not recorded";
                   const selected = orderId === focusedOrderId;
                   return (
                     <Pressable key={orderId} onPress={() => { setFocusedOrderId(orderId); setSelectedDriverQualificationId(""); void reservations.refetch(); void allocations.refetch(); }} style={[styles.orderRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
                       <View style={styles.orderCopy}>
                         <Text style={[styles.orderTitle, { color: palette.ink }]}>{productNameForKey(productKey)} · {firstNumber(order, ["requested_litres"]) ?? 0} L</Text>
                         <Text style={[styles.muted, { color: palette.muted }]}>{orderId.slice(0, 8).toUpperCase()} · {firstNumber(order, ["container_count"]) ?? 0} container(s)</Text>
+                        <Text style={[styles.muted, { color: palette.ink }]}>{customerName} · {customerPhone ?? "Phone unavailable"}</Text>
+                        <Text style={[styles.muted, { color: palette.muted }]} numberOfLines={2}>{customerAddress}</Text>
                       </View>
                       <StatusPill label={humanize(stage)} tone={stageTone(stage)} />
                     </Pressable>
@@ -1012,6 +1019,26 @@ export function FuelStationOperationsScreen() {
                 </View>
                 <StatusPill label={humanize(focusedStage)} tone={stageTone(focusedStage)} />
                 <Text style={[styles.muted, { color: palette.muted }]}>{fulfillmentModeLabel(focusedFulfillmentMode)}</Text>
+              </View>
+
+              <View style={{ gap: spacing.xs, padding: spacing.md, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceSubtle }}>
+                <Text style={[styles.sectionLabel, { color: palette.ink }]}>CUSTOMER DELIVERY DETAILS</Text>
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.sm }}>
+                  <MapPin color={palette.brand} size={17} />
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={[styles.muted, { color: palette.ink }]}>{firstString(focusedCustomerContact, ["address", "label"]) ?? "Delivery address not recorded"}</Text>
+                    {firstString(focusedCustomerContact, ["landmark"]) ? <Text style={[styles.muted, { color: palette.muted }]}>Landmark: {firstString(focusedCustomerContact, ["landmark"])}</Text> : null}
+                    {firstString(focusedCustomerContact, ["instructions"]) ? <Text style={[styles.muted, { color: palette.muted }]}>Instructions: {firstString(focusedCustomerContact, ["instructions"])}</Text> : null}
+                  </View>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm }}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[styles.muted, { color: palette.muted }]}>CUSTOMER CONTACT</Text>
+                    <Text style={[styles.orderTitle, { color: palette.ink }]}>{firstString(focusedCustomerContact, ["name"]) ?? "Customer"}</Text>
+                    <Text style={[styles.muted, { color: palette.ink }]}>{firstString(focusedCustomerContact, ["phone"]) ?? "Phone number unavailable"}</Text>
+                  </View>
+                  {firstString(focusedCustomerContact, ["phone"]) ? <AppButton label="Call customer" size="sm" variant="secondary" onPress={() => void Linking.openURL("tel:" + firstString(focusedCustomerContact, ["phone"])).catch(() => undefined)} icon={<PhoneCall color={palette.brand} size={15} />} /> : null}
+                </View>
               </View>
 
               {focusedSettlementExecutionId ? (

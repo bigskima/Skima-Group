@@ -1,8 +1,8 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { router, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, Navigation, PackageCheck, ReceiptText, ScanLine, ShieldCheck, Store } from "lucide-react-native";
+import { CheckCircle2, Navigation, PackageCheck, PhoneCall, ReceiptText, ScanLine, ShieldCheck, Store } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, displayStatus, displayTitle, firstNumber, firstString, nestedRecord } from "../api/records";
@@ -331,6 +331,14 @@ export function InternalDriverJobDetailScreen() {
                 </Text>
               </View>
 
+              <View style={[styles.noticeCard, { backgroundColor: palette.surface, borderColor: palette.border, gap: 9 }]}>
+                <Text style={[styles.nextStepEyebrow, { color: palette.muted }]}>CUSTOMER CONTACT</Text>
+                <Text style={[styles.nextStepTitle, { color: palette.ink }]}>{firstString(delivery, ["contactName", "contact_name"]) ?? "Customer"}</Text>
+                <Text style={[styles.nextStepBody, { color: palette.muted }]}>{firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Delivery address not available"}</Text>
+                {firstString(delivery, ["landmark"]) ? <Text style={[styles.nextStepBody, { color: palette.muted }]}>Landmark: {firstString(delivery, ["landmark"])}</Text> : null}
+                {firstString(delivery, ["instructions", "deliveryInstructions", "delivery_instructions"]) ? <Text style={[styles.nextStepBody, { color: palette.muted }]}>Instructions: {firstString(delivery, ["instructions", "deliveryInstructions", "delivery_instructions"])}</Text> : null}
+                {firstString(delivery, ["contactPhone", "contact_phone"]) ? <AppButton label={"Call customer · " + firstString(delivery, ["contactPhone", "contact_phone"])} fullWidth icon={<PhoneCall color="#FFFFFF" size={17} />} onPress={() => void Linking.openURL("tel:" + firstString(delivery, ["contactPhone", "contact_phone"])).catch(() => Alert.alert("Unable to call", "Your device could not open the phone dialer."))} /> : <Text style={[styles.nextStepBody, { color: palette.muted }]}>No customer phone number is saved for this delivery. Contact dispatch before leaving.</Text>}
+              </View>
               <View style={[styles.nextStepCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
                 <Text style={[styles.nextStepEyebrow, { color: palette.muted }]}>YOUR NEXT STEP</Text>
                 <Text style={[styles.nextStepTitle, { color: palette.ink }]}>{friendlyStatus(status)}</Text>

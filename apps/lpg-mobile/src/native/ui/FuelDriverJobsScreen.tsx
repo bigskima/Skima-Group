@@ -1,10 +1,10 @@
 import { router } from "expo-router";
-import { CheckCircle2, Fuel, Package, RotateCcw, Truck } from "lucide-react-native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2, Fuel, MapPin, Package, PhoneCall, RotateCcw, Truck } from "lucide-react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
-import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString } from "../api/records";
+import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString, nestedRecord } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -67,6 +67,8 @@ export function FuelDriverJobsScreen() {
   const driverModeDescription = describeDriverMode(fulfillmentMode);
   const containerCount = firstNumber(selectedOrder, ["container_count"]) ?? 0;
   const withDriverCount = selectedAllocations.filter((row) => firstString(row, ["status"]) === "with_driver").length;
+  const customerContact = nestedRecord(selectedOrder, "customer_contact");
+  const customerPhone = firstString(customerContact, ["phone"]);
 
   const refresh = async () => {
     await Promise.allSettled([orders.refetch(), allocations.refetch()]);
@@ -189,6 +191,17 @@ export function FuelDriverJobsScreen() {
 
           {selectedOrder ? (
             <Card title={productName + " delivery"} description={stageDescription(currentStage, isRental)}>
+              <View style={[styles.returnCard, { backgroundColor: palette.surfaceSubtle, alignItems: "flex-start" }]}>
+                <MapPin color={palette.brand} size={20} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={[styles.jobTitle, { color: palette.ink }]}>Customer delivery address</Text>
+                  <Text style={[styles.muted, { color: palette.ink }]}>{firstString(customerContact, ["address", "label"]) ?? "Saved address not available"}</Text>
+                  {firstString(customerContact, ["landmark"]) ? <Text style={[styles.muted, { color: palette.ink }]}>Landmark: {firstString(customerContact, ["landmark"])}</Text> : null}
+                  {firstString(customerContact, ["instructions"]) ? <Text style={[styles.muted, { color: palette.ink }]}>Instructions: {firstString(customerContact, ["instructions"])}</Text> : null}
+                  <Text style={[styles.muted, { color: palette.ink }]}>Contact: {firstString(customerContact, ["name"]) ?? "Customer"} · {customerPhone ?? "Phone unavailable"}</Text>
+                  {customerPhone ? <AppButton label={"Call customer · " + customerPhone} fullWidth variant="secondary" icon={<PhoneCall color={palette.brand} size={17} />} onPress={() => void Linking.openURL("tel:" + customerPhone).catch(() => Alert.alert("Unable to call", "Your device could not open the phone dialer."))} /> : null}
+                </View>
+              </View>
               <View style={[styles.returnCard, { backgroundColor: palette.surfaceSubtle }]}>
                 <Truck color={palette.brand} size={20} />
                 <View style={{ flex: 1, gap: 4 }}>

@@ -8,11 +8,12 @@ import {
   MapPin,
   Navigation,
   PackageCheck,
+  PhoneCall,
   ScanLine,
   ShieldCheck,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -576,10 +577,11 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
             {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
             {(workspace === "station" || workspace === "station_driver") && stationManagedVehicle ? <><Divider /><SummaryField label="Station vehicle" value={[firstString(stationManagedVehicle, ["registrationNumber", "registration_number"]), firstString(stationManagedVehicle, ["typeName", "type_name"])].filter(Boolean).join(" · ") || "Assigned station vehicle"} /></> : null}
-            {driverWorkspace && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
-            {driverWorkspace && firstString(contactLocation, ["contactName", "contact_name"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery contact" : "Pickup contact"} value={firstString(contactLocation, ["contactName", "contact_name"]) ?? "Customer"} /></> : null}
-            {driverWorkspace && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
-            {driverWorkspace && (firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"])) ? <><Divider /><SummaryField label="Contact email" value={firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"]) ?? "Not available"} /></> : null}
+            {(driverWorkspace || workspace === "station") && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
+            {(driverWorkspace || workspace === "station") && firstString(contactLocation, ["contactName", "contact_name"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery contact" : "Pickup contact"} value={firstString(contactLocation, ["contactName", "contact_name"]) ?? "Customer"} /></> : null}
+            {(driverWorkspace || workspace === "station") && firstString(contactLocation, ["formattedAddress", "formatted_address"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery address" : "Pickup address"} value={firstString(contactLocation, ["formattedAddress", "formatted_address"]) ?? "Not available"} /></> : null}
+            {(driverWorkspace || workspace === "station") && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /><AppButton label={"Call customer · " + firstString(contactLocation, ["contactPhone", "contact_phone"])} fullWidth variant="secondary" icon={<PhoneCall color={palette.brand} size={17} />} onPress={() => void Linking.openURL("tel:" + firstString(contactLocation, ["contactPhone", "contact_phone"])).catch(() => Alert.alert("Unable to call", "Your device could not open the phone dialer."))} /></> : null}
+            {(driverWorkspace || workspace === "station") && (firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"])) ? <><Divider /><SummaryField label="Contact email" value={firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"]) ?? "Not available"} /></> : null}
           </View>
           ) : null}
 

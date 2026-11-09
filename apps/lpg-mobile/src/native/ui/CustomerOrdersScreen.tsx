@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { ChevronRight, ClipboardList, Fuel, MapPin, PackageCheck, QrCode, ReceiptText, ShieldCheck, ShoppingBag, Truck } from "lucide-react-native";
+import { ChevronRight, ClipboardList, Fuel, MapPin, PackageCheck, PhoneCall, QrCode, ReceiptText, ShieldCheck, ShoppingBag, Truck } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { isSkimaInternalFulfillmentChannel } from "../api/lpgFulfillment";
 import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
@@ -320,6 +320,10 @@ export function CustomerOrderDetailScreen() {
   const savedOrder = (orders.data ?? []).find((item) => recordId(item) === id) ?? null;
   const order = jobOrder ?? savedOrder;
   const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
+  const customer = nestedRecord(root, "customer") ?? nestedRecord(order, "customer");
+  const assignedDriver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver");
+  const stationManagedDriver = nestedRecord(root, "stationManagedDriver") ?? nestedRecord(order, "stationManagedDriver");
+  const visibleDriver = assignedDriver ?? stationManagedDriver;
   const cylinderId = firstString(cylinder, ["id", "cylinderId", "cylinder_id"])
     ?? firstString(order, ["cylinderId", "cylinder_id"]);
   const customerCylinder = (cylinders.data ?? []).find((item) => recordId(item) === cylinderId) ?? null;
@@ -330,6 +334,11 @@ export function CustomerOrderDetailScreen() {
   const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
   const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
   const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
+  const customerPhone = firstString(delivery, ["contactPhone", "contact_phone"])
+    ?? firstString(pickup, ["contactPhone", "contact_phone"])
+    ?? firstString(customer, ["phone"]);
+  const driverPhone = firstString(visibleDriver, ["phone"]);
+  const driverName = firstString(visibleDriver, ["displayName", "display_name"]) ?? "Assigned driver";
   const status = order ? (displayStatus(order) ?? "created") : "";
   const normalized = normalizeStatus(status);
   const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
@@ -426,6 +435,21 @@ export function CustomerOrderDetailScreen() {
               <InfoField label="Pickup" value={pickupAddress} />
               <InfoField label="Return" value={returnAddress} />
             </View>
+          </Card>
+
+          <Card padding="lg">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <MapPin color={palette.brand} size={20} />
+              <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Contact and delivery details</Text>
+            </View>
+            <InfoField label="Delivery address" value={firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? returnAddress} />
+            {firstString(delivery, ["landmark"]) ? <InfoField label="Landmark" value={firstString(delivery, ["landmark"]) ?? ""} /> : null}
+            {firstString(delivery, ["instructions", "deliveryInstructions", "delivery_instructions"]) ? <InfoField label="Delivery instructions" value={firstString(delivery, ["instructions", "deliveryInstructions", "delivery_instructions"]) ?? ""} /> : null}
+            {customerPhone ? <InfoField label="Your contact phone" value={customerPhone} /> : <Text style={[styles.label, { color: palette.muted }]}>No phone number is saved for this delivery location. Update your contact details before the driver sets out.</Text>}
+            <View style={{ height: 1, backgroundColor: palette.border, marginVertical: spacing.xs }} />
+            <InfoField label="Assigned driver" value={driverName} />
+            {driverPhone ? <InfoField label="Driver phone" value={driverPhone} /> : <Text style={[styles.label, { color: palette.muted }]}>The assigned driver's phone number is not available yet.</Text>}
+            {driverPhone ? <AppButton label={"Call assigned driver · " + driverPhone} fullWidth icon={<PhoneCall color="#FFFFFF" size={17} />} onPress={() => void Linking.openURL("tel:" + driverPhone).catch(() => undefined)} /> : null}
           </Card>
 
           <Card padding="lg">

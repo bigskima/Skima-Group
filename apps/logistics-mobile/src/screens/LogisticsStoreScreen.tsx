@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store, X } from "lucide-react-native";
-import { Alert, ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Alert, ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { z } from "zod";
 import { useLogisticsQuery, asString, asNumber } from "../api/logistics";
 import { useLogisticsStorefrontData } from "../api/store";
@@ -13,6 +13,7 @@ import { radii, typography } from "../theme/tokens";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
+import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontDetailSheet, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
 
 type CartLine = { itemId: string; variantId: string | null; name: string; variantName: string | null; quantity: number; unitAmount: number; currencyCode: string };
 type ProductMedia = { assetId: string; mediaType: "image" | "video"; displayOrder: number };
@@ -222,14 +223,7 @@ export function LogisticsStoreScreen() {
         <StatePanel title="Store is not available" description="Store isn’t available right now. Please try again later." icon={<Store color={palette.brand} size={23}/>}/>
       ) : (
         <>
-          <View style={[styles.hero,{backgroundColor:palette.surface,borderColor:palette.border}]}>
-        <View style={styles.heroCopy}>
-          <Text style={[styles.heroEyebrow,{color:palette.brand}]}>SKIMA STORE</Text>
-          <Text style={[styles.heroTitle,{color:palette.ink}]}>Shop essentials.</Text>
-          <Text style={[styles.heroBody,{color:palette.muted}]}>Cylinders and more, all in one store.</Text>
-        </View>
-        <View style={[styles.heroIcon,{backgroundColor:palette.brandSoft}]}><ShoppingBag color={palette.brand} size={29}/></View>
-      </View>
+          <StorefrontHero palette={palette} walletValue={walletId ? money(walletBalance, currency) : "Wallet unavailable"} basketCount={cart.reduce((sum,line)=>sum+line.quantity,0)} basketSubtotal={money(cartTotal,cartCurrency)} />
       <View style={[styles.toolbar,{borderColor:palette.border,backgroundColor:palette.surface}]}>
             <View style={styles.search}><Search color={palette.muted} size={16}/><TextInput value={search} onChangeText={setSearch} placeholder="Search products" placeholderTextColor={palette.muted} style={[styles.searchInput,{color:palette.ink}]}/>{search?<Pressable onPress={()=>setSearch("")}><X color={palette.muted} size={16}/></Pressable>:null}</View>
             <View style={styles.walletPill}><ShoppingBag color={palette.brand} size={14}/><Text style={{color:palette.ink,fontSize:10,fontWeight:"800"}}>{walletId?money(walletBalance,currency):"Wallet unavailable"}</Text></View>
@@ -238,8 +232,8 @@ export function LogisticsStoreScreen() {
             <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>Shop by category</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>Browse active Store sections</Text></View>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-            <Filter label="All products" active={category==="all"} onPress={()=>setCategory("all")}/>
-            {activeCategories.map((item)=>{const id=asString(item,"id")??asString(item,"key")??"";return <Filter key={id} label={asString(item,"display_name","name")??"Category"} active={category===id} onPress={()=>setCategory(id)}/>;})}
+            <StorefrontCategoryChip palette={palette} label="All products" active={category==="all"} onPress={()=>setCategory("all")}/>
+            {activeCategories.map((item)=>{const id=asString(item,"id")??asString(item,"key")??"";return <StorefrontCategoryChip key={id} palette={palette} label={asString(item,"display_name","name")??"Category"} active={category===id} onPress={()=>setCategory(id)}/>;})}
           </ScrollView>
           {store.items.isPending||store.prices.isPending||store.availability.isPending? <ScreenSkeleton cards={3}/> :
            store.items.error||store.prices.error||store.availability.error? <StatePanel title="Products could not load" description="Refresh products and try again." retry={()=>void Promise.all([store.items.refetch(),store.prices.refetch(),store.availability.refetch()])}/> :
@@ -265,56 +259,20 @@ export function LogisticsStoreScreen() {
                       ? Math.round((product.compareAtAmount - product.amount) / product.compareAtAmount * 100)
                       : 0;
                   return (
-                    <View
+                    <StorefrontProductCard
                       key={`${product.id}:${product.variantId ?? "base"}`}
-                      style={[
-                        styles.product,
-                        {
-                          width: width >= 1100 ? "23.5%" : width >= 700 ? "31.5%" : "48.5%",
-                          backgroundColor: palette.surface,
-                          borderColor: palette.border,
-                        },
-                      ]}
-                    >
-                      <View style={styles.productMedia}>
-                        <ProductImage assetId={product.imageAssetId} label={product.name} />
-                        {discountPercent > 0 ? (
-                          <View style={[styles.discountBadge, { backgroundColor: palette.brand }]}>
-                            <Text style={styles.discountText}>{discountPercent}% OFF</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <Text style={[styles.productCategory, { color: palette.muted }]} numberOfLines={1}>
-                        {categoryLabel}
-                      </Text>
-                      <Pressable
-                        onPress={() => router.push({
-                          pathname: "/(customer)/store",
-                          params: { itemId: product.id },
-                        } as never)}
-                      >
-                        <Text style={[styles.productName, { color: palette.ink }]} numberOfLines={2}>
-                          {product.name}
-                        </Text>
-                      </Pressable>
-                      {product.variantName ? (
-                        <Text style={[styles.productDescription, { color: palette.muted }]} numberOfLines={1}>
-                          {product.variantName}
-                        </Text>
-                      ) : null}
-                      <View style={styles.priceRow}>
-                        <Text style={[styles.price, { color: palette.ink }]}>{money(product.amount, product.currency)}</Text>
-                        {product.compareAtAmount !== null && product.compareAtAmount > product.amount ? (
-                          <Text style={[styles.comparePrice, { color: palette.muted }]}>
-                            {money(product.compareAtAmount, product.currency)}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <Pressable onPress={() => add(product)} style={[styles.add, { backgroundColor: palette.brand }]}>
-                        <Plus color="#fff" size={15} />
-                        <Text style={styles.addText}>Add to basket</Text>
-                      </Pressable>
-                    </View>
+                      palette={palette}
+                      width={width >= 1100 ? "23.5%" : width >= 700 ? "31.5%" : "48.5%"}
+                      media={<ProductImage assetId={product.imageAssetId} label={product.name} />}
+                      categoryLabel={categoryLabel}
+                      name={product.name}
+                      variantName={product.variantName}
+                      priceLabel={money(product.amount, product.currency)}
+                      compareAtLabel={product.compareAtAmount !== null && product.compareAtAmount > product.amount ? money(product.compareAtAmount, product.currency) : null}
+                      stockLabel={product.stock === null ? "Available" : product.stock + " in stock"}
+                      onDetails={() => setSelectedProduct(product)}
+                      onAdd={() => add(product)}
+                    />
                   );
                 })}
               </View>
@@ -327,7 +285,7 @@ export function LogisticsStoreScreen() {
            </>}
           {cart.length? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
             <View style={styles.cartHead}><View style={styles.cartTitleRow}><ShoppingCart color={palette.brand} size={18}/><Text style={[styles.cartTitle,{color:palette.ink}]}>Basket ({cart.reduce((sum,line)=>sum+line.quantity,0)})</Text></View><Text style={[styles.cartTotal,{color:palette.ink}]}>{money(cartTotal,cartCurrency)}</Text></View>
-            {cart.map(line=><View key={`${line.itemId}:${line.variantId??"base"}`} style={styles.cartLine}><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.cartName,{color:palette.ink}]}>{line.name}</Text>{line.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{line.variantName}</Text>:null}</View><View style={styles.quantity}><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,-1)}><Minus color={palette.muted} size={15}/></Pressable><Text style={{color:palette.ink,fontWeight:"800"}}>{line.quantity}</Text><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,1)}><Plus color={palette.brand} size={15}/></Pressable></View><Text style={[styles.cartAmount,{color:palette.ink}]}>{money(line.unitAmount*line.quantity,line.currencyCode)}</Text></View>)}
+            {cart.map(line=><StorefrontBasketLine key={`${line.itemId}:${line.variantId??"base"}`} palette={palette} name={line.name} variantName={line.variantName} quantity={line.quantity} amountLabel={money(line.unitAmount*line.quantity,line.currencyCode)} onDecrease={()=>changeQuantity(line.itemId,line.variantId,-1)} onIncrease={()=>changeQuantity(line.itemId,line.variantId,1)}/>)}
             {cart.length?<>
               <View style={styles.options}>{allowedMethods.includes("delivery")?<Filter label="Delivery" active={fulfillment==="delivery"} onPress={()=>setFulfillment("delivery")}/>:null}{allowedMethods.includes("pickup")?<Filter label="Pickup" active={fulfillment==="pickup"} onPress={()=>setFulfillment("pickup")}/>:null}</View>
               {fulfillment==="delivery"?<View style={styles.locationChoices}><Text style={[styles.formLabel,{color:palette.ink}]}>Delivery address</Text>{availableLocations.length?availableLocations.slice(0,6).map(location=>{const id=asString(location,"id")??"";return <Pressable key={id} onPress={()=>setLocationId(id)} style={[styles.location,{borderColor:locationId===id?palette.brand:palette.border,backgroundColor:locationId===id?palette.brandSoft:palette.surface}]}><Text style={[styles.locationText,{color:palette.ink}]} numberOfLines={2}>{asString(location,"formatted_address","display_name","address")??"Saved address"}</Text></Pressable>;}) : <Text style={[styles.productDescription,{color:palette.muted}]}>Add a saved address or choose pickup.</Text>}</View>:null}
@@ -373,30 +331,19 @@ export function LogisticsStoreScreen() {
           {confirmReceipt.error ? <Text style={[styles.error,{color:palette.danger}]}>{confirmReceipt.error.message}</Text> : null}
         </>
       )}
-      <Modal transparent animationType="slide" visible={Boolean(selectedProduct)} onRequestClose={closeSelectedProduct}>
-        <View style={styles.detailBackdrop}>
-          <View style={[styles.detailPanel,{backgroundColor:palette.surface}]}>
-            <View style={styles.detailHandle}/>
-            <View style={styles.detailHeader}>
-              <View style={{flex:1,minWidth:0}}>
-                <Text style={[styles.detailTitle,{color:palette.ink}]}>{selectedProduct?.name??"Product details"}</Text>
-                {selectedProduct?.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{selectedProduct.variantName}</Text>:null}
-              </View>
-              <Pressable onPress={closeSelectedProduct} style={[styles.detailClose,{backgroundColor:palette.brandSoft}]}><X color={palette.ink} size={19}/></Pressable>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{gap:12,paddingBottom:12}}>
-              {selectedProduct?.media.length?(
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:9}}>
-                  {selectedProduct.media.map(media=><StoreProductMedia key={media.assetId} assetId={media.assetId} label={selectedProduct.name} isVideo={media.mediaType==="video"}/>)}
-                </ScrollView>
-              ):selectedProduct?<ProductImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/>:null}
-              {selectedProduct?.description?<Text style={[styles.detailDescription,{color:palette.muted}]}>{selectedProduct.description}</Text>:null}
-              {selectedProduct?<View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(selectedProduct.amount,selectedProduct.currency)}</Text>{selectedProduct.compareAtAmount!==null&&selectedProduct.compareAtAmount>selectedProduct.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(selectedProduct.compareAtAmount,selectedProduct.currency)}</Text>:null}</View>:null}
-              {selectedProduct?<Pressable onPress={()=>{add(selectedProduct);closeSelectedProduct();}} style={[styles.add,{backgroundColor:palette.brand,height:44}]}><Plus color="#fff" size={16}/><Text style={styles.addText}>Add to basket</Text></Pressable>:null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <StorefrontDetailSheet
+        visible={Boolean(selectedProduct)}
+        onClose={closeSelectedProduct}
+        palette={palette}
+        title={selectedProduct?.name??"Product details"}
+        categoryLabel={selectedProduct?asString(selectedProduct.item,"category_name","category")??"SKIMA Store":undefined}
+        description={selectedProduct?.description}
+        media={selectedProduct?<View style={{height:160}}>{selectedProduct.media.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:9}}>{selectedProduct.media.map(media=><StoreProductMedia key={media.assetId} assetId={media.assetId} label={selectedProduct.name} isVideo={media.mediaType==="video"}/>)}</ScrollView>:<ProductImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/>}</View>:null}
+        priceLabel={selectedProduct?money(selectedProduct.amount,selectedProduct.currency):null}
+        compareAtLabel={selectedProduct&&selectedProduct.compareAtAmount!==null&&selectedProduct.compareAtAmount>selectedProduct.amount?money(selectedProduct.compareAtAmount,selectedProduct.currency):null}
+        stockLabel={selectedProduct?(selectedProduct.stock===null?"Available":selectedProduct.stock+" in stock"):null}
+        footer={selectedProduct?<Pressable onPress={()=>{add(selectedProduct);closeSelectedProduct();}} style={[styles.add,{backgroundColor:palette.brand,height:44}]}><Plus color="#fff" size={16}/><Text style={styles.addText}>Add to basket</Text></Pressable>:null}
+      />
     </Screen>
   );
 }
