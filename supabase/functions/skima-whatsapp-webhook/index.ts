@@ -2,15 +2,15 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.1
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const MENU = [
-  "Welcome to SKIMA LPG 👋",
+  "Welcome to SKIMA 👋",
   "",
   "Reply with a number:",
   "1 — Order an LPG refill",
   "2 — Fund my SKIMA wallet",
   "3 — Pay / retry a pending order",
   "4 — Check and track my orders",
-  "5 — Get help",
-  "6 — Enable order status notifications",
+  "5 — Help & customer support",
+  "6 — Enable LPG order updates",
 ].join("\n");
 
 type InboundMessage = {
@@ -33,7 +33,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method === "GET") return verifyWebhook(request);
   if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
   if (new URL(request.url).searchParams.get("mode") === "dispatch") {
-    return await dispatchOrderStatusNotifications(request);
+    return await dispatchWhatsAppOutboxes(request);
   }
 
   const appSecret = Deno.env.get("SKIMA_WHATSAPP_APP_SECRET");
@@ -89,6 +89,20 @@ Deno.serve(async (request: Request): Promise<Response> => {
       return json({ ok: false, error: "delivery_status_persistence_failed" }, 500);
     }
     if (statusResult.data) statusesRecorded += 1;
+    const supportStatusResult = await db.from("skima_whatsapp_support_outbox")
+      .update({
+        provider_delivery_status: status.status,
+        provider_status_at: providerTime,
+        provider_error_code: status.errorCode ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("provider_message_id", status.id)
+      .select("id")
+      .maybeSingle();
+    if (supportStatusResult.error) {
+      return json({ ok: false, error: "support_delivery_status_persistence_failed" }, 500);
+    }
+    if (supportStatusResult.data) statusesRecorded += 1;
   }
   if (messages.length === 0) return json({ ok: true, accepted: 0, statusesRecorded });
   let accepted = 0;
@@ -300,6 +314,158 @@ async function handleLinkedMessage(
   if (["cancel", "restart"].includes(normalized)) {
     return plan("Cancelled the current step. No new order was created by that command.\n\n" + MENU, "menu");
   }
+  const agentHelp = ["agent help", "support agent help", "support commands"].includes(normalized);
+  if (agentHelp) {
+    return plan([
+      "SKIMA Support Agent commands:",
+      "",
+      "CLAIM SK-XXXXXXXX — claim an unassigned case",
+      "REPLY SK-XXXXXXXX your message — send a customer-visible reply",
+      "NOTE SK-XXXXXXXX your note — add a private internal note",
+      "",
+      "You must link this WhatsApp number to your SKIMA staff account and have support-manage permission for that app. Replies are saved in the shared Admin/app support conversation.",
+    ].join("\n"), "menu");
+  }
+
+  const agentCommand = /^(REPLY|NOTE|CLAIM)\\s+(SK-[A-F0-9]{8})(?:\\s+([\\s\\S]+))?$/i.exec(input);
+  if (agentCommand) {
+    const command = agentCommand[1].toUpperCase();
+    const reference = agentCommand[2].toUpperCase();
+    const body = (agentCommand[3] ?? "").trim();
+    if (command === "CLAIM") {
+      const claimed = await db.rpc("skima_whatsapp_claim_support_thread", {
+        target_agent_whatsapp_wa_id: whatsappWaId,
+        target_support_reference: reference,
+      });
+      if (claimed.error) {
+        return plan("I could not claim that case. Confirm that this WhatsApp number is linked to your SKIMA staff account, that you have permission for the app's support queue, and that the case is not assigned to another agent. Reply HELP for commands.", "menu");
+      }
+      return plan(`You have claimed support case ${reference}. You can now reply with: REPLY ${reference} your message`, "menu");
+    }
+    if (!body) return plan(`Add the message after the reference. Example: ${command} ${reference} I am checking this for you.`, "menu");
+    const response = await db.rpc("skima_whatsapp_agent_reply_support_thread", {
+      target_agent_whatsapp_wa_id: whatsappWaId,
+      target_support_reference: reference,
+      target_body: body,
+      target_is_internal: command === "NOTE",
+      target_provider_message_id: item.id,
+    });
+    if (response.error) {
+      return plan("I could not send that response. Confirm that this WhatsApp number is linked to your SKIMA staff account, you have manage permission for this app, and the case is assigned to you. Reply HELP for commands.", "menu");
+    }
+    return plan(
+      command === "NOTE"
+        ? `Your private internal note has been recorded on ${reference}. It was not sent to the customer.`
+        : `Your reply has been added to ${reference}. The customer's WhatsApp message will be sent when their service conversation is open.`,
+      "menu",
+    );
+  }
+
+  if (stage === "menu" && ["5", "support", "help", "customer support", "help & support"].includes(normalized)) {
+    return plan([
+      "Which SKIMA app do you need help with?",
+      "",
+      "1 — Refill (LPG and Fuel)",
+      "2 — Store",
+      "3 — Logistics",
+      "4 — Bills",
+      "",
+      "Reply with the number.",
+    ].join("\n"), "support.app");
+  }
+
+  if (stage === "support.app") {
+    const apps = [
+      { value: "refill", label: "Refill" },
+      { value: "store", label: "Store" },
+      { value: "logistics", label: "Logistics" },
+      { value: "bills", label: "Bills" },
+    ];
+    const selected = selectNumber(input, apps as unknown as Record<string, unknown>[]);
+    if (!selected) return plan("Reply 1 for Refill, 2 for Store, 3 for Logistics or 4 for Bills. You can reply MENU to cancel.", stage);
+    const appKey = asText(selected.value, "refill");
+    const appLabel = apps.find((entry) => entry.value === appKey)?.label ?? "SKIMA";
+    return plan([
+      `What is your ${appLabel} issue about?`,
+      "",
+      "1 — Payment or wallet",
+      "2 — Order or service",
+      "3 — Delivery or fulfilment",
+      "4 — Account or sign-in",
+      "5 — App issue",
+      "6 — Safety concern",
+      "7 — Other",
+    ].join("\n"), "support.category", { supportAppKey: appKey, supportAppLabel: appLabel });
+  }
+
+  if (stage === "support.category") {
+    const categories = [
+      { key: "payment", label: "Payment or wallet" },
+      { key: "order", label: "Order or service" },
+      { key: "delivery", label: "Delivery or fulfilment" },
+      { key: "account", label: "Account or sign-in" },
+      { key: "technical", label: "App issue" },
+      { key: "safety", label: "Safety concern" },
+      { key: "other", label: "Other" },
+    ];
+    const selected = selectNumber(input, categories as unknown as Record<string, unknown>[]);
+    if (!selected) return plan("Choose a category from 1 to 7, or reply MENU to cancel.", stage, state);
+    const categoryKey = asText(selected.key, "other");
+    const categoryLabel = categories.find((entry) => entry.key === categoryKey)?.label ?? "Other";
+    return plan(
+      `Please describe the ${categoryLabel.toLowerCase()} issue in one message. Include an order or transaction reference where available. Do not include your password, wallet PIN, OTP or card details.`,
+      "support.message",
+      { ...state, supportCategory: categoryKey, supportCategoryLabel: categoryLabel },
+    );
+  }
+
+  if (stage === "support.message") {
+    if (input.length > 4000) return plan("Please keep the support message under 4,000 characters.", stage, state);
+    const firstLine = input.split(/\\r?\\n/)[0]?.trim() ?? "";
+    const subject = firstLine.length >= 3 ? firstLine.slice(0, 160) : "Customer support request";
+    const created = await db.rpc("skima_whatsapp_create_support_thread", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_app_key: asText(state.supportAppKey, "refill"),
+      target_category: asText(state.supportCategory, "other"),
+      target_subject: subject,
+      target_body: input,
+      target_provider_message_id: item.id,
+    });
+    if (created.error) {
+      return plan("I could not open your support request right now. Please try again, or use Help & Support inside the SKIMA app.", "menu");
+    }
+    const record = asRecord(created.data);
+    const reference = asText(record.reference, "");
+    const appLabel = asText(state.supportAppLabel, "SKIMA");
+    if (!reference) return plan("Your support request was received, but I could not retrieve its reference. Please contact SKIMA Support in the app.", "menu");
+    return plan([
+      `Your ${appLabel} support request has been sent.`,
+      `Reference: ${reference}`,
+      "",
+      "A support agent can now take over this conversation. You can keep sending details here and they will be added to the same case.",
+      "",
+      "Reply MENU to return to SKIMA services.",
+    ].join("\n"), "support.active", {
+      supportAppKey: asText(state.supportAppKey, "refill"),
+      supportAppLabel: appLabel,
+      supportReference: reference,
+    });
+  }
+
+  if (stage === "support.active") {
+    const reference = asText(state.supportReference, "");
+    if (!reference) return plan("Your support reference is no longer available. Reply 5 from the main menu to open a new support request.", "menu");
+    if (input.length > 4000) return plan("Please keep your support reply under 4,000 characters.", stage, state);
+    const saved = await db.rpc("skima_whatsapp_reply_support_thread", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_support_reference: reference,
+      target_body: input,
+      target_provider_message_id: item.id,
+    });
+    if (saved.error) return plan("I could not add that message to your support case. Reply MENU and choose Help & Support to start again, or use the support conversation in the SKIMA app.", "menu");
+    return plan(`Your message has been added to support case ${reference}. A support agent can see the updated conversation.`, "support.active", state);
+  }
+
   if (
     (stage === "menu" && normalized === "6") ||
     ["notifications", "order notifications", "enable notifications", "enable order updates"].includes(normalized)
@@ -840,6 +1006,161 @@ async function sendWhatsAppText(args: {
   if (response.ok) return { ok: true, error: "" };
   const body = (await response.text()).slice(0, 500);
   return { ok: false, error: `Meta Graph API returned ${response.status}: ${body}` };
+}
+
+async function dispatchWhatsAppOutboxes(request: Request): Promise<Response> {
+  const [ordersResponse, supportResponse] = await Promise.all([
+    dispatchOrderStatusNotifications(request),
+    dispatchSupportOutbox(request),
+  ]);
+  const [orders, support] = await Promise.all([
+    ordersResponse.json().catch(() => ({ ok: false, error: "order_dispatch_response_invalid" })),
+    supportResponse.json().catch(() => ({ ok: false, error: "support_dispatch_response_invalid" })),
+  ]);
+  const ok = ordersResponse.ok && supportResponse.ok;
+  const status = !ordersResponse.ok ? ordersResponse.status : !supportResponse.ok ? supportResponse.status : 200;
+  return json({ ok, orders, support }, status);
+}
+
+async function dispatchSupportOutbox(request: Request): Promise<Response> {
+  const expectedSecret = Deno.env.get("SKIMA_WHATSAPP_DISPATCH_SECRET") ?? "";
+  const suppliedSecret = /^Bearer\\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? "";
+  if (!expectedSecret || !timingSafeEqual(expectedSecret, suppliedSecret)) {
+    return json({ ok: false, error: "unauthorized" }, 401);
+  }
+
+  const accessToken = Deno.env.get("SKIMA_WHATSAPP_ACCESS_TOKEN");
+  const phoneNumberId = Deno.env.get("SKIMA_WHATSAPP_PHONE_NUMBER_ID");
+  const graphVersion = Deno.env.get("SKIMA_WHATSAPP_GRAPH_API_VERSION");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!accessToken || !phoneNumberId || !graphVersion || !supabaseUrl || !serviceRoleKey) {
+    return json({ ok: false, error: "whatsapp_provider_not_configured" }, 503);
+  }
+  if (!/^v\\d+\\.\\d+$/.test(graphVersion)) {
+    return json({ ok: false, error: "invalid_graph_api_version_configuration" }, 500);
+  }
+
+  const db = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+  });
+  const claimedResult = await db.rpc("claim_skima_whatsapp_support_outbox", { target_limit: 25 });
+  if (claimedResult.error) {
+    console.error(JSON.stringify({ event: "whatsapp_support_outbox_claim_failed", code: "claim_failed" }));
+    return json({ ok: false, error: "support_notification_queue_unavailable" }, 500);
+  }
+
+  const claimed = arrayOfRecords(claimedResult.data);
+  let sent = 0;
+  let queuedForRetry = 0;
+  let deadLettered = 0;
+  for (const item of claimed) {
+    const notificationId = asText(item.notification_id, "");
+    const recipient = asText(item.whatsapp_wa_id, "");
+    const attempt = numberValue(item.attempt_count) ?? 1;
+    const body = asText(item.body, "");
+    if (!notificationId || !/^[0-9]{6,20}$/.test(recipient) || !body) {
+      if (notificationId) {
+        await db.from("skima_whatsapp_support_outbox")
+          .update({
+            status: "failed",
+            locked_at: null,
+            last_error_code: "invalid_support_notification",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", notificationId)
+          .eq("status", "processing");
+      }
+      deadLettered += 1;
+      continue;
+    }
+
+    const result = await sendWhatsAppTextWithReceipt({
+      accessToken, graphVersion, phoneNumberId, recipient, text: body,
+    });
+    if (result.ok) {
+      const saved = await db.from("skima_whatsapp_support_outbox")
+        .update({
+          status: "sent",
+          provider_message_id: result.providerMessageId,
+          provider_delivery_status: result.providerMessageId ? "sent" : null,
+          provider_status_at: result.providerMessageId ? new Date().toISOString() : null,
+          sent_at: new Date().toISOString(),
+          locked_at: null,
+          last_error_code: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", notificationId)
+        .eq("status", "processing");
+      if (saved.error) {
+        console.error(JSON.stringify({ event: "whatsapp_support_sent_but_not_recorded", notificationId }));
+      } else {
+        sent += 1;
+      }
+      continue;
+    }
+
+    const retry = result.retryable && attempt < 8;
+    const delayMinutes = Math.min(360, Math.max(1, 2 ** Math.min(attempt, 8)));
+    const saved = await db.from("skima_whatsapp_support_outbox")
+      .update({
+        status: retry ? "queued" : "failed",
+        next_attempt_at: new Date(Date.now() + delayMinutes * 60_000).toISOString(),
+        locked_at: null,
+        last_error_code: result.errorCode,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", notificationId)
+      .eq("status", "processing");
+    if (saved.error) {
+      console.error(JSON.stringify({ event: "whatsapp_support_failure_not_recorded", notificationId }));
+    }
+    if (retry) queuedForRetry += 1;
+    else deadLettered += 1;
+  }
+  return json({ ok: true, claimed: claimed.length, sent, queuedForRetry, deadLettered });
+}
+
+async function sendWhatsAppTextWithReceipt(args: {
+  accessToken: string; graphVersion: string; phoneNumberId: string; recipient: string; text: string;
+}): Promise<
+  | { ok: true; providerMessageId: string | null }
+  | { ok: false; errorCode: string; retryable: boolean }
+> {
+  const response = await fetch(
+    `https://graph.facebook.com/${args.graphVersion}/${args.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${args.accessToken}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: args.recipient,
+        type: "text",
+        text: { preview_url: false, body: args.text },
+      }),
+    },
+  ).catch(() => null);
+  if (!response) return { ok: false, errorCode: "meta_network_error", retryable: true };
+  let body: unknown = null;
+  try { body = await response.json(); } catch { body = null; }
+  if (!response.ok) {
+    const errorObject = isRecord(body) && isRecord(body.error) ? body.error : {};
+    const code = typeof errorObject.code === "string" || typeof errorObject.code === "number"
+      ? String(errorObject.code)
+      : `http_${response.status}`;
+    return {
+      ok: false,
+      errorCode: `meta_${code}`.slice(0,180),
+      retryable: response.status === 429 || response.status >= 500,
+    };
+  }
+  const messages = isRecord(body) && Array.isArray(body.messages) ? body.messages : [];
+  const firstMessage = isRecord(messages[0]) ? messages[0] : null;
+  return {
+    ok: true,
+    providerMessageId: firstMessage && typeof firstMessage.id === "string" ? firstMessage.id : null,
+  };
 }
 
 async function dispatchOrderStatusNotifications(request: Request): Promise<Response> {
