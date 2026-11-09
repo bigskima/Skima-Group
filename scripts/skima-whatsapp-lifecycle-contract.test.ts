@@ -25,6 +25,41 @@ Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () =
   assertIncludes(webhook, 'db.rpc("set_skima_whatsapp_order_notifications"');
   assertIncludes(webhook, 'stage === "menu" && normalized === "6"');
   assertIncludes(webhook, 'eq("order_status_notifications_opt_in", true)');
+  assertIncludes(webhook, 'stage === "menu" && normalized === "6"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_create_support_thread"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_reply_support_thread"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_agent_reply_support_thread"');
+  assertIncludes(webhook, 'db.rpc("skima_whatsapp_claim_support_thread"');
+  assertIncludes(webhook, 'db.rpc("claim_skima_whatsapp_support_outbox"');
+  assertIncludes(webhook, 'dispatchWhatsAppOutboxes(request)');
+  assertIncludes(webhook, 'supportStatusResult');
+  assertIncludes(webhook, 'target_is_internal: command === "NOTE"');
+  assertIncludes(webhook, 'SKIMA Bills');
+  assertIncludes(webhook, 'SKIMA Logistics');
+  assertIncludes(webhook, 'SKIMA Store');
+  assertIncludes(webhook, 'SKIMA Refill');
+  const supportConsentGuard = webhook.indexOf('const consentResult = await db.from("skima_whatsapp_contacts")');
+  const supportOrderSend = webhook.indexOf("const result = await sendWhatsAppTemplate", supportConsentGuard);
+  if (supportConsentGuard < 0 || supportOrderSend <= supportConsentGuard) {
+    throw new Error("Order notification consent must be rechecked before every provider send.");
+  }
+
+  const supportMigration = await read("supabase/migrations/20261109120000_skima_whatsapp_support_handoff.sql");
+  assertIncludes(supportMigration, "create table if not exists public.skima_whatsapp_support_outbox");
+  assertIncludes(supportMigration, "public.create_support_app_thread(");
+  assertIncludes(supportMigration, "public.reply_to_my_support_app_thread(");
+  assertIncludes(supportMigration, "public.respond_to_support_app_thread(");
+  assertIncludes(supportMigration, "public.assign_support_app_thread(");
+  assertIncludes(supportMigration, "not coalesce(new.is_internal,false)");
+  assertIncludes(supportMigration, "interval '24 hours'");
+  assertIncludes(supportMigration, "for update of n skip locked");
+  assertIncludes(supportMigration, "to service_role");
+  const historyPolicy = JSON.parse(await read("supabase/migration-history-policy.json")) as {
+    businessModuleMigrations: string[];
+  };
+  if (!historyPolicy.businessModuleMigrations.includes("20261109120000_skima_whatsapp_support_handoff.sql")) {
+    throw new Error("WhatsApp support handoff migration must be tracked in migration-history-policy.json.");
+  }
   const consentGuardIndex = webhook.indexOf('const consentResult = await db.from("skima_whatsapp_contacts")');
   const notificationSendIndex = webhook.indexOf("const result = await sendWhatsAppTemplate", consentGuardIndex);
   if (consentGuardIndex < 0 || notificationSendIndex <= consentGuardIndex) {
