@@ -943,7 +943,31 @@ async function handleLinkedMessage(
 
   if (stage === "logistics.description") {
     const description = ["skip", "none", "no"].includes(normalized) ? "" : input;
-    return plan("What name should the logistics provider contact?", "logistics.contact.name", { ...state, description });
+    return plan(
+      "What type of cargo are you moving?\n\n1 — General goods\n2 — Documents\n3 — Fragile items\n4 — Furniture\n5 — Perishable goods\n6 — Not specified",
+      "logistics.cargo.type",
+      { ...state, description },
+    );
+  }
+
+  if (stage === "logistics.cargo.type") {
+    const cargoTypes = [
+      { key: "general", label: "General goods" },
+      { key: "documents", label: "Documents" },
+      { key: "fragile", label: "Fragile items" },
+      { key: "furniture", label: "Furniture" },
+      { key: "perishable", label: "Perishable goods" },
+      { key: "", label: "Not specified" },
+    ];
+    const selected = selectNumber(input, cargoTypes as unknown as Record<string, unknown>[]);
+    if (!selected) return plan("Choose a cargo type from 1 to 6.", stage, state);
+    return plan("What is the estimated cargo weight in kilograms? Enter a number, or reply SKIP if you do not know.", "logistics.cargo.weight", { ...state, cargoType: selected.key });
+  }
+
+  if (stage === "logistics.cargo.weight") {
+    const weight = ["skip", "none", "unknown"].includes(normalized) ? null : Number(input.replace(/\s*kg$/i, "").trim());
+    if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) return plan("Enter a positive weight in kilograms or reply SKIP.", stage, state);
+    return plan("What name should the logistics provider contact?", "logistics.contact.name", { ...state, cargoWeight: weight });
   }
 
   if (stage === "logistics.contact.name") {
@@ -953,7 +977,16 @@ async function handleLinkedMessage(
 
   if (stage === "logistics.contact.phone") {
     if (!/^\+?[0-9][0-9 ()-]{6,22}$/.test(input)) return plan("Enter a valid phone number, for example +234 800 000 0000.", stage, state);
+    return plan("Add any handling, access or pickup instructions for the provider, or reply SKIP.", "logistics.instructions", { ...state, contactPhone: input });
+  }
+
+  if (stage === "logistics.instructions") {
+    const instructions = ["skip", "none", "no"].includes(normalized) ? null : input.slice(0, 1000);
     const category = asRecord(state.category);
+    const cargoType = asText(state.cargoType, "");
+    const cargoWeight = numberValue(state.cargoWeight);
+    const cargo: Record<string, unknown> = { cargo_type_keys: cargoType ? [cargoType] : [] };
+    if (cargoWeight !== null) cargo.weight_kg = cargoWeight;
     const payload = {
       category_key: asText(category.key, ""),
       service_key: asText(category.key, ""),
@@ -961,9 +994,9 @@ async function handleLinkedMessage(
       description: asText(state.description, "") || null,
       pickup: asRecord(state.pickup),
       destination: asRecord(state.destination),
-      cargo: { cargo_type_keys: [] as string[] },
-      customer_contact: { name: asText(state.contactName, ""), phone: input },
-      instructions: null,
+      cargo,
+      customer_contact: { name: asText(state.contactName, ""), phone: asText(state.contactPhone, "") },
+      instructions,
       metadata: { channel: "whatsapp", customer_app: "logistics" },
     };
     const created = await db.rpc("skima_whatsapp_create_logistics_job", {
