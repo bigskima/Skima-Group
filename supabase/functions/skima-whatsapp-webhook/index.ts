@@ -421,7 +421,7 @@ async function handleLinkedMessage(
 
   if (stage === "support.message") {
     if (input.length > 4000) return plan("Please keep the support message under 4,000 characters.", stage, state);
-    const firstLine = input.split(/\\r?\\n/)[0]?.trim() ?? "";
+    const firstLine = input.split(/\r?\n/)[0]?.trim() ?? "";
     const subject = firstLine.length >= 3 ? firstLine.slice(0, 160) : "Customer support request";
     const created = await db.rpc("skima_whatsapp_create_support_thread", {
       target_whatsapp_wa_id: whatsappWaId,
