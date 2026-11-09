@@ -1066,13 +1066,20 @@ async function handleLinkedMessage(
   // Store catalogue and checkout read the same active SKIMA Store catalogue,
   // effective prices, stock/availability rules and saved fulfilment locations.
   if (stage === "menu" && ["5", "store", "shop", "buy"].includes(normalized)) {
-    const [catalog, choices, wallets] = await Promise.all([
+    const [catalog, addressResult, wallets] = await Promise.all([
       readWhatsAppStoreCatalogue(db),
-      db.rpc("read_skima_whatsapp_customer_choices", { target_whatsapp_wa_id: whatsappWaId }),
+      db.from("lpg_customer_locations")
+        .select("id,label,formatted_address,landmark,delivery_instructions,contact_name,contact_phone,status")
+        .eq("owner_user_id", profileId)
+        .eq("status", "active")
+        .order("updated_at", { ascending: false }),
       readWhatsAppCustomerWallets(db, profileId),
     ]);
-    if (choices.error) throw choices.error;
-    const locations = arrayOfRecords(asRecord(choices.data).locations);
+    if (addressResult.error) throw addressResult.error;
+    // Store delivery needs a real saved street address, not LPG map coordinates.
+    const locations = arrayOfRecords(addressResult.data)
+      .filter((location) => asText(location.formatted_address, "").length > 0)
+      .map((location) => ({ ...location, address: asText(location.formatted_address, "") }));
     if (!catalog.products.length) return plan("SKIMA Store has no purchasable products available right now. Please check again later.", "menu");
     if (!walletForCurrency(wallets, catalog.currencyCode)) return plan("An active " + catalog.currencyCode + " customer wallet is required for SKIMA Store checkout. Create or fund your wallet in the SKIMA app, then reply MENU.", "menu");
     return plan(
@@ -1522,23 +1529,25 @@ async function readWhatsAppCustomerWallets(
   db: SupabaseClient,
   profileId: string,
 ): Promise<Record<string, unknown>[]> {
-  const balances = await db.from("wallet_balances")
-    .select("wallet_id,currency_code,balance")
-    .order("wallet_id", { ascending: true });
-  if (balances.error) throw balances.error;
-  const balanceRows = arrayOfRecords(balances.data);
-  const walletIds = balanceRows.map((row) => asText(row.wallet_id, "")).filter(Boolean);
-  if (!walletIds.length) return [];
+  // Start with wallet_accounts so newly created or zero-balance wallets are not
+  // lost merely because the balance view has no row for them yet.
   const wallets = await db.from("wallet_accounts")
     .select("id,wallet_type,owner_entity_type,owner_entity_id,currency_code,status")
-    .in("id", walletIds)
     .eq("wallet_type", "customer")
     .eq("owner_entity_type", "user")
     .eq("owner_entity_id", profileId)
     .eq("status", "active");
   if (wallets.error) throw wallets.error;
-  const balanceById = new Map(balanceRows.map((row) => [asText(row.wallet_id, ""), row]));
-  return arrayOfRecords(wallets.data).map((wallet) => {
+  const walletRows = arrayOfRecords(wallets.data);
+  const walletIds = walletRows.map((wallet) => asText(wallet.id, "")).filter(Boolean);
+  if (!walletIds.length) return [];
+
+  const balances = await db.from("wallet_balances")
+    .select("wallet_id,currency_code,balance")
+    .in("wallet_id", walletIds);
+  if (balances.error) throw balances.error;
+  const balanceById = new Map(arrayOfRecords(balances.data).map((row) => [asText(row.wallet_id, ""), row]));
+  return walletRows.map((wallet) => {
     const balance = balanceById.get(asText(wallet.id, ""));
     return {
       ...wallet,
@@ -1547,7 +1556,6 @@ async function readWhatsAppCustomerWallets(
     };
   }).sort((left, right) => (numberValue(right.balance) ?? 0) - (numberValue(left.balance) ?? 0));
 }
-
 function walletForCurrency(wallets: Record<string, unknown>[], currencyCode: string): Record<string, unknown> | null {
   return wallets.find((wallet) => asText(wallet.currencyCode, "") === currencyCode) ?? null;
 }
