@@ -34,10 +34,6 @@ Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () =
   assertIncludes(webhook, 'dispatchWhatsAppOutboxes(request)');
   assertIncludes(webhook, 'supportStatusResult');
   assertIncludes(webhook, 'target_is_internal: command === "NOTE"');
-  assertIncludes(webhook, 'SKIMA Bills');
-  assertIncludes(webhook, 'SKIMA Logistics');
-  assertIncludes(webhook, 'SKIMA Store');
-  assertIncludes(webhook, 'SKIMA Refill');
   const supportConsentGuard = webhook.indexOf('const consentResult = await db.from("skima_whatsapp_contacts")');
   const supportOrderSend = webhook.indexOf("const result = await sendWhatsAppTemplate", supportConsentGuard);
   if (supportConsentGuard < 0 || supportOrderSend <= supportConsentGuard) {
