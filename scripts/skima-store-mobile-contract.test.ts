@@ -229,3 +229,40 @@ Deno.test("Admin Logistics settings and fee policies have valid routes and cross
   requireText(workspace, '"/money/pricing/logistics"', "Logistics fee settings destination");
   requireText(fees, "percentage_basis_points: z.coerce.number().int().min(0).max(10000).optional().default(0)", "Non-Logistics financial policy compatibility");
 });
+
+
+Deno.test("Store customer receipt settlement preserves the shared order workflow", async () => {
+  const migration = await read("supabase/migrations/20261109043700_store_settlement_shared_workflow_handoff.sql");
+  requireText(migration, "store_order.workflow_instance_id = request_record.workflow_instance_id", "Shared Store workflow detection");
+  requireText(migration, "service_request_event_id := public.record_platform_event", "Settlement event is still recorded");
+  requireText(migration, "service_request_event_id := public.process_service_request_event", "Non-Store service requests retain normal settlement workflow advancement");
+  requireText(migration, "Store customer receipt action (store.order.complete)", "Store receipt action owns the final order transition");
+  requireText(migration, "service_request_event_id,", "Settlement history points to the recorded event");
+});
+
+Deno.test("Store shopping follows separate browse, basket, delivery and review steps", async () => {
+  const shop = await read("apps/store-mobile/src/screens/StoreShopScreen.tsx");
+  for (const step of ["browse", "basket", "fulfillment", "review"]) {
+    requireText(shop, '"' + step + '"', "Store progressive shopping step " + step);
+  }
+  requireText(shop, "Picked for everyday", "Store browse landing experience");
+  requireText(shop, "Your basket", "Dedicated basket stage");
+  requireText(shop, "Continue to delivery", "Basket-to-fulfilment progression");
+  requireText(shop, "Review order", "Fulfilment-to-review progression");
+  requireText(shop, "Pay securely", "Final explicit wallet payment step");
+  requireText(shop, "AsyncStorage.setItem(cartKey", "Customer basket persists between visits");
+  rejectText(shop, "Your Store orders", "Order tracking belongs on the Orders screen, not the browsing home");
+});
+
+Deno.test("Logistics admin exposes settings and accepts shared policy families", async () => {
+  const [navigation, logistics, fees] = await Promise.all([
+    read("apps/admin/src/app/admin-v2-navigation.ts"),
+    read("apps/admin/src/features/logistics/LogisticsWorkspace.tsx"),
+    read("apps/admin/src/admin-logistics-fee-workspace.tsx"),
+  ]);
+  requireText(navigation, 'href: "/logistics/settings"', "Logistics settings navigation");
+  requireText(logistics, 'props.route === "/logistics/settings"', "Logistics settings route");
+  requireText(logistics, 'props.onNavigate("/money/pricing/logistics")', "Logistics settings fee-policy destination");
+  requireText(fees, "fixed_amount: z.coerce.number().nonnegative().optional().default(0)", "Non-Logistics policy fixed-amount compatibility");
+  requireText(fees, "percentage_basis_points: z.coerce.number().int().min(0).max(10000).optional().default(0)", "Non-Logistics policy percentage compatibility");
+});
