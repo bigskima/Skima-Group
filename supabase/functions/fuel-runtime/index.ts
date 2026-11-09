@@ -728,7 +728,7 @@ async function handleFuelRuntimeRequest(
     const { data: operationRows, error: operationError } = await query;
     if (operationError) return databaseError(operationError as { readonly message: string; readonly code?: string }, id);
     const rows = Array.isArray(operationRows) ? operationRows as Record<string, unknown>[] : [];
-    if (!(orderId || scope === "customer" || scope === "driver") || rows.length === 0) {
+    if (!(orderId || branchId || scope === "customer" || scope === "driver") || rows.length === 0) {
       return jsonResponse({ ok: true, data: rows, requestId: id });
     }
     const enrichedRows = await Promise.all(rows.map(async (row) => {

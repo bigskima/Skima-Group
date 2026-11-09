@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store, X } from "lucide-react-native";
-import { Alert, ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Alert, ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { z } from "zod";
 import { useLogisticsQuery, asString, asNumber } from "../api/logistics";
 import { useLogisticsStorefrontData } from "../api/store";
@@ -13,7 +13,7 @@ import { radii, typography } from "../theme/tokens";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
-import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
+import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontDetailSheet, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
 
 type CartLine = { itemId: string; variantId: string | null; name: string; variantName: string | null; quantity: number; unitAmount: number; currencyCode: string };
 type ProductMedia = { assetId: string; mediaType: "image" | "video"; displayOrder: number };
@@ -273,7 +273,6 @@ export function LogisticsStoreScreen() {
                       onDetails={() => setSelectedProduct(product)}
                       onAdd={() => add(product)}
                     />
-                  );                    </View>
                   );
                 })}
               </View>
@@ -332,30 +331,19 @@ export function LogisticsStoreScreen() {
           {confirmReceipt.error ? <Text style={[styles.error,{color:palette.danger}]}>{confirmReceipt.error.message}</Text> : null}
         </>
       )}
-      <Modal transparent animationType="slide" visible={Boolean(selectedProduct)} onRequestClose={closeSelectedProduct}>
-        <View style={styles.detailBackdrop}>
-          <View style={[styles.detailPanel,{backgroundColor:palette.surface}]}>
-            <View style={styles.detailHandle}/>
-            <View style={styles.detailHeader}>
-              <View style={{flex:1,minWidth:0}}>
-                <Text style={[styles.detailTitle,{color:palette.ink}]}>{selectedProduct?.name??"Product details"}</Text>
-                {selectedProduct?.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{selectedProduct.variantName}</Text>:null}
-              </View>
-              <Pressable onPress={closeSelectedProduct} style={[styles.detailClose,{backgroundColor:palette.brandSoft}]}><X color={palette.ink} size={19}/></Pressable>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{gap:12,paddingBottom:12}}>
-              {selectedProduct?.media.length?(
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:9}}>
-                  {selectedProduct.media.map(media=><StoreProductMedia key={media.assetId} assetId={media.assetId} label={selectedProduct.name} isVideo={media.mediaType==="video"}/>)}
-                </ScrollView>
-              ):selectedProduct?<ProductImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/>:null}
-              {selectedProduct?.description?<Text style={[styles.detailDescription,{color:palette.muted}]}>{selectedProduct.description}</Text>:null}
-              {selectedProduct?<View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(selectedProduct.amount,selectedProduct.currency)}</Text>{selectedProduct.compareAtAmount!==null&&selectedProduct.compareAtAmount>selectedProduct.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(selectedProduct.compareAtAmount,selectedProduct.currency)}</Text>:null}</View>:null}
-              {selectedProduct?<Pressable onPress={()=>{add(selectedProduct);closeSelectedProduct();}} style={[styles.add,{backgroundColor:palette.brand,height:44}]}><Plus color="#fff" size={16}/><Text style={styles.addText}>Add to basket</Text></Pressable>:null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <StorefrontDetailSheet
+        visible={Boolean(selectedProduct)}
+        onClose={closeSelectedProduct}
+        palette={palette}
+        title={selectedProduct?.name??"Product details"}
+        categoryLabel={selectedProduct?asString(selectedProduct.item,"category_name","category")??"SKIMA Store":undefined}
+        description={selectedProduct?.description}
+        media={selectedProduct?<View style={{height:160}}>{selectedProduct.media.length?<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:9}}>{selectedProduct.media.map(media=><StoreProductMedia key={media.assetId} assetId={media.assetId} label={selectedProduct.name} isVideo={media.mediaType==="video"}/>)}</ScrollView>:<ProductImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/>}</View>:null}
+        priceLabel={selectedProduct?money(selectedProduct.amount,selectedProduct.currency):null}
+        compareAtLabel={selectedProduct&&selectedProduct.compareAtAmount!==null&&selectedProduct.compareAtAmount>selectedProduct.amount?money(selectedProduct.compareAtAmount,selectedProduct.currency):null}
+        stockLabel={selectedProduct?(selectedProduct.stock===null?"Available":selectedProduct.stock+" in stock"):null}
+        footer={selectedProduct?<Pressable onPress={()=>{add(selectedProduct);closeSelectedProduct();}} style={[styles.add,{backgroundColor:palette.brand,height:44}]}><Plus color="#fff" size={16}/><Text style={styles.addText}>Add to basket</Text></Pressable>:null}
+      />
     </Screen>
   );
 }

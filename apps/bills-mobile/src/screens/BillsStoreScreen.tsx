@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, ShoppingCart, X } from "lucide-react-native";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
@@ -10,7 +10,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
 import { AppButton } from "../ui/AppButton";
 import { GuideTarget } from "../onboarding/BillsGuideProvider";
-import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
+import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontDetailSheet, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
 
 type Row=Record<string,unknown>;
 type CartLine={itemId:string;variantId:string|null;name:string;variantName:string|null;quantity:number;unitAmount:number;currencyCode:string;stock:number|null};
@@ -110,25 +110,20 @@ export function BillsStoreScreen(){
     <AppButton label={"Pay "+money(total,currency)} fullWidth disabled={!canCheckout} loading={checkout.isPending} onPress={()=>checkout.mutate()}/>
    </View>:null}
   </Card></GuideTarget>
-  <Modal transparent animationType="slide" visible={Boolean(selectedProduct)} onRequestClose={()=>setSelectedProduct(null)}>
-   <View style={{flex:1,backgroundColor:"rgba(0,0,0,.45)",justifyContent:"flex-end"}}>
-    <View style={{maxHeight:"88%",backgroundColor:palette.surface,borderTopLeftRadius:22,borderTopRightRadius:22,padding:16,gap:12}}>
-     <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:12}}>
-      <Pressable accessibilityRole="button" onPress={()=>setSelectedProduct(null)} style={{flexDirection:"row",alignItems:"center",gap:7,paddingVertical:6}}><ArrowLeft size={17} color={palette.brand}/><Text style={{color:palette.brand,fontWeight:"900",fontSize:11}}>Back to Store</Text></Pressable>
-      <Text style={{fontSize:14,fontWeight:"900",color:palette.ink,flex:1,textAlign:"right"}} numberOfLines={2}>{selectedProduct?.name??"Product details"}</Text>
-     </View>
-     {selectedProduct?<ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{gap:12,paddingBottom:10}}>
-      <View style={{height:190,borderRadius:16,overflow:"hidden",backgroundColor:palette.surfaceSubtle}}><StoreImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/></View>
-      <Text style={{color:palette.muted,fontSize:10}}>{asString(selectedProduct.item,"category_name","category")??"SKIMA Store"}</Text>
-      {selectedProduct.description?<Text style={{color:palette.ink,fontSize:12,lineHeight:19}}>{selectedProduct.description}</Text>:null}
-      <View style={{flexDirection:"row",alignItems:"center",gap:8}}><Text style={{fontSize:17,fontWeight:"900",color:palette.ink}}>{money(selectedProduct.amount,selectedProduct.currency)}</Text>{selectedProduct.compareAtAmount&&selectedProduct.compareAtAmount>selectedProduct.amount?<Text style={{fontSize:11,color:palette.muted,textDecorationLine:"line-through"}}>{money(selectedProduct.compareAtAmount,selectedProduct.currency)}</Text>:null}</View>
-      <Text style={{fontSize:10,color:palette.success,fontWeight:"800"}}>{selectedProduct.stock===null?"Available":selectedProduct.stock+" in stock"}</Text>
-      <AppButton label="Add to basket" fullWidth disabled={checkout.isPending} onPress={()=>{const p=selectedProduct;setCheckoutKey(makeIdempotencyKey("bills-store-checkout"));setCart(cur=>{const found=cur.find(x=>x.itemId===p.id&&x.variantId===p.variantId);if(found)return cur.map(x=>x===found?{...x,quantity:p.stock===null?x.quantity+1:Math.min(p.stock,x.quantity+1)}:x);return [...cur,{itemId:p.id,variantId:p.variantId,name:p.name,variantName:p.variantName,quantity:1,unitAmount:p.amount,currencyCode:p.currency,stock:p.stock}];});setSelectedProduct(null);}} />
-     </ScrollView>:null}
-    </View>
-   </View>
-  </Modal>
-  <View style={{gap:9}}><SectionTitle title="Your Store orders" caption="Track deliveries and confirm receipt."/>
+  <StorefrontDetailSheet
+    visible={Boolean(selectedProduct)}
+    onClose={()=>setSelectedProduct(null)}
+    palette={palette}
+    title={selectedProduct?.name??"Product details"}
+    media={selectedProduct?<StoreImage assetId={selectedProduct.imageAssetId} label={selectedProduct.name}/>:null}
+    categoryLabel={selectedProduct?asString(selectedProduct.item,"category_name","category")??"SKIMA Store":undefined}
+    description={selectedProduct?.description}
+    priceLabel={selectedProduct?money(selectedProduct.amount,selectedProduct.currency):null}
+    compareAtLabel={selectedProduct&&selectedProduct.compareAtAmount&&selectedProduct.compareAtAmount>selectedProduct.amount?money(selectedProduct.compareAtAmount,selectedProduct.currency):null}
+    stockLabel={selectedProduct?(selectedProduct.stock===null?"Available":selectedProduct.stock+" in stock"):null}
+    footer={selectedProduct?<AppButton label="Add to basket" fullWidth disabled={checkout.isPending} onPress={()=>{const p=selectedProduct;setCheckoutKey(makeIdempotencyKey("bills-store-checkout"));setCart(cur=>{const found=cur.find(x=>x.itemId===p.id&&x.variantId===p.variantId);if(found)return cur.map(x=>x===found?{...x,quantity:p.stock===null?x.quantity+1:Math.min(p.stock,x.quantity+1)}:x);return [...cur,{itemId:p.id,variantId:p.variantId,name:p.name,variantName:p.variantName,quantity:1,unitAmount:p.amount,currencyCode:p.currency,stock:p.stock}];});setSelectedProduct(null);}}/>:null}
+  />
+  <SectionTitle title="Your Store orders" caption="Track deliveries and confirm receipt."/>
    {orders.isPending?<ActivityIndicator color={palette.brand}/>:orders.error?<State title="Orders unavailable" body="Your previous Store orders are safe. Try again." retry={()=>void orders.refetch()}/>:orders.data?.length?orders.data.slice(0,6).map(o=><Card key={asString(o,"id")??""} style={{gap:7}}><View style={{flexDirection:"row",justifyContent:"space-between",gap:10}}><Text style={{fontSize:11,color:palette.ink,fontWeight:"900"}}>{"Order "+(asString(o,"id")??"").slice(0,8).toUpperCase()}</Text><Text style={{fontSize:10,color:palette.brand,fontWeight:"900"}}>{(asString(o,"status")??"received").replaceAll("_"," ")}</Text></View><Text style={{fontSize:10,color:palette.muted}}>{asString(o,"fulfillment_method")??"delivery"} · {money(asNumber(o,"total_amount")??0,asString(o,"currency_code")??currency)}</Text>{asString(o,"status")==="fulfilled"?<ActionButton small label="Confirm receipt" onPress={()=>receipt.mutate(asString(o,"id")??"")} loading={receipt.isPending}/>:null}{asString(o,"status")==="completed"?<Text style={{fontSize:10,color:palette.success,fontWeight:"800"}}>Receipt confirmed · settlement completed</Text>:null}</Card>):<State title="No Store orders yet" body="Orders placed from Bills will appear here alongside your SKIMA Store purchases."/>}
   </View>
   {notice?<Notice text={notice} tone="success"/>:null}

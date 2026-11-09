@@ -42,7 +42,7 @@ import { idempotencyKey } from "../../src/native/utilities/idempotency";
 import { selectWorkspaceWallet, walletRecordId } from "../../src/native/utilities/financeWallet";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
 import { borders, radii, spacing, typography } from "../../src/native/theme/tokens";
-import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
+import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontDetailSheet, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
 
 type StoreCartLine = {
   itemId: string;
@@ -543,10 +543,10 @@ export default function StoreScreen() {
                       priceLabel={formatMoney(amount, currencyCode)}
                       compareAtLabel={compareAt && compareAt > amount ? formatMoney(compareAt, currencyCode) : null}
                       stockLabel="Available"
+                      addLabel={item._variants.length ? "Select options" : "Add to basket"}
                       onDetails={() => openProduct(item)}
                       onAdd={() => openProduct(item)}
                     />
-                  );                    </Pressable>
                   );
                 })}
               </View>
@@ -569,87 +569,82 @@ export default function StoreScreen() {
         </>
       )}
 
-      <Modal transparent animationType="slide" visible={Boolean(selectedItem)} onRequestClose={closeProductDetails}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.productModal, { backgroundColor: palette.surface }]}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: palette.ink }]} numberOfLines={2}>{selectedItem ? recordString(selectedItem, "display_name") : "Product"}</Text>
-              <Pressable onPress={closeProductDetails} style={[styles.closeButton, { backgroundColor: palette.surfaceSubtle }]}><X color={palette.ink} size={19} /></Pressable>
+      <StorefrontDetailSheet
+        visible={Boolean(selectedItem)}
+        onClose={closeProductDetails}
+        palette={palette}
+        title={selectedItem ? recordString(selectedItem, "display_name") : "Product details"}
+        media={selectedItem ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productGallery}>
+            {data.media.data
+              ?.filter((media) => media.item_id === selectedItemId && media.status === "active")
+              .sort((left, right) => numberValue(left.display_order) - numberValue(right.display_order))
+              .map((media) => {
+                const assetId = recordString(media, "media_asset_id");
+                const isVideo = metadataValue(media, "mediaType") === "video";
+                return assetId ? <StoreProductMedia key={assetId} assetId={assetId} label={recordString(selectedItem, "display_name")} isVideo={isVideo} /> : null;
+              })}
+            {!data.media.data?.some((media) => media.item_id === selectedItemId && media.status === "active") ? (
+              <View style={[styles.galleryEmpty, { backgroundColor: palette.surfaceSubtle }]}>
+                <Text style={{ color: palette.muted, fontSize: 11, fontWeight: "700" }}>No product media yet</Text>
+              </View>
+            ) : null}
+          </ScrollView>
+        ) : null}
+        categoryLabel={selectedItem ? recordString(categories.find((category) => recordString(category, "id") === recordString(selectedItem, "category_id")) ?? {}, "display_name") : undefined}
+        description={selectedItem ? recordString(selectedItem, "description") : null}
+        priceLabel={selectedPrice ? formatMoney(numberValue(selectedPrice.amount), currencyCode) : null}
+        compareAtLabel={selectedPrice && optionalNumber(selectedPrice.compare_at_amount) !== null && numberValue(selectedPrice.compare_at_amount) > numberValue(selectedPrice.amount) ? formatMoney(numberValue(selectedPrice.compare_at_amount), currencyCode) : null}
+        stockLabel={selectedItem ? (selectedAvailable ? selectedStock === null ? "Available" : selectedStock + " in stock" : "Currently unavailable") : null}
+        footer={selectedItem ? (
+          <View style={styles.modalFooter}>
+            <View style={styles.quantityPicker}>
+              <Pressable onPress={() => setSelectedQuantity((value) => Math.max(1, value - 1))} style={[styles.quantityButton, { borderColor: palette.border }]}><Minus color={palette.ink} size={16} /></Pressable>
+              <Text style={[styles.quantityValue, { color: palette.ink }]}>{selectedQuantity}</Text>
+              <Pressable onPress={() => setSelectedQuantity((value) => Math.min(selectedMax, value + 1))} disabled={selectedQuantity >= selectedMax} style={[styles.quantityButton, { borderColor: palette.border, opacity: selectedQuantity >= selectedMax ? 0.4 : 1 }]}><Plus color={palette.ink} size={16} /></Pressable>
             </View>
-            {selectedItem ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productGallery}>
-                {data.media.data
-                  ?.filter((media) => media.item_id === selectedItemId && media.status === "active")
-                  .sort((left, right) => numberValue(left.display_order) - numberValue(right.display_order))
-                  .map((media) => {
-                    const assetId = recordString(media, "media_asset_id");
-                    const isVideo = metadataValue(media, "mediaType") === "video";
-                    return assetId ? (
-                      <StoreProductMedia
-                        key={assetId}
-                        assetId={assetId}
-                        label={recordString(selectedItem, "display_name")}
-                        isVideo={isVideo}
-                      />
-                    ) : null;
-                  })}
-                {!data.media.data?.some((media) => media.item_id === selectedItemId && media.status === "active") ? (
-                  <View style={[styles.galleryEmpty, { backgroundColor: palette.surfaceSubtle }]}>
-                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: "700" }}>No product media yet</Text>
-                  </View>
-                ) : null}
-              </ScrollView>
-            ) : null}
-            {selectedItem && recordString(selectedItem, "description") ? <Text style={[styles.modalDescription, { color: palette.muted }]}>{recordString(selectedItem, "description")}</Text> : null}
-            {selectedVariants.length ? (
-              <View style={styles.optionSection}>
-                <Text style={[styles.optionLabel, { color: palette.ink }]}>Choose an option</Text>
-                <View style={styles.optionList}>
-                  {selectedVariants.map((variant) => {
-                    const variantId = recordString(variant, "id");
-                    const active = selectedVariantId === variantId;
-                    const variantPrice = chooseRecord(
-                      (data.prices.data ?? []).filter((price) =>
-                        price.item_id === selectedItemId &&
-                        price.currency_code === currencyCode &&
-                        price.status === "active" &&
-                        isEffective(price, Date.now())
-                      ),
-                      variantId,
-                    ) ?? chooseRecord(
-                      (data.prices.data ?? []).filter((price) =>
-                        price.item_id === selectedItemId &&
-                        price.currency_code === currencyCode &&
-                        price.status === "active" &&
-                        isEffective(price, Date.now())
-                      ),
-                      null,
-                    );
-                    return (
-                      <Pressable key={variantId} onPress={() => setSelectedVariantId(variantId)} style={[styles.optionButton, { borderColor: active ? palette.brand : palette.border, backgroundColor: active ? palette.brandSoft : palette.surface }]}>
-                        <View style={styles.optionRadio}>{active ? <Check color={palette.brand} size={13} /> : null}</View>
-                        <Text style={[styles.optionName, { color: palette.ink }]}>{recordString(variant, "display_name")}</Text>
-                        <Text style={[styles.optionPrice, { color: palette.ink }]}>{variantPrice ? formatMoney(numberValue(variantPrice.amount), currencyCode) : "Price unavailable"}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-            <View style={styles.modalFooter}>
-              <View style={styles.quantityPicker}>
-                <Pressable onPress={() => setSelectedQuantity((value) => Math.max(1, value - 1))} style={[styles.quantityButton, { borderColor: palette.border }]}><Minus color={palette.ink} size={16} /></Pressable>
-                <Text style={[styles.quantityValue, { color: palette.ink }]}>{selectedQuantity}</Text>
-                <Pressable onPress={() => setSelectedQuantity((value) => Math.min(selectedMax, value + 1))} disabled={selectedQuantity >= selectedMax} style={[styles.quantityButton, { borderColor: palette.border, opacity: selectedQuantity >= selectedMax ? 0.4 : 1 }]}><Plus color={palette.ink} size={16} /></Pressable>
-              </View>
-              <Pressable disabled={!selectedAvailable || !selectedPrice || selectedMax < 1} onPress={addSelectedToCart} style={[styles.primaryButton, { backgroundColor: palette.brand, opacity: !selectedAvailable || !selectedPrice ? 0.5 : 1 }]}>
-                <Text style={styles.primaryButtonText}>{selectedPrice ? `Add · ${formatMoney(numberValue(selectedPrice.amount) * selectedQuantity, currencyCode)}` : "Price unavailable"}</Text>
-              </Pressable>
+            <Pressable disabled={!selectedAvailable || !selectedPrice || selectedMax < 1} onPress={addSelectedToCart} style={[styles.primaryButton, { backgroundColor: palette.brand, opacity: !selectedAvailable || !selectedPrice ? 0.5 : 1 }]}>
+              <Text style={styles.primaryButtonText}>{selectedPrice ? `Add · ${formatMoney(numberValue(selectedPrice.amount) * selectedQuantity, currencyCode)}` : "Price unavailable"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      >
+        {selectedVariants.length ? (
+          <View style={styles.optionSection}>
+            <Text style={[styles.optionLabel, { color: palette.ink }]}>Choose an option</Text>
+            <View style={styles.optionList}>
+              {selectedVariants.map((variant) => {
+                const variantId = recordString(variant, "id");
+                const active = selectedVariantId === variantId;
+                const variantPrice = chooseRecord(
+                  (data.prices.data ?? []).filter((price) =>
+                    price.item_id === selectedItemId &&
+                    price.currency_code === settings?.currency_code &&
+                    price.status === "active" &&
+                    isEffective(price, Date.now())
+                  ),
+                  variantId,
+                ) ?? chooseRecord(
+                  (data.prices.data ?? []).filter((price) =>
+                    price.item_id === selectedItemId &&
+                    price.currency_code === settings?.currency_code &&
+                    price.status === "active" &&
+                    isEffective(price, Date.now())
+                  ),
+                  null,
+                );
+                return (
+                  <Pressable key={variantId} onPress={() => setSelectedVariantId(variantId)} style={[styles.optionButton, { borderColor: active ? palette.brand : palette.border, backgroundColor: active ? palette.brandSoft : palette.surface }]}>
+                    <View style={styles.optionRadio}>{active ? <Check color={palette.brand} size={13} /> : null}</View>
+                    <Text style={[styles.optionName, { color: palette.ink }]}>{recordString(variant, "display_name")}</Text>
+                    <Text style={[styles.optionPrice, { color: palette.ink }]}>{variantPrice ? formatMoney(numberValue(variantPrice.amount), currencyCode) : "Price unavailable"}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
-        </View>
-      </Modal>
+        ) : null}
+      </StorefrontDetailSheet>
 
       <Modal transparent animationType="slide" visible={cartOpen} onRequestClose={() => setCartOpen(false)}>
         <View style={styles.modalBackdrop}>
