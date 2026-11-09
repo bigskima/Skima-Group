@@ -23,7 +23,9 @@ for(const app of apps){
  const html=read(`${app.dir}/app/+html.tsx`);
  for(const marker of ['rel="icon"','rel="apple-touch-icon"','rel="manifest"','apple-mobile-web-app-capable','beforeinstallprompt','serviceWorker.register'])assert(html.includes(marker),`${app.name}: HTML missing ${marker}`);
  const sw=read(`${app.dir}/public/service-worker.js`);
- assert(sw.includes(`skima-${app.key}-pwa-shell-v1`)&&sw.includes('request.mode==="navigate"'),`${app.name}: service worker shell`);
+ assert(sw.includes(`skima-${app.key}-pwa-shell-v1`) && /request\\.mode\\s*===\\s*"navigate"/.test(sw), `${app.name}: service worker shell`);
+ assert(/request\\.method\\s*!==\\s*"GET"/.test(sw), `${app.name}: non-GET requests must bypass cache`);
+ assert(/if\\s*\\(!(?:isPublicStatic|allowed)\\)\\s*return/.test(sw), `${app.name}: service worker must use a static-only allowlist`);
  assert(sw.includes('url.pathname.startsWith("/_expo/static/")')&&sw.includes('url.pathname.startsWith("/assets/")'),`${app.name}: static bundle allowlist`);
  assert(!sw.includes('"/functions/v1/')&&!sw.includes('"/rest/v1/'),`${app.name}: API routes must not be cached`);
  console.log(`PASS ${app.name}: manifest, favicon, Apple icon, install prompt and offline shell`);
