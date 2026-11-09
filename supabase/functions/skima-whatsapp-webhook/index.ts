@@ -316,7 +316,7 @@ async function handleLinkedMessage(
       target_opt_in: false,
     });
     if (preference.error) throw preference.error;
-    return plan("WhatsApp order-status notifications are now off. You can still message SKIMA to check your orders. Reply 6 to opt in again.", "menu");
+    return plan("WhatsApp order-status notifications are now off. You can still message SKIMA to check your orders. Reply 0 to opt in again.", "menu");
   }
   if (normalized === "menu") return plan(MENU, "menu", {});
   if (["cancel", "restart"].includes(normalized)) {
