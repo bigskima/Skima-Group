@@ -31,6 +31,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   experiments: { typedRoutes: true },
   web: {
     bundler: "metro",
+    name: "SKIMA LPG",
+    shortName: "SKIMA LPG",
+    description: "Order LPG refills and manage your SKIMA fulfilment.",
+    themeColor: "#ED1C2E",
+    backgroundColor: "#FFFFFF",
+    favicon: brandImage,
     // Orders and workspace details use dynamic Expo Router params. Export one SPA shell
     // so a browser refresh on /orders/:id is routed back through Expo Router.
     output: "single",
