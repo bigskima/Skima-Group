@@ -229,9 +229,19 @@ begin
   function_sql:=replace(function_sql,old_decl,new_decl);
 
   old_validation:=$old$    or target_payment_method not in ('cash','bank_transfer')$old$;
-  new_validation:=$new$    or target_payment_method<>'cash'$new$;
+  new_validation:=$new$    or target_payment_method not in ('cash','bank_transfer')$new$;
   if position(old_validation in function_sql)=0 then raise exception 'LPG supplier-payment method validation changed'; end if;
   function_sql:=replace(function_sql,old_validation,new_validation);
+
+  -- Preserve true idempotent replays of historical bank-transfer payments, but
+  -- require all new supplier payments to follow the physical cash-float cycle.
+  old_balance:=$old$  if procurement.status<>'approved' then$old$;
+  new_balance:=$new$  if target_payment_method<>'cash' then
+    raise exception using errcode='22023',message='New LPG supplier payments must be recorded as physical cash after a Supplier Fund withdrawal';
+  end if;
+  if procurement.status<>'approved' then$new$;
+  if position(old_balance in function_sql)=0 then raise exception 'LPG supplier payment new-method guard anchor changed'; end if;
+  function_sql:=replace(function_sql,old_balance,new_balance);
 
   old_balance:=$old$  select coalesce(balance.balance,0) into available_balance
   from public.wallet_accounts wallet
