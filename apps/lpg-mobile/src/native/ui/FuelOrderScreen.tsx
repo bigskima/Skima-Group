@@ -379,10 +379,22 @@ export function FuelOrderScreen() {
     products.refetch(), offers.refetch(), containerTypes.refetch(), locations.refetch(), wallets.refetch(),
     platformFees.refetch(), stockAvailability.refetch(), fulfillmentControls.refetch(), managedPrices.refetch(),
   ]);
-  const loading = products.isPending || offers.isPending || containerTypes.isPending || wallets.isPending || locations.isPending ||
-    platformFees.isPending || stockAvailability.isPending || fulfillmentControls.isPending;
-  const loadingError = products.error || offers.error || containerTypes.error || wallets.error || locations.error ||
-    platformFees.error || stockAvailability.error || fulfillmentControls.error;
+  // Only the product and station-offer catalogue are fatal to browsing.
+  // Wallet, location, stock, pricing and fulfilment reads should not hide
+  // otherwise valid offers behind a misleading "offers could not load" page.
+  const loading = products.isPending || offers.isPending || containerTypes.isPending || wallets.isPending ||
+    locations.isPending || platformFees.isPending || stockAvailability.isPending ||
+    fulfillmentControls.isPending || managedPrices.isPending;
+  const catalogueLoadError = products.error ?? offers.error;
+  const supplementaryLoadFailures = [
+    containerTypes.error ? "container options" : null,
+    wallets.error ? "wallet balance" : null,
+    locations.error ? "saved delivery locations" : null,
+    platformFees.error ? "Fuel markup details" : null,
+    stockAvailability.error ? "live station stock" : null,
+    fulfillmentControls.error ? "delivery options" : null,
+    managedPrices.error ? "SKIMA Managed pricing" : null,
+  ].filter((label): label is string => Boolean(label));
 
 
 
@@ -401,10 +413,13 @@ export function FuelOrderScreen() {
     >
       {loading ? (
         <ScreenSkeleton variant="list" cards={3} />
-      ) : loadingError ? (
+      ) : catalogueLoadError ? (
         <EmptyState
-          title="Fuel offers could not be loaded"
-          description="Refresh and try again. Your existing orders are not affected."
+          title={products.error ? "Fuel products could not be loaded" : "Station offers could not be loaded"}
+          description={friendlyError(
+            catalogueLoadError,
+            "We couldn't refresh the Fuel catalogue. Please try again. Your existing orders are not affected.",
+          )}
           action={<AppButton label="Try again" onPress={refreshAll} />}
         />
       ) : paid && createdQuote ? (
@@ -503,6 +518,15 @@ export function FuelOrderScreen() {
         </>
       ) : (
         <>
+          {supplementaryLoadFailures.length > 0 ? (
+            <View style={[styles.dataWarning, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+              <Text style={[styles.dataWarningText, { color: palette.muted }]} accessibilityRole="alert">
+                Some checkout details couldn't be refreshed ({supplementaryLoadFailures.join(", ")}).
+                Current station offers remain visible; retry these details before placing an order.
+              </Text>
+              <AppButton label="Retry details" size="sm" variant="secondary" onPress={refreshAll} />
+            </View>
+          ) : null}
           <View style={styles.progressCard} accessibilityLabel={`Fuel order step ${orderStep} of 4`}>
             {[1, 2, 3, 4].map((stepNumber) => (
               <View key={stepNumber} style={[styles.progressSegment, { backgroundColor: stepNumber <= orderStep ? palette.brand : palette.border }]} />
@@ -618,6 +642,11 @@ export function FuelOrderScreen() {
                 <View style={styles.modeRow}>
                   <ModeOption title="Use my container" subtitle="Swap for a filled one" active={containerMode === "exchange"} onPress={() => { setContainerMode("exchange"); setCreatedQuote(null); setLocalError(null); }} />
                 </View>
+                {compatibleContainerTypes.length === 0 ? (
+                  <Text style={[styles.inlineNotice, { color: palette.warning }]} accessibilityRole="alert">
+                    No compatible delivery container is configured for this fuel product yet. Please contact SKIMA support before placing an order.
+                  </Text>
+                ) : null}
                 <View style={styles.optionList}>
                   {compatibleContainerTypes.map((type) => {
                     const key = firstString(type, ["key"]) ?? "";
@@ -1014,6 +1043,8 @@ const styles = StyleSheet.create({
   liveEstimateLabel: { ...typography.eyebrow, fontSize: 8 },
   liveEstimateAmount: { ...typography.title, fontSize: 24 },
   inlineNotice: { ...typography.caption, fontWeight: "800", lineHeight: 18 },
+  dataWarning: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 1, borderRadius: radii.lg, padding: spacing.md },
+  dataWarningText: { flex: 1, ...typography.caption, lineHeight: 18 },
   modeRow: { flexDirection: "row", gap: spacing.sm },
   modeOption: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: spacing.md },
   modeMark: { width: 26, alignItems: "center", justifyContent: "center" },
