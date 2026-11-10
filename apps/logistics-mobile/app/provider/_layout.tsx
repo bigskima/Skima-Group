@@ -1,6 +1,7 @@
 import { Redirect, Stack } from "expo-router";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useSession } from "../../src/session/SessionProvider";
+import { ScreenSkeleton } from "../../src/ui/ScreenSkeleton";
 import { useAppTheme } from "../../src/theme/ThemeProvider";
 
 export default function LegacyProviderLayout() {
@@ -10,7 +11,7 @@ export default function LegacyProviderLayout() {
   if (status === "loading") {
     return (
       <View style={[styles.loading, { backgroundColor: palette.canvas }]}>
-        <ActivityIndicator color={palette.brand} size="large" />
+        <ScreenSkeleton variant="dashboard" cards={2} />
       </View>
     );
   }
