@@ -107,6 +107,16 @@ const appAnalyticsColumns: readonly TableColumn<RecordValue>[] = [
   { key: "ledgerDebits", header: "Ledger debits", render: (row) => row.ledgerDebits === null ? "Restricted" : money(numberValue(row, "ledgerDebits"), recordString(row, "currencyCode") ?? "NGN") },
 ];
 
+
+const SupplierFundsSchema = z.object({
+  currencyCode: z.string().default("NGN"),
+  accounts: z.array(RecordSchema).default([]),
+  recentMovements: z.array(RecordSchema).default([]),
+  fuelPayables: z.array(RecordSchema).default([]),
+  lpgPayables: z.array(RecordSchema).default([]),
+  legacyLpg: RecordSchema.default({}),
+}).passthrough();
+
 type Analytics = z.infer<typeof AnalyticsSchema>;
 type FleetOrder = RecordValue;
 
@@ -380,7 +390,25 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [currency, setCurrency] = useState("NGN");
   const [selectedOrder, setSelectedOrder] = useState<FleetOrder | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer">("bank_transfer");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer">("cash");
+  const [legacyLpgReclassAmount, setLegacyLpgReclassAmount] = useState("");
+  const [legacyLpgReclassReference, setLegacyLpgReclassReference] = useState("");
+  const [legacyLpgReclassNote, setLegacyLpgReclassNote] = useState("");
+  const legacyLpgReclassAttemptsRef = useRef(new Map<string, string>());
+  const [supplierWithdrawalModule, setSupplierWithdrawalModule] = useState<"lpg" | "fuel">("lpg");
+  const [supplierWithdrawalAmount, setSupplierWithdrawalAmount] = useState("");
+  const [supplierWithdrawalReference, setSupplierWithdrawalReference] = useState("");
+  const [supplierWithdrawalDate, setSupplierWithdrawalDate] = useState(() => localDateTimeInput(new Date()));
+  const supplierWithdrawalAttemptsRef = useRef(new Map<string, string>());
+  const [fuelPayableOrderId, setFuelPayableOrderId] = useState("");
+  const [fuelCashPaymentAmount, setFuelCashPaymentAmount] = useState("");
+  const [fuelCashPaymentReference, setFuelCashPaymentReference] = useState("");
+  const [fuelCashPaymentDate, setFuelCashPaymentDate] = useState(() => localDateTimeInput(new Date()));
+  const [fuelCashPaymentNote, setFuelCashPaymentNote] = useState("");
+  const [fuelEvidenceFile, setFuelEvidenceFile] = useState<File | null>(null);
+  const [fuelEvidenceMediaAssetId, setFuelEvidenceMediaAssetId] = useState<string | null>(null);
+  const [fuelEvidenceFileName, setFuelEvidenceFileName] = useState<string | null>(null);
+  const fuelCashPaymentAttemptsRef = useRef(new Map<string, string>());
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => localDateTimeInput(new Date()));
@@ -436,10 +464,25 @@ export function AdminFinancialAnalyticsWorkspace() {
     },
   });
 
+
+  const supplierFunds = useQuery({
+    queryKey: ["platform-supplier-funds", currency],
+    enabled: status === "authenticated" && canRead,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_platform_supplier_funds_workspace", {
+        target_currency_code: currency,
+      });
+      if (error) throw error;
+      return SupplierFundsSchema.parse(data);
+    },
+  });
+
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["platform-financial-analytics"] }),
       queryClient.invalidateQueries({ queryKey: ["platform-product-financial-analytics"] }),
+      queryClient.invalidateQueries({ queryKey: ["platform-supplier-funds"] }),
     ]);
   };
 
@@ -571,6 +614,230 @@ export function AdminFinancialAnalyticsWorkspace() {
       setEvidenceMediaAssetId(null);
       setEvidenceFileName(null);
       await refresh();
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
+
+  const reclassifyLegacyLpgSupplierFunds = useMutation({
+    mutationFn: async () => {
+      const legacy = supplierFunds.data?.legacyLpg;
+      const reclassifiable = numberValue(legacy, "reclassifiableAmount");
+      const amount = Number(legacyLpgReclassAmount);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > reclassifiable) {
+        throw new Error(
+          `Enter an amount up to the reconciled legacy balance of ${money(reclassifiable, currency)}.`,
+        );
+      }
+      const reference = legacyLpgReclassReference.trim();
+      if (reference.length < 3) {
+        throw new Error("Enter the Finance reconciliation reference for the legacy LPG pool.");
+      }
+      const note = legacyLpgReclassNote.trim();
+      const fingerprint = JSON.stringify([currency, amount, reference, note]);
+      const idempotencyKey = legacyLpgReclassAttemptsRef.current.get(fingerprint)
+        ?? createClientIdempotencyKey("admin.lpg.legacy-supplier-fund-reclass", fingerprint);
+      legacyLpgReclassAttemptsRef.current.set(fingerprint, idempotencyKey);
+      const { data, error } = await supabase.rpc("record_platform_legacy_lpg_fund_reclassification", {
+        target_currency_code: currency,
+        target_amount: amount,
+        target_reference: reference,
+        target_note: note || null,
+        target_idempotency_key: idempotencyKey,
+      });
+      if (error) throw error;
+      return data as RecordValue;
+    },
+    onSuccess: async (result) => {
+      setNotice(
+        `Legacy LPG funds reclassified into Supplier Fund · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)}`,
+      );
+      setNoticeTone("success");
+      setLegacyLpgReclassAmount("");
+      setLegacyLpgReclassReference("");
+      setLegacyLpgReclassNote("");
+      legacyLpgReclassAttemptsRef.current.clear();
+      await refresh();
+      await supplierFunds.refetch();
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
+  const recordSupplierCashWithdrawal = useMutation({
+    mutationFn: async () => {
+      const amount = Number(supplierWithdrawalAmount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("Enter a positive amount to withdraw into SKIMA's physical cash float.");
+      }
+      const reference = supplierWithdrawalReference.trim();
+      if (reference.length < 3) {
+        throw new Error("Enter the bank withdrawal slip, teller or cash-withdrawal reference.");
+      }
+      const withdrawnAt = new Date(supplierWithdrawalDate);
+      if (!supplierWithdrawalDate || !Number.isFinite(withdrawnAt.getTime())) {
+        throw new Error("Enter a valid cash withdrawal date and time.");
+      }
+      const fingerprint = JSON.stringify([
+        supplierWithdrawalModule, currency, amount, reference, withdrawnAt.toISOString(),
+      ]);
+      const idempotencyKey = supplierWithdrawalAttemptsRef.current.get(fingerprint)
+        ?? createClientIdempotencyKey("admin.supplier-cash.withdrawal", fingerprint);
+      supplierWithdrawalAttemptsRef.current.set(fingerprint, idempotencyKey);
+      const { data, error } = await supabase.rpc("record_platform_supplier_cash_withdrawal", {
+        target_module_key: supplierWithdrawalModule,
+        target_currency_code: currency,
+        target_amount: amount,
+        target_withdrawal_reference: reference,
+        target_note: "Physical cash withdrawn from SKIMA's operating bank account for station procurement.",
+        target_evidence_media_asset_id: null,
+        target_idempotency_key: idempotencyKey,
+        target_withdrawn_at: withdrawnAt.toISOString(),
+      });
+      if (error) throw error;
+      return data as RecordValue;
+    },
+    onSuccess: async (result) => {
+      setNotice(
+        `${label(supplierWithdrawalModule)} Supplier Fund cash withdrawal recorded · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)}`,
+      );
+      setNoticeTone("success");
+      setSupplierWithdrawalAmount("");
+      setSupplierWithdrawalReference("");
+      setSupplierWithdrawalDate(localDateTimeInput(new Date()));
+      supplierWithdrawalAttemptsRef.current.clear();
+      await refresh();
+      await supplierFunds.refetch();
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
+  const uploadFuelSupplierEvidence = useMutation({
+    mutationFn: async () => {
+      if (!fuelEvidenceFile) throw new Error("Choose a Fuel station cash voucher or signed receipt first.");
+      const ownerUserId = context?.user.id;
+      if (!ownerUserId) throw new Error("The authenticated Admin identity is unavailable.");
+      if (fuelEvidenceFile.size <= 0 || fuelEvidenceFile.size > 10 * 1024 * 1024) {
+        throw new Error("Fuel payment evidence must be a non-empty file no larger than 10 MB.");
+      }
+      const contentType = fuelEvidenceFile.type || "application/octet-stream";
+      if (!(contentType.startsWith("image/") || contentType === "application/pdf")) {
+        throw new Error("Fuel payment evidence must be an image or PDF document.");
+      }
+      const upload = await api.post(
+        "/runtime/media/upload-sessions",
+        {
+          contentType,
+          fileName: fuelEvidenceFile.name,
+          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.upload", `${fuelPayableOrderId}:${fuelEvidenceFile.name}`),
+          storageBucket: "skima-platform-media",
+        },
+        UploadSessionSchema,
+      );
+      const stored = await supabase.storage
+        .from(upload.storageBucket)
+        .uploadToSignedUrl(upload.storagePath, upload.token, fuelEvidenceFile, {
+          contentType,
+          upsert: true,
+        });
+      if (stored.error) throw new Error(stored.error.message || "The Fuel payment evidence upload did not complete.");
+      const media = await api.post(
+        "/runtime/media/assets",
+        {
+          assetTypeKey: "media.fuel.supplier_payment_evidence",
+          byteSize: fuelEvidenceFile.size,
+          contentType,
+          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.asset", `${fuelPayableOrderId}:${fuelEvidenceFile.name}`),
+          metadata: {
+            originalFileName: fuelEvidenceFile.name,
+            purpose: "SKIMA Fuel station cash payment evidence",
+            fuelOrderId: fuelPayableOrderId,
+            moduleKey: "fuel",
+          },
+          ownerUserId,
+          source: "skima.admin.financial.analytics",
+          storageBucket: upload.storageBucket,
+          storagePath: upload.storagePath,
+        },
+        MediaAssetSchema,
+      );
+      return { id: media.id, fileName: fuelEvidenceFile.name };
+    },
+    onSuccess: (result) => {
+      setFuelEvidenceMediaAssetId(result.id);
+      setFuelEvidenceFileName(result.fileName);
+      setNotice("Fuel station cash evidence uploaded and registered.");
+      setNoticeTone("success");
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
+  const recordFuelSupplierCashPayment = useMutation({
+    mutationFn: async () => {
+      const payable = supplierFunds.data?.fuelPayables.find(
+        (row) => recordString(row, "orderId") === fuelPayableOrderId,
+      );
+      if (!payable) throw new Error("Choose a current SKIMA Managed Fuel order with an outstanding station amount.");
+      const amount = Number(fuelCashPaymentAmount);
+      const outstanding = numberValue(payable, "outstandingAmount");
+      if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) {
+        throw new Error("Enter a positive cash amount no greater than this Fuel order's unpaid station supply amount.");
+      }
+      const reference = fuelCashPaymentReference.trim();
+      if (reference.length < 3) throw new Error("Enter the station cash receipt or signed handover voucher reference.");
+      if (fuelEvidenceFile && !fuelEvidenceMediaAssetId) {
+        throw new Error("Upload the selected Fuel station cash evidence before recording the payment.");
+      }
+      const paidAt = new Date(fuelCashPaymentDate);
+      if (!fuelCashPaymentDate || !Number.isFinite(paidAt.getTime())) {
+        throw new Error("Enter a valid Fuel station cash-payment date and time.");
+      }
+      const note = fuelCashPaymentNote.trim();
+      const fingerprint = JSON.stringify([
+        fuelPayableOrderId, amount, reference, paidAt.toISOString(), note,
+      ]);
+      const idempotencyKey = fuelCashPaymentAttemptsRef.current.get(fingerprint)
+        ?? createClientIdempotencyKey("admin.fuel.supplier-cash-payment", fingerprint);
+      fuelCashPaymentAttemptsRef.current.set(fingerprint, idempotencyKey);
+      const { data, error } = await supabase.rpc("record_fuel_supplier_cash_payment", {
+        target_order_id: fuelPayableOrderId,
+        target_amount: amount,
+        target_payment_reference: reference,
+        target_note: note || null,
+        target_evidence_media_asset_id: fuelEvidenceMediaAssetId,
+        target_idempotency_key: idempotencyKey,
+        target_paid_at: paidAt.toISOString(),
+      });
+      if (error) throw error;
+      return data as RecordValue;
+    },
+    onSuccess: async (result) => {
+      setNotice(
+        `Fuel station cash payment recorded · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)} · ${recordString(result, "orderReference") ?? ""}`,
+      );
+      setNoticeTone("success");
+      setFuelPayableOrderId("");
+      setFuelCashPaymentAmount("");
+      setFuelCashPaymentReference("");
+      setFuelCashPaymentDate(localDateTimeInput(new Date()));
+      setFuelCashPaymentNote("");
+      setFuelEvidenceFile(null);
+      setFuelEvidenceMediaAssetId(null);
+      setFuelEvidenceFileName(null);
+      fuelCashPaymentAttemptsRef.current.clear();
+      await refresh();
+      await supplierFunds.refetch();
     },
     onError: (error) => {
       setNotice(readError(error));
@@ -774,20 +1041,20 @@ export function AdminFinancialAnalyticsWorkspace() {
         <DataTable columns={orderColumns} caption="SKIMA Fleet orders and supplier balances" records={fleet.orders as FleetOrder[]}
           getRowKey={(row) => recordString(row, "orderId") ?? JSON.stringify(row)}
           emptyTitle="No SKIMA Fleet orders" emptyMessage="No settled SKIMA Fleet procurement records are available for this period." />
-        {canRecordSupplierPayment && fleet.orders.some((order) => numberValue(order, "supplierOutstanding") > 0) ? (
+        {canRecordSupplierPayment && (supplierFunds.data?.lpgPayables ?? []).some((order) => numberValue(order, "supplierOutstanding") > 0) ? (
           <div className="skima-form-grid">
             <SelectInput
               label="Order with supplier amount not yet recorded as paid"
               value={recordString(selectedOrder, "orderId") ?? ""}
-              options={fleet.orders
+              options={(supplierFunds.data?.lpgPayables ?? [])
                 .filter((order) => numberValue(order, "supplierOutstanding") > 0)
                 .map((order) => ({
-                  label: `${recordString(order, "orderReference") ?? "Order"} · ${money(numberValue(order, "supplierOutstanding"), currency)} not yet recorded`,
+                  label: `${recordString(order, "orderReference") ?? "Order"} · ${recordString(order, "supplierName") ?? "Station"} · ${money(numberValue(order, "supplierOutstanding"), currency)} outstanding`,
                   value: recordString(order, "orderId") ?? "",
                 }))}
               onChange={(event) => {
                 const selectedId = event.currentTarget.value;
-                const selected = fleet.orders.find((order) => recordString(order, "orderId") === selectedId) ?? null;
+                const selected = (supplierFunds.data?.lpgPayables ?? []).find((order) => recordString(order, "orderId") === selectedId) ?? null;
                 setSelectedOrder(selected);
                 setPaymentAmount(selected ? String(numberValue(selected, "supplierOutstanding")) : "");
                 setPaymentReference("");
@@ -812,23 +1079,18 @@ export function AdminFinancialAnalyticsWorkspace() {
             />
             <SelectInput
               label="How SKIMA paid the station"
-              value={paymentMethod}
-              options={[
-                { label: "Bank transfer", value: "bank_transfer" },
-                { label: "Physical cash", value: "cash" },
-              ]}
-              onChange={(event) => {
-                setPaymentMethod(event.currentTarget.value as "cash" | "bank_transfer");
-              }}
+              value="cash"
+              options={[{ label: "Physical cash", value: "cash" }]}
+              onChange={() => setPaymentMethod("cash")}
             />
             <TextInput
-              label={paymentMethod === "bank_transfer" ? "Bank transfer reference (required)" : "Cash voucher / receipt reference (required)"}
+              label="Cash voucher / signed station receipt reference (required)"
               value={paymentReference}
               onChange={(event) => {
                 setPaymentReference(event.currentTarget.value);
               }}
               disabled={!selectedOrder}
-              placeholder={paymentMethod === "bank_transfer" ? "Enter the bank transaction reference" : "Enter the cash voucher or signed handover reference"}
+              placeholder="Enter the cash voucher or signed station handover reference"
             />
             <TextInput
               label="Actual supplier payment date and time"
@@ -879,7 +1141,7 @@ export function AdminFinancialAnalyticsWorkspace() {
             />
             <div className="sk-panel">
               <strong>Payment control</strong>
-              <p className="skima-muted">Use this to record a supplier payment SKIMA has already made. The order must first have a posted SKIMA customer collection. Enter the actual earlier payment time when back-recording. This creates the internal accounting allocation from SKIMA clearing to the supplier-cost control ledger; it does not initiate a bank transfer or independently verify the bank. Both methods require a bank reference or cash voucher / signed handover reference.</p>
+              <p className="skima-muted">Record a physical cash payment SKIMA has already made to the LPG supplier. First withdraw the LPG Supplier Fund into LPG Cash On Hand in the Supplier Funds section above. This action debits Cash On Hand and records the supplier disbursement. It does not credit a station wallet or treat the supplier principal as SKIMA revenue.</p>
               <Button
                 disabled={!selectedOrder || recordSupplierPayment.isPending || Number(paymentAmount) <= 0}
                 isLoading={recordSupplierPayment.isPending}
@@ -894,6 +1156,297 @@ export function AdminFinancialAnalyticsWorkspace() {
 
       <section className="sk-panel stack-md">
         <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Supplier funds · Cash operations</p>
+            <h2>SKIMA procurement funds and physical cash float</h2>
+            <p className="skima-muted">Customer-funded procurement principal is held outside SKIMA revenue. Record the physical cash withdrawal into Cash On Hand first; station cash payments can only be posted from that cash float.</p>
+          </div>
+          <StatusBadge tone="neutral">LPG + Fuel · {currency}</StatusBadge>
+        </div>
+        {supplierFunds.isPending ? (
+          <LoadingState label="Loading supplier balances and cash movement history…" />
+        ) : supplierFunds.error ? (
+          <ErrorState title="Supplier funds unavailable" message={readError(supplierFunds.error)} onRetry={() => void supplierFunds.refetch()} />
+        ) : (
+          <>
+            <div className="skima-grid skima-grid--compact">
+              {(["lpg", "fuel"] as const).map((moduleKey) => {
+                const fund = supplierFunds.data?.accounts.find((row) =>
+                  recordString(row, "moduleKey") === moduleKey && recordString(row, "accountKind") === "supplier_fund"
+                );
+                const cash = supplierFunds.data?.accounts.find((row) =>
+                  recordString(row, "moduleKey") === moduleKey && recordString(row, "accountKind") === "cash_on_hand"
+                );
+                return (
+                  <div className="sk-panel stack-sm" key={moduleKey}>
+                    <strong>{moduleKey === "lpg" ? "SKIMA LPG" : "SKIMA Fuel"} supplier funds</strong>
+                    <MetricTile label="Supplier Fund · not revenue" value={money(numberValue(fund, "balance"), currency)} />
+                    <MetricTile label="Cash On Hand · ready for station" value={money(numberValue(cash, "balance"), currency)} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="sk-panel stack-md">
+              <div>
+                <h3>Legacy LPG supplier funds · reconciliation before use</h3>
+                <p className="skima-muted">Older LPG customer settlements placed supplier principal in the shared clearing account. These legacy funds are not automatically treated as available in the new Supplier Fund. Reclassify only after reconciling the shared clearing ledger and bank position; the system caps the transfer at both the outstanding LPG supplier allocation and the actual clearing balance.</p>
+              </div>
+              <div className="skima-grid skima-grid--compact">
+                <MetricTile label="Legacy LPG supplier principal credited" value={money(numberValue(supplierFunds.data?.legacyLpg, "supplierPrincipalCredited"), currency)} />
+                <MetricTile label="Old supplier cash payments recorded" value={money(numberValue(supplierFunds.data?.legacyLpg, "recordedSupplierCashPaid"), currency)} />
+                <MetricTile label="Available in shared clearing" value={money(numberValue(supplierFunds.data?.legacyLpg, "legacyClearingBalance"), currency)} />
+                <MetricTile label="Maximum safely reclassifiable" value={money(numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount"), currency)} />
+              </div>
+              {numberValue(supplierFunds.data?.legacyLpg, "unreconciledDifference") > 0 ? (
+                <StatusBadge tone="warning">
+                  Reconciliation gap · {money(numberValue(supplierFunds.data?.legacyLpg, "unreconciledDifference"), currency)} · not moved automatically
+                </StatusBadge>
+              ) : (
+                <StatusBadge tone="success">Legacy supplier allocation reconciles to the clearing balance</StatusBadge>
+              )}
+              {canRecordSupplierPayment && numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount") > 0 ? (
+                <div className="skima-form-grid">
+                  <TextInput
+                    label="Amount to move into LPG Supplier Fund"
+                    type="number"
+                    min="0.01"
+                    max={numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount")}
+                    step="0.01"
+                    value={legacyLpgReclassAmount}
+                    onChange={(event) => setLegacyLpgReclassAmount(event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Finance reconciliation reference"
+                    value={legacyLpgReclassReference}
+                    onChange={(event) => setLegacyLpgReclassReference(event.currentTarget.value)}
+                    placeholder="Reference for verified legacy balance"
+                  />
+                  <TextInput
+                    label="Reconciliation note (optional)"
+                    value={legacyLpgReclassNote}
+                    onChange={(event) => setLegacyLpgReclassNote(event.currentTarget.value)}
+                  />
+                </div>
+              ) : null}
+              {canRecordSupplierPayment && numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount") > 0 ? (
+                <Button
+                  disabled={reclassifyLegacyLpgSupplierFunds.isPending || Number(legacyLpgReclassAmount) <= 0 || legacyLpgReclassReference.trim().length < 3}
+                  isLoading={reclassifyLegacyLpgSupplierFunds.isPending}
+                  onClick={() => reclassifyLegacyLpgSupplierFunds.mutate()}
+                >
+                  Reclassify verified legacy funds
+                </Button>
+              ) : null}
+            </div>
+            <div className="sk-panel stack-md">
+              <div>
+                <h3>SKIMA LPG supplier payables · customer escrow funded</h3>
+                <p className="skima-muted">Only approved SKIMA-managed refill procurements with an active customer-funded escrow appear here. Expired holds and cancelled/refunded orders are excluded.</p>
+              </div>
+              <DataTable
+                columns={[
+                  { key: "orderReference", header: "LPG order", render: (row) => recordString(row, "orderReference") ?? "—" },
+                  { key: "supplierName", header: "Station", render: (row) => recordString(row, "supplierName") ?? "—" },
+                  { key: "supplierAmount", header: "Supplier amount", render: (row) => money(numberValue(row, "supplierAmount"), currency) },
+                  { key: "paidAmount", header: "Cash already paid", render: (row) => money(numberValue(row, "paidAmount"), currency) },
+                  { key: "supplierOutstanding", header: "Still outstanding", render: (row) => money(numberValue(row, "supplierOutstanding"), currency) },
+                  { key: "holdStatus", header: "Customer escrow", render: (row) => label(recordString(row, "holdStatus")) },
+                ]}
+                caption="Eligible LPG station cash payments"
+                records={(supplierFunds.data?.lpgPayables ?? []) as RecordValue[]}
+                getRowKey={(row) => recordString(row, "procurementId") ?? JSON.stringify(row)}
+                emptyTitle="No eligible LPG supplier payables"
+                emptyMessage="No approved SKIMA LPG procurements currently have an active customer-funded escrow and unpaid supplier balance."
+              />
+            </div>
+            {canRecordSupplierPayment ? (
+              <div className="sk-panel stack-md">
+                <div>
+                  <h3>Withdraw supplier funds into physical cash</h3>
+                  <p className="skima-muted">Use after cash is physically withdrawn from SKIMA's operating bank account. This records an internal movement from Supplier Fund to Cash On Hand; it does not send money to a station or initiate a bank transfer.</p>
+                </div>
+                <div className="skima-form-grid">
+                  <SelectInput
+                    label="Supplier fund"
+                    value={supplierWithdrawalModule}
+                    options={[
+                      { label: "LPG Supplier Fund", value: "lpg" },
+                      { label: "Fuel Supplier Fund", value: "fuel" },
+                    ]}
+                    onChange={(event) => setSupplierWithdrawalModule(event.currentTarget.value as "lpg" | "fuel")}
+                  />
+                  <TextInput
+                    label="Cash withdrawn"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={supplierWithdrawalAmount}
+                    onChange={(event) => setSupplierWithdrawalAmount(event.currentTarget.value)}
+                    placeholder="Amount physically withdrawn"
+                  />
+                  <TextInput
+                    label="Bank teller / cash withdrawal reference"
+                    value={supplierWithdrawalReference}
+                    onChange={(event) => setSupplierWithdrawalReference(event.currentTarget.value)}
+                    placeholder="ATM, teller or cash voucher reference"
+                  />
+                  <TextInput
+                    label="Actual withdrawal date and time"
+                    type="datetime-local"
+                    value={supplierWithdrawalDate}
+                    onChange={(event) => setSupplierWithdrawalDate(event.currentTarget.value)}
+                  />
+                </div>
+                <Button
+                  disabled={recordSupplierCashWithdrawal.isPending || Number(supplierWithdrawalAmount) <= 0 || supplierWithdrawalReference.trim().length < 3}
+                  isLoading={recordSupplierCashWithdrawal.isPending}
+                  onClick={() => recordSupplierCashWithdrawal.mutate()}
+                >
+                  Record cash withdrawal to Cash On Hand
+                </Button>
+              </div>
+            ) : null}
+            {canRecordSupplierPayment ? (
+              <div className="sk-panel stack-md">
+                <div>
+                  <h3>Record Fuel station cash payment</h3>
+                  <p className="skima-muted">For SKIMA Managed Fuel only. The payment consumes the Fuel Cash On Hand balance and is matched to the station branch and its order. It never credits the station wallet.</p>
+                </div>
+                <SelectInput
+                  label="SKIMA Managed Fuel order"
+                  value={fuelPayableOrderId}
+                  options={[
+                    { label: "Choose an order with an outstanding supplier amount", value: "" },
+                    ...(supplierFunds.data?.fuelPayables ?? []).map((row) => ({
+                      label: `${recordString(row, "orderReference") ?? "Fuel order"} · ${recordString(row, "supplierName") ?? recordString(row, "branchName") ?? "Station"} · ${money(numberValue(row, "outstandingAmount"), currency)} outstanding`,
+                      value: recordString(row, "orderId") ?? "",
+                    })),
+                  ]}
+                  onChange={(event) => {
+                    const id = event.currentTarget.value;
+                    const row = supplierFunds.data?.fuelPayables.find((item) => recordString(item, "orderId") === id);
+                    setFuelPayableOrderId(id);
+                    setFuelCashPaymentAmount(row ? String(numberValue(row, "outstandingAmount")) : "");
+                    setFuelCashPaymentReference("");
+                    setFuelCashPaymentDate(localDateTimeInput(new Date()));
+                    setFuelCashPaymentNote("");
+                    setFuelEvidenceFile(null);
+                    setFuelEvidenceMediaAssetId(null);
+                    setFuelEvidenceFileName(null);
+                  }}
+                />
+                <div className="skima-form-grid">
+                  <TextInput
+                    label="Cash paid to station"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={fuelCashPaymentAmount}
+                    disabled={!fuelPayableOrderId}
+                    onChange={(event) => setFuelCashPaymentAmount(event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Station cash receipt / signed voucher reference"
+                    value={fuelCashPaymentReference}
+                    disabled={!fuelPayableOrderId}
+                    onChange={(event) => setFuelCashPaymentReference(event.currentTarget.value)}
+                    placeholder="Reference for the physical cash handover"
+                  />
+                  <TextInput
+                    label="Actual station payment date and time"
+                    type="datetime-local"
+                    value={fuelCashPaymentDate}
+                    disabled={!fuelPayableOrderId}
+                    onChange={(event) => setFuelCashPaymentDate(event.currentTarget.value)}
+                  />
+                </div>
+                <TextInput
+                  label="Station cash receipt / payment evidence file (optional)"
+                  type="file"
+                  accept="image/*,.pdf"
+                  disabled={!fuelPayableOrderId || uploadFuelSupplierEvidence.isPending}
+                  onChange={(event) => {
+                    setFuelEvidenceFile(event.currentTarget.files?.[0] ?? null);
+                    setFuelEvidenceMediaAssetId(null);
+                    setFuelEvidenceFileName(null);
+                  }}
+                />
+                <div className="skima-action-row">
+                  <Button
+                    variant="outline"
+                    disabled={!fuelPayableOrderId || !fuelEvidenceFile || uploadFuelSupplierEvidence.isPending}
+                    isLoading={uploadFuelSupplierEvidence.isPending}
+                    onClick={() => uploadFuelSupplierEvidence.mutate()}
+                  >
+                    Upload Fuel payment evidence
+                  </Button>
+                  {fuelEvidenceMediaAssetId ? (
+                    <StatusBadge tone="success">Evidence attached: {fuelEvidenceFileName ?? "File uploaded"}</StatusBadge>
+                  ) : fuelEvidenceFile ? (
+                    <StatusBadge tone="warning">File selected · upload required before recording</StatusBadge>
+                  ) : (
+                    <StatusBadge>Optional · 10 MB maximum · image or PDF</StatusBadge>
+                  )}
+                </div>
+                <TextAreaInput
+                  label="Payment note (optional)"
+                  value={fuelCashPaymentNote}
+                  disabled={!fuelPayableOrderId}
+                  onChange={(event) => setFuelCashPaymentNote(event.currentTarget.value)}
+                  rows={2}
+                />
+                <Button
+                  disabled={!fuelPayableOrderId || recordFuelSupplierCashPayment.isPending || Number(fuelCashPaymentAmount) <= 0 || fuelCashPaymentReference.trim().length < 3}
+                  isLoading={recordFuelSupplierCashPayment.isPending}
+                  onClick={() => recordFuelSupplierCashPayment.mutate()}
+                >
+                  Record Fuel station cash payment
+                </Button>
+                <DataTable
+                  columns={[
+                    { key: "orderReference", header: "Fuel order", render: (row) => recordString(row, "orderReference") ?? "—" },
+                    { key: "supplierName", header: "Station", render: (row) => recordString(row, "supplierName") ?? "—" },
+                    { key: "supplierAmount", header: "Station supply amount", render: (row) => money(numberValue(row, "supplierAmount"), currency) },
+                    { key: "paidAmount", header: "Cash already paid", render: (row) => money(numberValue(row, "paidAmount"), currency) },
+                    { key: "outstandingAmount", header: "Still outstanding", render: (row) => money(numberValue(row, "outstandingAmount"), currency) },
+                    { key: "stageKey", header: "Order stage", render: (row) => label(recordString(row, "stageKey")) },
+                  ]}
+                  caption="SKIMA Managed Fuel supplier payables"
+                  records={(supplierFunds.data?.fuelPayables ?? []) as RecordValue[]}
+                  getRowKey={(row) => recordString(row, "orderId") ?? JSON.stringify(row)}
+                  emptyTitle="No Fuel supplier payables"
+                  emptyMessage="No SKIMA Managed Fuel orders currently have an unpaid supplier amount."
+                />
+              </div>
+            ) : null}
+            <h3>Supplier cash movement history</h3>
+            <DataTable
+              columns={[
+                { key: "moduleKey", header: "App", render: (row) => label(recordString(row, "moduleKey")) },
+                { key: "movementType", header: "Movement", render: (row) => {
+                  const kind = recordString(row, "movementType");
+                  return kind === "cash_withdrawal"
+                    ? "Supplier Fund → Cash On Hand"
+                    : kind === "fund_reclassification"
+                      ? "Legacy clearing → Supplier Fund"
+                      : "Cash paid to station";
+                } },
+                { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? currency) },
+                { key: "paymentReference", header: "Cash reference", render: (row) => recordString(row, "paymentReference") ?? "—" },
+                { key: "occurredAt", header: "Date", render: (row) => recordString(row, "occurredAt") ? new Date(recordString(row, "occurredAt") as string).toLocaleString() : "—" },
+              ]}
+              caption="Supplier fund withdrawals and station cash payments"
+              records={(supplierFunds.data?.recentMovements ?? []) as RecordValue[]}
+              getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
+              emptyTitle="No supplier cash movements recorded"
+              emptyMessage="Cash withdrawals and station payments will appear here after they are recorded."
+            />
+          </>
+        )}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header">
           <div><p className="admin-section-kicker">Supplier expenses</p><h2>Admin-recorded SKIMA payments to stations</h2></div>
           <StatusBadge tone="neutral">Separate from customer collections</StatusBadge>
         </div>
@@ -902,7 +1455,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           emptyTitle="No supplier payments recorded" emptyMessage="No supplier disbursement entries have been recorded yet. This means the database has no payment evidence; it does not prove the station was not physically paid." />
         <div className="skima-grid skima-grid--compact">
           <MetricTile label="Procurement cost recorded" value={money(fleet.procurementCost, currency)} />
-          <MetricTile label="Supplier cash / bank transfer recorded" value={money(fleet.supplierPaid, currency)} />
+          <MetricTile label="Supplier cash paid" value={money(fleet.supplierPaid, currency)} />
           <MetricTile label="Supplier balance outstanding" value={money(fleet.supplierOutstanding, currency)} tone={fleet.supplierOutstanding > 0 ? "warning" : "success"} />
           <MetricTile label="Cumulative supplier disbursements in expense ledger" value={money(supplierExpenseBalance, currency)} />
         </div>
