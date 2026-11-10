@@ -5,6 +5,7 @@ import { ArrowLeft, Bell, CheckCheck, CheckCircle2, ChevronRight, ShieldCheck, X
 import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { useSession } from "../session/SessionProvider";
 import { registerLogisticsPushDevice, requestLogisticsNotificationPermission } from "../notifications/LogisticsNotificationLifecycle";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -249,7 +250,7 @@ export function LogisticsNotificationsScreen() {
       </View>
 
       {center.isPending ? (
-        <View style={styles.loading}><ActivityIndicator color={palette.brand} /></View>
+        <ScreenSkeleton variant="list" cards={3}/>
       ) : center.error ? (
         <StatePanel
           title="Notifications unavailable"
