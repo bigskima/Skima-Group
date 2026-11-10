@@ -59,6 +59,7 @@ export function ProviderCompanyScreen() {
   const [destinationSearch, setDestinationSearch] = useState("");
   const [destinationPlace, setDestinationPlace] = useState<Place | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeWorkspaceSection, setActiveWorkspaceSection] = useState<"profile" | "application" | "fleet" | "wallet" | "services" | "coverage">("application");
 
   const activeCategories = (categoriesQuery.data ?? []).filter((item) => asString(item, "status") === "active");
   const organization = nested(company, "organization");
@@ -159,7 +160,28 @@ export function ProviderCompanyScreen() {
                 </View>
               </Card>
 
-              <View style={styles.section}>
+              <View style={styles.workspaceSections}>
+                {([
+                  ["profile", "Company identity", "Public logo and company details"],
+                  ["application", "Application", "Verification, evidence and approval"],
+                  ["fleet", "Fleet & drivers", "Vehicles and operating team"],
+                  ["wallet", "Company wallet", "Fund operating fees"],
+                  ["services", "Services", String(availableServices.length) + " services configured"],
+                  ["coverage", "Operating coverage", String(coverage.data?.length ?? 0) + " areas configured"],
+                ] as const).map(([key, title, detail]) => {
+                  const selected = activeWorkspaceSection === key;
+                  return (
+                    <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected }}
+                      onPress={() => setActiveWorkspaceSection(key)}
+                      style={[styles.workspaceSection, { backgroundColor: selected ? palette.brandSoft : palette.surface, borderColor: selected ? palette.brand : palette.border }]}>
+                      <Text style={[styles.workspaceSectionTitle, { color: selected ? palette.brand : palette.ink }]}>{title}</Text>
+                      <Text style={[styles.workspaceSectionCopy, { color: palette.muted }]}>{detail}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={[styles.section, { display: activeWorkspaceSection === "profile" ? "flex" : "none" }]}>
                 <SectionHeader title="Public company identity" description="These verified business images help customers recognise the company they are booking." />
                 <LogisticsMediaPicker
                   entityType="logistics_company"
@@ -181,18 +203,24 @@ export function ProviderCompanyScreen() {
                 />
               </View>
 
-              <LogisticsCompanyApplicationPanel
-                organizationId={organizationId ?? ""}
-                displayName={asString(company, "public_name") ?? ""}
-                legalName={asString(organization, "legal_name")}
-                registrationStatus={registrationStatus}
-              />
+              <View style={{ display: activeWorkspaceSection === "application" ? "flex" : "none" }}>
+                <LogisticsCompanyApplicationPanel
+                  organizationId={organizationId ?? ""}
+                  displayName={asString(company, "public_name") ?? ""}
+                  legalName={asString(organization, "legal_name")}
+                  registrationStatus={registrationStatus}
+                />
+              </View>
 
-              <LogisticsCompanyFleetPanel organizationId={organizationId ?? ""} />
+              <View style={{ display: activeWorkspaceSection === "fleet" ? "flex" : "none" }}>
+                <LogisticsCompanyFleetPanel organizationId={organizationId ?? ""} />
+              </View>
 
-              <ProviderWalletFundingPanel organizationId={organizationId ?? ""} />
+              <View style={{ display: activeWorkspaceSection === "wallet" ? "flex" : "none" }}>
+                <ProviderWalletFundingPanel organizationId={organizationId ?? ""} />
+              </View>
 
-              <View style={styles.section}>
+              <View style={[styles.section, { display: activeWorkspaceSection === "services" ? "flex" : "none" }]}>
                 <SectionHeader title="Your services" description="Choose service categories you can fulfil and state your capacity." />
                 {services.isPending ? <ScreenSkeleton cards={1} /> : services.error ? <StatePanel title="Services unavailable" description="Your service list could not be loaded." retry={() => void services.refetch()} /> : availableServices.length ? (
                   <View style={styles.serviceList}>
@@ -233,7 +261,7 @@ export function ProviderCompanyScreen() {
                 )}
               </View>
 
-              <View style={styles.section}>
+              <View style={[styles.section, { display: activeWorkspaceSection === "coverage" ? "flex" : "none" }]}>
                 <SectionHeader title="Operating coverage" description="Set the locations where your company can pick up and deliver." />
                 {coverage.isPending ? <ScreenSkeleton cards={1} /> : coverage.error ? <StatePanel title="Coverage unavailable" description="Your service coverage could not be loaded." retry={() => void coverage.refetch()} /> : coverage.data?.length ? (
                   <View style={styles.coverageList}>
@@ -481,6 +509,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: spacing.sm },
   content: { gap: spacing.lg },
   section: { gap: 12 },
+  workspaceSections: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  workspaceSection: { width: "48%", minHeight: 66, borderWidth: 1, borderRadius: radii.md, padding: 10, gap: 5 },
+  workspaceSectionTitle: { fontSize: 10, fontWeight: "900" },
+  workspaceSectionCopy: { ...typography.caption, fontSize: 9, lineHeight: 13 },
   sectionIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   sectionTitle: { ...typography.heading, fontSize: 18 },
   sectionBody: { ...typography.caption, fontSize: 11, lineHeight: 18 },
