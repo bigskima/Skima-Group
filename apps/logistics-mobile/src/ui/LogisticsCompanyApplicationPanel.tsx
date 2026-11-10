@@ -749,7 +749,7 @@ export function LogisticsCompanyApplicationPanel({
           ) : null}
 
           {activeSection === "submit" ? (
-          {canEdit && applicationCanBeSubmitted ? (
+          canEdit && applicationCanBeSubmitted ? (
             <Card padding="lg">
               <Text style={[styles.heading, { color: palette.ink }]}>Submit for SKIMA review</Text>
               <Text style={[styles.copy, { color: palette.muted }]}>
