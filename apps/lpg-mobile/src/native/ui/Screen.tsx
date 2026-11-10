@@ -18,12 +18,14 @@ export function Screen({
   subtitle,
   action,
   refreshControl,
+  denseHeader = false,
 }: PropsWithChildren<{
   title: string;
   eyebrow?: string;
   subtitle?: string;
   action?: ReactNode;
   refreshControl?: ReactElement<RefreshControlProps>;
+  denseHeader?: boolean;
 }>) {
   const { palette } = useAppTheme();
   const network = useNetInfo();
@@ -70,7 +72,7 @@ export function Screen({
           </View>
         ) : null}
 
-        <View style={[styles.heading, compact && styles.headingCompact]}>
+        <View style={[styles.heading, compact && styles.headingCompact, denseHeader && styles.headingDense]}>
           <View style={styles.headingCopy}>
             {eyebrow ? (
               <View style={[styles.eyebrowPill, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}>
@@ -83,6 +85,7 @@ export function Screen({
                 styles.title,
                 { color: palette.ink },
                 compact && styles.titleMobile,
+                denseHeader && styles.titleDense,
               ]}
             >
               {title}
@@ -91,7 +94,7 @@ export function Screen({
               <Text style={[styles.subtitle, { color: palette.muted }]}>{subtitle}</Text>
             ) : null}
           </View>
-          {action ? <View style={[styles.action, compact && styles.actionCompact]}>{action}</View> : null}
+          {action ? <View style={[styles.action, compact && styles.actionCompact, denseHeader && styles.actionDense]}>{action}</View> : null}
         </View>
 
         <View style={styles.body}>{children}</View>
@@ -135,6 +138,9 @@ const styles = StyleSheet.create({
   },
   title: { ...typography.title },
   titleMobile: { fontSize: 27, lineHeight: 32, letterSpacing: -0.7 },
+  headingDense: { minHeight: 46, marginBottom: 10, paddingTop: 0 },
+  titleDense: { fontSize: 22, lineHeight: 27, letterSpacing: -0.55 },
+  actionDense: { alignSelf: "center", maxWidth: "48%", paddingTop: 0 },
   subtitle: { ...typography.body, maxWidth: 620, fontSize: 13, lineHeight: 19 },
   offline: {
     flexDirection: "row",
