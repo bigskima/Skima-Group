@@ -195,7 +195,7 @@ export function LogisticsStoreScreen() {
     },
     onSuccess:async(result)=>{
       const order=record(result);const orderId=asString(order,"orderId")??(typeof result==="string"?result:"received");
-      setCart([]);setNote("");setCheckoutKey(idempotency());
+      setCart([]);setNote("");setCheckoutKey(idempotency());setActiveSection("orders");
       await Promise.all([wallets.refetch(),balances.refetch(),queryClient.invalidateQueries({queryKey:["skima-logistics","store"]})]);
       Alert.alert("Payment received",`Your SKIMA Store order ${orderId==="received"?"has been received":`(${orderId.slice(0,8).toUpperCase()}) is confirmed`}. ${money(total??cartTotal,currency)} is held securely until your order is completed.`);
     },
