@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Share, Text, View } from "react-native";
+import { Alert, Share, Text, View } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { CheckCircle2, Receipt, Share2, ShieldCheck } from "lucide-react-native";
@@ -8,6 +8,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, State, Notice } from "./BillsUI";
 import { useSession } from "../session/SessionProvider";
 import { ServiceDiscoveryModal } from "./ServiceDiscoveryModal";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 
 function escapeHtml(value:string){const map:Record<string,string>={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};return value.replace(/[&<>"']/g,character=>map[character]??character);}
 export function BillsReceiptScreen({id}:{id:string}){
@@ -41,7 +42,7 @@ export function BillsReceiptScreen({id}:{id:string}){
  };
  return <Page>
   <SectionTitle title="Bill receipt" caption="A clear record of the request and provider outcome."/>
-  {query.isPending?<ActivityIndicator color={palette.brand}/>:query.error?<State title="Receipt unavailable" body="Your receipt could not be loaded. Try refreshing." retry={()=>void query.refetch()}/>:!bill?<State title="Receipt not found" body="This bill request is not present in your visible history."/>:<>
+  {query.isPending?<ScreenSkeleton variant="detail" cards={2}/>:query.error?<State title="Receipt unavailable" body="Your receipt could not be loaded. Try refreshing." retry={()=>void query.refetch()}/>:!bill?<State title="Receipt not found" body="This bill request is not present in your visible history."/>:<>
    <Card style={{alignItems:"center",gap:8,paddingVertical:22}}>
     <View style={{width:50,height:50,borderRadius:17,backgroundColor:palette.brandSoft,alignItems:"center",justifyContent:"center"}}><Receipt color={palette.brand} size={23}/></View>
     <Text style={{fontSize:10,color:palette.muted,fontWeight:"900",letterSpacing:1}}>SKIMA BILLS</Text>
