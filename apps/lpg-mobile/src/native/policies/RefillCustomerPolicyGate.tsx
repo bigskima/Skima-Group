@@ -1,10 +1,11 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { PropsWithChildren } from "react";
 import { useCurrentPolicy, useCurrentPolicyAcceptance } from "../api/policies";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography } from "../theme/tokens";
 import { PolicyDocumentScreen } from "../ui/PolicyDocumentScreen";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 
 export function RefillCustomerPolicyGate({ children }: PropsWithChildren) {
   const session = useSession();
@@ -18,12 +19,7 @@ export function RefillCustomerPolicyGate({ children }: PropsWithChildren) {
 
   if (session.status !== "authenticated") return <>{children}</>;
   if (policy.isPending || (policy.data?.published === true && acceptance.isPending)) {
-    return (
-      <View style={[styles.status, { backgroundColor: palette.canvas }]}>
-        <ActivityIndicator color={palette.brand} />
-        <Text style={[styles.copy, { color: palette.muted }]}>Preparing your current SKIMA Refill terms…</Text>
-      </View>
-    );
+    return <ScreenSkeleton variant="policy" cards={1} />;
   }
   if (policy.error || acceptance.error || policy.data?.published !== true) {
     return (
