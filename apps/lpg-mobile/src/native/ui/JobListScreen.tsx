@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { MapPin, PackageCheck, Route, ScanLine, Search, UserCheck } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useLpgConfig } from "../api/domains";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useManagedDriverEarnings } from "../api/managedDriverEarnings";
 import {
   cylinderPermanentIdentifier,
@@ -144,10 +145,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
       ) : null}
 
       {jobs.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading jobs…</Text>
-        </View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : jobs.error ? (
         <EmptyState
           title="Couldn't load jobs"
