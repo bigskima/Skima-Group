@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, Fuel, KeyRound, MapPin, Package, PhoneCall, RotateCcw, ShieldCheck, Truck } from "lucide-react-native";
-import { ActivityIndicator, Linking, StyleSheet, Text, TextInput, View } from "react-native";
+import { Linking, StyleSheet, Text, TextInput, View } from "react-native";
 import { useState } from "react";
+import { ScreenSkeleton, SkeletonRows } from "./ScreenSkeleton";
 import type { ReactNode } from "react";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
@@ -175,10 +176,7 @@ export function FuelOrderDetailsScreen() {
       action={<AppButton label="Back" size="sm" variant="ghost" onPress={() => router.back()} />}
     >
       {operations.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.muted, { color: palette.muted }]}>Loading your Fuel order…</Text>
-        </View>
+        <ScreenSkeleton variant="detail" cards={2} />
       ) : operations.error || !order ? (
         <EmptyState
           title="This Fuel order is not available"
@@ -257,7 +255,7 @@ export function FuelOrderDetailsScreen() {
 
           <Card title="Activity history" description="The operational history is recorded as the station and driver complete each verified step.">
             {events.isPending ? (
-              <View style={styles.loadingSmall}><ActivityIndicator color={palette.brand} /></View>
+              <SkeletonRows rows={2} compact />
             ) : events.error ? (
               <Text style={[styles.muted, { color: palette.muted }]}>The activity history could not be refreshed.</Text>
             ) : (events.data ?? []).length === 0 ? (
