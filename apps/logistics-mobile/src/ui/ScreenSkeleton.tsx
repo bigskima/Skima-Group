@@ -133,13 +133,13 @@ export function ScreenSkeleton({
 
   return (
     <View style={styles.stack}>
-      {variant !== "list" ? <Animated.View style={[styles.hero, { backgroundColor: fill, opacity, height: variant === "dashboard" ? 142 : compact ? 74 : 112 }]} /> : null}
+      <Animated.View style={[styles.hero, { backgroundColor: fill, opacity, height: variant === "dashboard" ? 142 : compact ? 74 : 112 }]} />
       {variant === "dashboard" ? (
         <View style={styles.metricRow}>
           {Array.from({ length: 2 }, (_, index) => <Animated.View key={index} style={[styles.metric, { backgroundColor: palette.surface, borderColor: palette.border, opacity }]}><View style={[styles.line, { backgroundColor: fill, width: "50%" }]} /><View style={[styles.line, { backgroundColor: fill, width: "76%", height: 18 }]} /></Animated.View>)}
         </View>
       ) : null}
-      <SkeletonRows rows={cards} compact={compact || variant === "list"} />
+      <SkeletonRows rows={cards} compact={compact} />
     </View>
   );
 }
