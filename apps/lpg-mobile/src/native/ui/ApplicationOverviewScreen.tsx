@@ -621,7 +621,7 @@ export function ApplicationOverviewScreen({
   if (applications.isPending || types.isPending || requirements.isPending) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
-        <ActivityIndicator color={palette.brand} />
+        <ScreenSkeleton variant="form" cards={2} />
       </Screen>
     );
   }
