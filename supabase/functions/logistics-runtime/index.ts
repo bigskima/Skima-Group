@@ -266,6 +266,56 @@ async function handleLogisticsRequest(
     return jsonResponse({ ok: true, data: result.data, requestId: id });
   }
 
+  if (routePath === "/runtime/logistics/company/earnings/transfer-to-personal" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    const organizationId = requireUuid(p.organizationId, "organizationId");
+    const customerWalletId = requireUuid(p.customerWalletId, "customerWalletId");
+    const amount = optionalNumber(p.amount, "amount") ?? 0;
+    const idempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
+    if (amount <= 0) throw new RequestValidationError("amount must be greater than zero.");
+
+    const companyPermission = await supabase.rpc("can_manage_logistics_company", {
+      target_organization_id: organizationId,
+    });
+    if (companyPermission.error) return databaseError(companyPermission.error, id);
+    if (companyPermission.data !== true) {
+      return jsonResponse({ ok: false, error: "company_wallet_access_denied", requestId: id }, 403);
+    }
+
+    const ownerWallet = await supabase.from("wallet_accounts")
+      .select("id,currency_code")
+      .eq("id", customerWalletId)
+      .eq("wallet_type", "customer")
+      .eq("owner_entity_type", "user")
+      .eq("owner_entity_id", requesterUserId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (ownerWallet.error) return databaseError(ownerWallet.error, id);
+    if (!ownerWallet.data) {
+      return jsonResponse({
+        ok: false,
+        error: "personal_wallet_required",
+        message: "Choose your own active SKIMA Wallet to receive the company transfer.",
+        requestId: id,
+      }, 403);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const result = await serviceClient.rpc("transfer_logistics_company_earnings_to_owner_wallet", {
+      target_organization_id: organizationId,
+      target_owner_user_id: requesterUserId,
+      target_owner_wallet_id: customerWalletId,
+      target_amount: amount,
+      target_idempotency_key: idempotencyKey,
+    });
+    if (result.error) return databaseError(result.error, id);
+    return jsonResponse({ ok: true, data: result.data, requestId: id });
+  }
+
   if (routePath === "/runtime/logistics/company/profile" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
