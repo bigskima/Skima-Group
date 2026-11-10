@@ -166,6 +166,7 @@
     "20261109053653_store_settlement_event_log_terminal.sql",
     "20261109120000_skima_whatsapp_support_handoff.sql",
     "20261109153000_skima_whatsapp_four_app_ordering.sql",
-    "20261110080000_fuel_customer_container_exchange.sql"
+    "20261110080000_fuel_customer_container_exchange.sql",
+    "20261110193000_skima_managed_supplier_funds_cash_cycle.sql"
   ]
 }
