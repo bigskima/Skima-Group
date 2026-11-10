@@ -113,6 +113,7 @@ const SupplierFundsSchema = z.object({
   accounts: z.array(RecordSchema).default([]),
   recentMovements: z.array(RecordSchema).default([]),
   fuelPayables: z.array(RecordSchema).default([]),
+  legacyLpg: RecordSchema.default({}),
 }).passthrough();
 
 type Analytics = z.infer<typeof AnalyticsSchema>;
@@ -389,6 +390,10 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [selectedOrder, setSelectedOrder] = useState<FleetOrder | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer">("cash");
+  const [legacyLpgReclassAmount, setLegacyLpgReclassAmount] = useState("");
+  const [legacyLpgReclassReference, setLegacyLpgReclassReference] = useState("");
+  const [legacyLpgReclassNote, setLegacyLpgReclassNote] = useState("");
+  const legacyLpgReclassAttemptsRef = useRef(new Map<string, string>());
   const [supplierWithdrawalModule, setSupplierWithdrawalModule] = useState<"lpg" | "fuel">("lpg");
   const [supplierWithdrawalAmount, setSupplierWithdrawalAmount] = useState("");
   const [supplierWithdrawalReference, setSupplierWithdrawalReference] = useState("");
@@ -612,6 +617,53 @@ export function AdminFinancialAnalyticsWorkspace() {
     },
   });
 
+
+  const reclassifyLegacyLpgSupplierFunds = useMutation({
+    mutationFn: async () => {
+      const legacy = supplierFunds.data?.legacyLpg;
+      const reclassifiable = numberValue(legacy, "reclassifiableAmount");
+      const amount = Number(legacyLpgReclassAmount);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > reclassifiable) {
+        throw new Error(
+          `Enter an amount up to the reconciled legacy balance of ${money(reclassifiable, currency)}.`,
+        );
+      }
+      const reference = legacyLpgReclassReference.trim();
+      if (reference.length < 3) {
+        throw new Error("Enter the Finance reconciliation reference for the legacy LPG pool.");
+      }
+      const note = legacyLpgReclassNote.trim();
+      const fingerprint = JSON.stringify([currency, amount, reference, note]);
+      const idempotencyKey = legacyLpgReclassAttemptsRef.current.get(fingerprint)
+        ?? createClientIdempotencyKey("admin.lpg.legacy-supplier-fund-reclass", fingerprint);
+      legacyLpgReclassAttemptsRef.current.set(fingerprint, idempotencyKey);
+      const { data, error } = await supabase.rpc("record_platform_legacy_lpg_fund_reclassification", {
+        target_currency_code: currency,
+        target_amount: amount,
+        target_reference: reference,
+        target_note: note || null,
+        target_idempotency_key: idempotencyKey,
+      });
+      if (error) throw error;
+      return data as RecordValue;
+    },
+    onSuccess: async (result) => {
+      setNotice(
+        `Legacy LPG funds reclassified into Supplier Fund · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)}`,
+      );
+      setNoticeTone("success");
+      setLegacyLpgReclassAmount("");
+      setLegacyLpgReclassReference("");
+      setLegacyLpgReclassNote("");
+      legacyLpgReclassAttemptsRef.current.clear();
+      await refresh();
+      await supplierFunds.refetch();
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
 
   const recordSupplierCashWithdrawal = useMutation({
     mutationFn: async () => {
@@ -1061,6 +1113,58 @@ export function AdminFinancialAnalyticsWorkspace() {
                 );
               })}
             </div>
+            <div className="sk-panel stack-md">
+              <div>
+                <h3>Legacy LPG supplier funds · reconciliation before use</h3>
+                <p className="skima-muted">Older LPG customer settlements placed supplier principal in the shared clearing account. These legacy funds are not automatically treated as available in the new Supplier Fund. Reclassify only after reconciling the shared clearing ledger and bank position; the system caps the transfer at both the outstanding LPG supplier allocation and the actual clearing balance.</p>
+              </div>
+              <div className="skima-grid skima-grid--compact">
+                <MetricTile label="Legacy LPG supplier principal credited" value={money(numberValue(supplierFunds.data?.legacyLpg, "supplierPrincipalCredited"), currency)} />
+                <MetricTile label="Old supplier cash payments recorded" value={money(numberValue(supplierFunds.data?.legacyLpg, "recordedSupplierCashPaid"), currency)} />
+                <MetricTile label="Available in shared clearing" value={money(numberValue(supplierFunds.data?.legacyLpg, "legacyClearingBalance"), currency)} />
+                <MetricTile label="Maximum safely reclassifiable" value={money(numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount"), currency)} />
+              </div>
+              {numberValue(supplierFunds.data?.legacyLpg, "unreconciledDifference") > 0 ? (
+                <StatusBadge tone="warning">
+                  Reconciliation gap · {money(numberValue(supplierFunds.data?.legacyLpg, "unreconciledDifference"), currency)} · not moved automatically
+                </StatusBadge>
+              ) : (
+                <StatusBadge tone="success">Legacy supplier allocation reconciles to the clearing balance</StatusBadge>
+              )}
+              {canRecordSupplierPayment && numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount") > 0 ? (
+                <div className="skima-form-grid">
+                  <TextInput
+                    label="Amount to move into LPG Supplier Fund"
+                    type="number"
+                    min="0.01"
+                    max={numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount")}
+                    step="0.01"
+                    value={legacyLpgReclassAmount}
+                    onChange={(event) => setLegacyLpgReclassAmount(event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Finance reconciliation reference"
+                    value={legacyLpgReclassReference}
+                    onChange={(event) => setLegacyLpgReclassReference(event.currentTarget.value)}
+                    placeholder="Reference for verified legacy balance"
+                  />
+                  <TextInput
+                    label="Reconciliation note (optional)"
+                    value={legacyLpgReclassNote}
+                    onChange={(event) => setLegacyLpgReclassNote(event.currentTarget.value)}
+                  />
+                </div>
+              ) : null}
+              {canRecordSupplierPayment && numberValue(supplierFunds.data?.legacyLpg, "reclassifiableAmount") > 0 ? (
+                <Button
+                  disabled={reclassifyLegacyLpgSupplierFunds.isPending || Number(legacyLpgReclassAmount) <= 0 || legacyLpgReclassReference.trim().length < 3}
+                  isLoading={reclassifyLegacyLpgSupplierFunds.isPending}
+                  onClick={() => reclassifyLegacyLpgSupplierFunds.mutate()}
+                >
+                  Reclassify verified legacy funds
+                </Button>
+              ) : null}
+            </div>
             {canRecordSupplierPayment ? (
               <div className="sk-panel stack-md">
                 <div>
@@ -1194,7 +1298,14 @@ export function AdminFinancialAnalyticsWorkspace() {
             <DataTable
               columns={[
                 { key: "moduleKey", header: "App", render: (row) => label(recordString(row, "moduleKey")) },
-                { key: "movementType", header: "Movement", render: (row) => recordString(row, "movementType") === "cash_withdrawal" ? "Supplier Fund → Cash On Hand" : "Cash paid to station" },
+                { key: "movementType", header: "Movement", render: (row) => {
+                  const kind = recordString(row, "movementType");
+                  return kind === "cash_withdrawal"
+                    ? "Supplier Fund → Cash On Hand"
+                    : kind === "fund_reclassification"
+                      ? "Legacy clearing → Supplier Fund"
+                      : "Cash paid to station";
+                } },
                 { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? currency) },
                 { key: "paymentReference", header: "Cash reference", render: (row) => recordString(row, "paymentReference") ?? "—" },
                 { key: "occurredAt", header: "Date", render: (row) => recordString(row, "occurredAt") ? new Date(recordString(row, "occurredAt") as string).toLocaleString() : "—" },
