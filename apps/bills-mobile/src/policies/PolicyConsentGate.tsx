@@ -300,6 +300,7 @@ const styles = StyleSheet.create({
   eyebrow: { ...typography.eyebrow, fontSize: 8, letterSpacing: 0.5 },
   heroTitle: { ...typography.title, fontSize: 20, lineHeight: 25, letterSpacing: -0.35 },
   copy: { ...typography.body, fontSize: 12, lineHeight: 18 },
+  card: { borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 10 },
   summary: { gap: 7, padding: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
   metaStrip: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   publishedTag: { borderRadius: radii.pill, paddingHorizontal: 9, paddingVertical: 4 },
