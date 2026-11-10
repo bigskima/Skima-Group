@@ -2,8 +2,9 @@ import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { Bell, BellRing, CheckCheck, ChevronRight, MessageCircle, ShieldCheck, Truck, Wallet } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useOrganizationInvitations } from "../api/domains";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotificationCenter } from "../api/notifications";
 import { firstString, nestedRecord, recordId, type PlatformRecord } from "../api/records";
 import { invitationIdFromMessage, isStationInvitationMessage } from "../api/stationInvitations";
@@ -222,9 +223,7 @@ export function NotificationsScreen() {
       ) : null}
 
       {center.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-        </View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : center.error ? (
         <RequestFailureState error={center.error} onRetry={() => void center.refetch()} />
       ) : filteredMessages.length ? (
