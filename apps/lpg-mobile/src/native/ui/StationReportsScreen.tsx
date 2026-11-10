@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { BarChart3, BriefcaseBusiness, Gauge, ShieldCheck } from "lucide-react-native";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { domainQueries, useStationRuntime } from "../api/domains";
+import { SkeletonRows } from "./ScreenSkeleton";
 import {
   displayReference,
   displayStatus,
@@ -160,7 +161,7 @@ function SettlementSummary({
   if (loading) {
     return (
       <View style={[styles.settlementState, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <ActivityIndicator color={palette.brand} />
+        <SkeletonRows rows={1} compact />
         <View style={styles.settlementCopy}>
           <Text style={[styles.settlementTitle, { color: palette.ink }]}>Loading settlement information</Text>
           <Text style={[styles.settlementBody, { color: palette.muted }]}>Checking the latest station earnings and settlement records.</Text>
