@@ -72,18 +72,30 @@ Deno.test("cash withdrawal moves value from Supplier Fund to Cash On Hand and ca
   includes(migration, "idempotency key was reused with different details", "a reused withdrawal idempotency key cannot alter an existing movement");
 });
 
-Deno.test("only completed and settled SKIMA Managed Fuel orders can consume the Fuel cash float", () => {
+Deno.test("customer-funded SKIMA Managed Fuel orders can pay the station at handover", () => {
   includes(migration, "public.record_fuel_supplier_cash_payment", "Fuel station cash payment RPC exists");
   includes(migration, "operation.fulfillment_mode<>'skima_managed'", "Station Managed and Independent Driver are excluded");
-  includes(migration, "operation.stage_key<>'completed'", "Fuel must be completed");
-  includes(migration, "operation.settled_at is null", "Fuel customer settlement must be posted");
+  includes(migration, "operation.stage_key not in ('ready_for_driver','station_handover','out_for_delivery','delivered','completed')", "Fuel cash payment is allowed only from station-ready or later stages");
+  includes(migration, "hold.status not in ('held','partially_released','released')", "Fuel payment must use active customer-funded escrow");
   includes(migration, "hold.status not in ('held','partially_released','released')", "payment must trace to a customer-funded escrow hold");
   includes(migration, "quote.component_snapshot->>'station_supply_amount'", "station payment uses supplier price, not SKIMA retail price");
   includes(migration, "round(target_amount,2)>remaining_amount", "partial payments cannot exceed outstanding supplier principal");
   includes(migration, "public.ensure_skima_supplier_wallet('fuel',order_record.currency_code,'cash_on_hand')", "Fuel station payment draws from Fuel cash on hand");
   includes(migration, "if not found or available_balance<round(target_amount,2) then", "Fuel station payment cannot overdraw the cash float");
   includes(migration, "'role','skima_fuel_cash_paid_to_station'", "Fuel cash payment is an operating disbursement");
-  includes(migration, "operation.stage_key='completed'", "the Finance read model only displays settled, funded Fuel payables");
+  includes(migration, "operation.stage_key in ('ready_for_driver','station_handover','out_for_delivery','delivered','completed')", "the Finance read model shows station-ready Fuel payables before final delivery");
+});
+
+Deno.test("LPG supplier cash payments require approved procurement and active customer escrow, not final delivery settlement", () => {
+  includes(migration, "lpgPayables_value", "the Finance read model contains LPG supplier payables");
+  includes(migration, "order_record.payment_status in ('reserved','settled')", "LPG supplier payments require a reserved or settled customer payment");
+  includes(migration, "hold.status in ('held','partially_released','released')", "LPG payable queue excludes expired and cancelled customer escrow");
+  includes(migration, "order_record.escrow_hold_id", "LPG payments are linked to their actual escrow hold");
+  includes(migration, "hold_record.status not in ('held','partially_released','released')", "LPG cash payment RPC rejects expired customer escrow");
+  includes(migration, "order_record.internal_settlement_execution_id is not null", "completed historical orders preserve their original funding source");
+  includes(migration, "public.ensure_skima_supplier_wallet(\n      'lpg',order_record.currency_code,'supplier_fund'\n    )", "unsettled but customer-funded LPG orders use the dedicated Supplier Fund identity");
+  includes(workspace, "supplierFunds.data?.lpgPayables", "LPG cash-payment selector uses the active funded-payables queue");
+  includes(workspace, "SKIMA LPG supplier payables · customer escrow funded", "Finance shows only escrow-funded LPG supplier payables");
 });
 
 Deno.test("SKIMA Managed Fuel settlement credits Supplier Fund while other modes retain station settlement", () => {
@@ -104,6 +116,7 @@ Deno.test("Finance workspace exposes the withdrawal and physical station cash cy
   includes(workspace, "Record Fuel station cash payment", "Fuel payment is a distinct Finance action");
   includes(workspace, "Record a physical cash payment SKIMA has already made to the LPG supplier", "LPG station cash payment help text reflects the real process");
   includes(workspace, "Fuel supplier payables", "Finance can reconcile Fuel supplier amounts by order");
+  includes(workspace, "SKIMA LPG supplier payables", "Finance can reconcile LPG supplier amounts by order");
   includes(workspace, "Supplier fund withdrawals and station cash payments", "cash movement history is visible to Finance");
   includes(workspace, "media.fuel.supplier_payment_evidence", "Fuel supplier cash receipts are registered as private media evidence");
   includes(workspace, "Upload Fuel payment evidence", "Finance can upload signed Fuel station payment evidence");
