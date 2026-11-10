@@ -772,7 +772,7 @@ export function LogisticsCompanyApplicationPanel({
                 Your application is already submitted. You may save corrections or replacement evidence while SKIMA reviews it; those changes are added to the existing review rather than creating a duplicate submission.
               </Text>
             </Card>
-          ) : null}
+          ) : null
           ) : null}
         </>
       )}
