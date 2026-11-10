@@ -6,8 +6,9 @@ import {
   Plus,
   ShieldCheck,
 } from "lucide-react-native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
+import { ScreenSkeleton, SkeletonRows } from "./ScreenSkeleton";
 import {
   displayReference,
   displayStatus,
@@ -49,9 +50,7 @@ export function CustomerWalletScreen() {
       }
     >
       {wallets.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-        </View>
+        <ScreenSkeleton variant="dashboard" cards={2} />
       ) : (
         <>
           <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -99,9 +98,7 @@ export function CustomerWalletScreen() {
           />
 
           {transactions.isPending ? (
-            <View style={styles.loadingCompact}>
-              <ActivityIndicator color={palette.brand} />
-            </View>
+            <SkeletonRows rows={2} compact />
           ) : (transactions.data ?? []).length > 0 ? (
             <View style={styles.transactionList}>
               {(transactions.data ?? []).slice(0, 5).map((item, index) => {
