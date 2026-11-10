@@ -1,7 +1,7 @@
 import { CheckCircle2, LocateFixed, MapPin, Star } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SkeletonRows } from "./ScreenSkeleton";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { domainQueries, useApplicationPayload } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
