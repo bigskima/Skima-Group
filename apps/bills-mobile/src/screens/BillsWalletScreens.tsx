@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { ArrowDownLeft, ArrowUpRight, Building2, CheckCircle2, ChevronRight, Plus, ShieldCheck, WalletCards } from "lucide-react-native";
 import { z } from "zod";
 import { useBillsFinanceMutation, useBillsFinanceQuery } from "../api/finance";
 import { BillArraySchema, BillObjectSchema, asNumber, asString, makeIdempotencyKey, money, useBillsQuery } from "../api/bills";
 import { useSession } from "../session/SessionProvider";
+import { SkeletonRows } from "../ui/ScreenSkeleton";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { Page, Card, SectionTitle, ActionButton, Field, Notice, State } from "./BillsUI";
 import { AppField } from "../ui/AppField";
@@ -47,7 +48,7 @@ export function BillsWalletScreen({onOpenPage}:{onOpenPage:(page:any)=>void}){
    {!walletId&&!wallets.isPending?<Notice tone="warning" text="Your SKIMA Wallet isn’t available yet. Refresh and try again. Contact support if it still doesn’t appear."/>:null}
   </Card></GuideTarget>
   <View style={{gap:9}}><SectionTitle title="Quick actions"/><View style={{flexDirection:"row",gap:8}}><View style={{flex:1}}><ActionButton label="Saved billers" variant="secondary" small onPress={()=>onOpenPage("saved")}/></View><View style={{flex:1}}><ActionButton label="Refresh balance" variant="quiet" small onPress={refresh}/></View></View></View>
-  <View style={{gap:9}}><SectionTitle title="Funding activity"/>{deposits.isPending?<ActivityIndicator color={palette.brand}/>:deposits.error?<State title="Funding history unavailable" body="Please try again." retry={()=>void deposits.refetch()}/>:recentDeposits.length?recentDeposits.map((row,i)=><FinanceRow key={asString(row,"id")??String(i)} icon={<ArrowDownLeft color={palette.success} size={17}/>} title="Wallet funding" subtitle={(asString(row,"public_reference")??"Deposit")+" · "+statusName(asString(row,"status")??"pending")} amount={money(asNumber(row,"amount")??0,asString(row,"currency_code")??currency)}/>):<State title="No funding activity yet" body="Your wallet deposits will appear here after you add funds."/>}</View>
+  <View style={{gap:9}}><SectionTitle title="Funding activity"/>{deposits.isPending?<SkeletonRows rows={2} compact/>:deposits.error?<State title="Funding history unavailable" body="Please try again." retry={()=>void deposits.refetch()}/>:recentDeposits.length?recentDeposits.map((row,i)=><FinanceRow key={asString(row,"id")??String(i)} icon={<ArrowDownLeft color={palette.success} size={17}/>} title="Wallet funding" subtitle={(asString(row,"public_reference")??"Deposit")+" · "+statusName(asString(row,"status")??"pending")} amount={money(asNumber(row,"amount")??0,asString(row,"currency_code")??currency)}/>):<State title="No funding activity yet" body="Your wallet deposits will appear here after you add funds."/>}</View>
   <View style={{gap:9}}><SectionTitle title="Withdrawal activity"/>{withdrawals.isPending?<ActivityIndicator color={palette.brand}/>:withdrawals.error?<State title="Withdrawal history unavailable" body="Please try again." retry={()=>void withdrawals.refetch()}/>:recentWithdrawals.length?recentWithdrawals.map((row,i)=><FinanceRow key={asString(row,"id")??String(i)} icon={<ArrowUpRight color={palette.brand} size={17}/>} title="Wallet withdrawal" subtitle={(asString(row,"public_reference")??"Withdrawal")+" · "+statusName(asString(row,"status")??"pending")} amount={money(asNumber(row,"amount")??0,asString(row,"currency_code")??currency)}/>):<State title="No withdrawals yet" body="Completed and pending withdrawals will appear here."/>}</View>
  </Page>;
 }
