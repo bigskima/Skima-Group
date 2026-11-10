@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20261109053653",
+  "remoteHeadVersion": "20261110164500",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -46,7 +46,8 @@
     "20261103132000_logistics_cargo_recovery_dispatch.sql": "20261103144006_logistics_cargo_recovery_dispatch.sql",
     "20261104170000_logistics_company_identity_and_revision_runtime.sql": "20261108095432_logistics_company_identity_and_revision_runtime.sql",
     "20261109045830_store_settlement_shared_workflow_handoff.sql": "20261109045831_store_settlement_shared_workflow_handoff.sql",
-    "20261109060000_store_settlement_event_log_terminal.sql": "20261109053653_store_settlement_event_log_terminal.sql"
+    "20261109060000_store_settlement_event_log_terminal.sql": "20261109053653_store_settlement_event_log_terminal.sql",
+    "20261110163641_logistics_company_earnings_transfer_to_owner_wallet.sql": "20261110164500_logistics_company_earnings_transfer_to_owner_wallet.sql"
   },
   "businessModuleMigrations": [
     "20260810010000_phase_two_experience_runtime.sql",
@@ -167,6 +168,7 @@
     "20261109120000_skima_whatsapp_support_handoff.sql",
     "20261109153000_skima_whatsapp_four_app_ordering.sql",
     "20261110080000_fuel_customer_container_exchange.sql",
-    "20261110193000_skima_managed_supplier_funds_cash_cycle.sql"
+    "20261110193000_skima_managed_supplier_funds_cash_cycle.sql",
+    "20261110164500_logistics_company_earnings_transfer_to_owner_wallet.sql"
   ]
 }
