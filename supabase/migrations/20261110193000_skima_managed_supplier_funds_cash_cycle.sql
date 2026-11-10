@@ -217,6 +217,8 @@ declare
   new_debit text;
   old_insert text;
   new_insert text;
+  old_processing text;
+  new_processing text;
 begin
   select pg_get_functiondef(
     'public.record_lpg_internal_supplier_payment(uuid,numeric,text,text,uuid,text,text,timestamptz)'::regprocedure
@@ -226,6 +228,7 @@ begin
   supplier_wallet_id uuid;$old$;
   new_decl:=$new$  funding_wallet_id uuid;
   cash_wallet_id uuid;
+  hold_record public.escrow_holds%rowtype;
   supplier_wallet_id uuid;$new$;
   if position(old_decl in function_sql)=0 then raise exception 'LPG supplier-payment declarations changed'; end if;
   function_sql:=replace(function_sql,old_decl,new_decl);
@@ -234,6 +237,71 @@ begin
   new_validation:=$new$    or target_payment_method not in ('cash','bank_transfer')$new$;
   if position(old_validation in function_sql)=0 then raise exception 'LPG supplier-payment method validation changed'; end if;
   function_sql:=replace(function_sql,old_validation,new_validation);
+
+  old_processing:=$old$  select * into order_record
+  from public.lpg_refill_orders
+  where id=procurement.lpg_order_id
+  for update;
+  if not found or order_record.fulfillment_channel<>'skima_internal'
+    or order_record.internal_settlement_execution_id is null then
+    raise exception using errcode='55000',message='a settled SKIMA Fleet order is required before recording its supplier payment';
+  end if;
+
+  select * into settlement
+  from public.settlement_executions
+  where id=order_record.internal_settlement_execution_id and status='posted';
+  if not found then
+    raise exception using errcode='55000',message='posted SKIMA Fleet customer collection was not found';
+  end if;
+
+  select nullif(entry.value->>'wallet_id','')::uuid into funding_wallet_id
+  from jsonb_array_elements(settlement.distribution) entry(value)
+  where entry.value->>'role'='internal_lpg_cost_recovery'
+  limit 1;
+  if funding_wallet_id is null then
+    raise exception using errcode='55000',message='SKIMA Fleet customer funds allocation is missing from the order settlement';
+  end if;$old$;
+  new_processing:=$new$  select * into order_record
+  from public.lpg_refill_orders
+  where id=procurement.lpg_order_id
+  for update;
+  if not found or order_record.fulfillment_channel<>'skima_internal'
+    or order_record.payment_status not in ('reserved','settled')
+    or order_record.escrow_hold_id is null then
+    raise exception using errcode='55000',message='an approved, customer-funded SKIMA Fleet order is required before recording its supplier cash payment';
+  end if;
+
+  select * into hold_record
+  from public.escrow_holds
+  where id=order_record.escrow_hold_id
+    and subject_type='service_request'
+    and subject_id=order_record.service_request_id
+  for share;
+  if not found or hold_record.status not in ('held','partially_released','released') then
+    raise exception using errcode='55000',message='SKIMA Fleet customer escrow is not active; supplier cash cannot be paid from an expired or cancelled order';
+  end if;
+
+  if order_record.internal_settlement_execution_id is not null then
+    select * into settlement
+    from public.settlement_executions
+    where id=order_record.internal_settlement_execution_id and status='posted';
+    if not found then
+      raise exception using errcode='55000',message='posted SKIMA Fleet customer collection was not found';
+    end if;
+    select nullif(entry.value->>'wallet_id','')::uuid into funding_wallet_id
+    from jsonb_array_elements(settlement.distribution) entry(value)
+    where entry.value->>'role'='internal_lpg_cost_recovery'
+    limit 1;
+  else
+    funding_wallet_id:=public.ensure_skima_supplier_wallet(
+      'lpg',order_record.currency_code,'supplier_fund'
+    );
+  end if;
+  if funding_wallet_id is null then
+    raise exception using errcode='55000',message='SKIMA Fleet Supplier Fund allocation could not be resolved';
+  end if;$new$;
+  if position(old_processing in function_sql)=0 then raise exception 'LPG customer-funded order guard changed'; end if;
+  function_sql:=replace(function_sql,old_processing,new_processing);
 
   -- Preserve true idempotent replays of historical bank-transfer payments, but
   -- require all new supplier payments to follow the physical cash-float cycle.
@@ -344,6 +412,7 @@ declare
   accounts_value jsonb;
   movements_value jsonb;
   fuel_payables_value jsonb;
+  lpg_payables_value jsonb;
   legacy_lpg_value jsonb;
 begin
   if not (
@@ -409,7 +478,7 @@ begin
 
   select coalesce(jsonb_agg(jsonb_build_object(
     'orderId',order_record.id,
-    'orderReference',order_record.public_reference,
+    'orderReference',order_record.id::text,
     'branchId',operation.station_branch_id,
     'branchName',branch.display_name,
     'supplierName',organization.display_name,
@@ -445,11 +514,42 @@ begin
       ),0)::numeric(28,8) as paid_amount
   ) supplier_amount
   where operation.fulfillment_mode='skima_managed'
-    and operation.stage_key='completed'
-    and operation.settled_at is not null
+    and operation.stage_key in ('ready_for_driver','station_handover','out_for_delivery','delivered','completed')
     and order_record.currency_code=currency_value
     and hold.status in ('held','partially_released','released')
     and supplier_amount.amount>supplier_amount.paid_amount;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'procurementId',procurement.id,
+    'orderId',order_record.id,
+    'orderReference',order_record.public_reference,
+    'supplierName',procurement.supplier_name,
+    'supplierAmount',procurement.procurement_amount,
+    'paidAmount',supplier_amount.paid_amount,
+    'supplierOutstanding',greatest(procurement.procurement_amount-supplier_amount.paid_amount,0),
+    'currencyCode',order_record.currency_code,
+    'orderStatus',order_record.status,
+    'paymentStatus',order_record.payment_status,
+    'holdStatus',hold.status
+  ) order by order_record.created_at desc),'[]'::jsonb)
+  into lpg_payables_value
+  from public.lpg_internal_refill_procurements procurement
+  join public.lpg_refill_orders order_record on order_record.id=procurement.lpg_order_id
+  join public.escrow_holds hold
+    on hold.id=order_record.escrow_hold_id
+   and hold.subject_type='service_request'
+   and hold.subject_id=order_record.service_request_id
+  cross join lateral (
+    select coalesce(sum(payment.amount),0)::numeric(28,8) as paid_amount
+    from public.lpg_internal_supplier_payments payment
+    where payment.procurement_id=procurement.id
+  ) supplier_amount
+  where procurement.status='approved'
+    and order_record.fulfillment_channel='skima_internal'
+    and order_record.payment_status in ('reserved','settled')
+    and hold.status in ('held','partially_released','released')
+    and order_record.currency_code=currency_value
+    and procurement.procurement_amount>supplier_amount.paid_amount;
 
   select jsonb_build_object(
     'supplierPrincipalCredited',coalesce(sum(
@@ -523,6 +623,7 @@ begin
     'accounts',accounts_value,
     'recentMovements',movements_value,
     'fuelPayables',fuel_payables_value,
+    'lpgPayables',lpg_payables_value,
     'legacyLpg',legacy_lpg_value
   );
 end;
@@ -745,9 +846,8 @@ begin
   where order_id=target_order_id
   for update;
   if not found or operation.fulfillment_mode<>'skima_managed'
-     or operation.stage_key<>'completed'
-     or operation.settled_at is null then
-    raise exception using errcode='55000',message='Only a completed and financially settled SKIMA Managed Fuel order can be paid from the supplier cash float';
+     or operation.stage_key not in ('ready_for_driver','station_handover','out_for_delivery','delivered','completed') then
+    raise exception using errcode='55000',message='Only a customer-funded SKIMA Managed Fuel order ready for station handover or later can be paid from the supplier cash float';
   end if;
 
   select * into request_record from public.service_requests where id=operation.service_request_id for share;
