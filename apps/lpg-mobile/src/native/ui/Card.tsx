@@ -7,6 +7,7 @@ export function Card({
   children,
   variant = "default",
   padding = "md",
+  gap = 14,
   eyebrow,
   title,
   description,
@@ -14,6 +15,7 @@ export function Card({
 }: PropsWithChildren<{
   variant?: "default" | "subtle" | "outline" | "elevated" | "brandSoft" | "success" | "warning" | "danger";
   padding?: "sm" | "md" | "lg";
+  gap?: number;
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -59,6 +61,7 @@ export function Card({
         padding === "md" && styles.paddingMd,
         padding === "lg" && styles.paddingLg,
         cardStyle,
+        { gap },
       ]}
     >
       {eyebrow || title || description || action ? (

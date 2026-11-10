@@ -5,7 +5,7 @@ async function read(path: string) {
 }
 const [
   refillGate, refillApi, refillReader, logisticsGate, storeGate, billsGate,
-  lpgSkeleton, logisticsSkeleton, storeSkeleton, billsSkeleton,
+  lpgSkeleton, logisticsSkeleton, storeSkeleton, billsSkeleton, lpgScreen, lpgCard,
   lpgEntry, logisticsEntry, storeEntry, billsEntry,
   docsMigration, versionsMigration, admin,
 ] = await Promise.all([
@@ -19,6 +19,8 @@ const [
   read("apps/logistics-mobile/src/ui/ScreenSkeleton.tsx"),
   read("apps/store-mobile/src/ui/ScreenSkeleton.tsx"),
   read("apps/bills-mobile/src/ui/ScreenSkeleton.tsx"),
+  read("apps/lpg-mobile/src/native/ui/Screen.tsx"),
+  read("apps/lpg-mobile/src/native/ui/Card.tsx"),
   read("apps/lpg-mobile/app/index.tsx"),
   read("apps/logistics-mobile/app/index.tsx"),
   read("apps/store-mobile/app/index.tsx"),
@@ -91,6 +93,21 @@ Deno.test("admin can draft, edit, publish and review app-specific policies", () 
   assertStringIncludes(admin, "update_policy_draft");
   assertStringIncludes(admin, "publish_policy_version");
 });
+Deno.test("four customer policy readers use compact, consistent presentation primitives", () => {
+  assertStringIncludes(refillReader, "<Screen");
+  assertStringIncludes(refillReader, "denseHeader");
+  assertStringIncludes(lpgScreen, "denseHeader?: boolean");
+  assertStringIncludes(lpgCard, "gap?: number");
+  assertStringIncludes(refillReader, '<Card padding="sm" gap={10}>');
+  for (const source of [logisticsGate, storeGate, billsGate]) {
+    assertStringIncludes(source, "headerBrandRow");
+    assertStringIncludes(source, "publishedTag");
+    assertStringIncludes(source, "paddingTop: 14");
+    assertStringIncludes(source, "fontSize: 20, lineHeight: 25");
+    assertStringIncludes(source, "padding: 11");
+  }
+});
+
 Deno.test("database migrations define and publish the three separate customer policies", () => {
   for (const key of ["policy.customer.logistics.terms", "policy.customer.store.terms", "policy.customer.bills.terms"]) {
     assertStringIncludes(docsMigration + versionsMigration, key);

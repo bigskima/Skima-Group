@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, spacing, typography } from "../theme/tokens";
+import { radii, typography } from "../theme/tokens";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 
 const APP_KEY = "logistics";
@@ -189,15 +189,23 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.canvas }]}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View style={[styles.brandMark, { backgroundColor: palette.brandSoft }]}><Text style={[styles.brandMarkText, { color: palette.brand }]}>S</Text></View>
-          <Text style={[styles.eyebrow, { color: palette.brand }]}>SKIMA · {APP_NAME.toUpperCase()}</Text>
-          <Text style={[styles.heroTitle, { color: palette.ink }]}>A quick review before you continue</Text>
-          <Text style={[styles.copy, { color: palette.muted }]}>Please review the current customer terms for {APP_NAME}. Open every chapter, then confirm that you agree.</Text>
+          <View style={styles.headerBrandRow}>
+            <View style={[styles.brandMark, { backgroundColor: palette.brandSoft }]}><Text style={[styles.brandMarkText, { color: palette.brand }]}>S</Text></View>
+            <View style={styles.headerCopy}>
+              <Text style={[styles.eyebrow, { color: palette.brand }]}>SKIMA · {APP_NAME.toUpperCase()} · CUSTOMER TERMS</Text>
+              <Text style={[styles.heroTitle, { color: palette.ink }]}>{document.title}</Text>
+            </View>
+          </View>
+          <Text style={[styles.copy, { color: palette.muted }]}>Review the published terms. Open each chapter, then confirm your agreement.</Text>
         </View>
 
-        <View style={styles.summary}>
-          <Text style={[styles.eyebrow, { color: palette.brand }]}>CURRENT DOCUMENT · VERSION {document.versionLabel || "CURRENT"} · ABOUT {minutes} MIN</Text>
-          <Text style={[styles.documentTitle, { color: palette.ink }]}>{document.title}</Text>
+        <View style={[styles.summary, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+          <View style={styles.metaStrip}>
+            <Text style={[styles.eyebrow, { color: palette.brand }]}>VERSION {document.versionLabel || "CURRENT"} · ABOUT {minutes} MIN</Text>
+            <View style={[styles.publishedTag, { backgroundColor: palette.successSoft }]}>
+              <Text style={[styles.publishedTagText, { color: palette.success }]}>CURRENT</Text>
+            </View>
+          </View>
           {document.summary ? <Text style={[styles.copy, { color: palette.muted }]}>{document.summary}</Text> : null}
         </View>
 
@@ -283,52 +291,57 @@ function friendlyMessage(error: unknown) {
 }
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  page: { width: "100%", maxWidth: 820, alignSelf: "center", paddingHorizontal: 18, paddingTop: 22, paddingBottom: 46, gap: 14 },
-  header: { gap: 8, paddingBottom: 4 },
-  brandMark: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  brandMarkText: { fontSize: 24, fontWeight: "900" },
-  eyebrow: { ...typography.eyebrow, fontSize: 9 },
-  heroTitle: { ...typography.title, fontSize: 24, lineHeight: 29 },
-  copy: { ...typography.body, fontSize: 13, lineHeight: 20 },
-  card: { borderRadius: radii.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing.md, gap: 11 },
-  summary: { gap: 7, paddingHorizontal: 2, paddingVertical: 4 },
-  documentTitle: { ...typography.sectionTitle, fontSize: 16 },
+  page: { width: "100%", maxWidth: 820, alignSelf: "center", paddingHorizontal: 18, paddingTop: 14, paddingBottom: 30, gap: 10 },
+  header: { gap: 7, paddingBottom: 0 },
+  headerBrandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerCopy: { flex: 1, minWidth: 0, gap: 3 },
+  brandMark: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  brandMarkText: { fontSize: 21, fontWeight: "900" },
+  eyebrow: { ...typography.eyebrow, fontSize: 8, letterSpacing: 0.5 },
+  heroTitle: { ...typography.title, fontSize: 20, lineHeight: 25, letterSpacing: -0.35 },
+  copy: { ...typography.body, fontSize: 12, lineHeight: 18 },
+  card: { borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 10 },
+  summary: { gap: 7, padding: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
+  metaStrip: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
+  publishedTag: { borderRadius: radii.pill, paddingHorizontal: 9, paddingVertical: 4 },
+  publishedTagText: { ...typography.eyebrow, fontSize: 8, letterSpacing: 0.4 },
+  documentTitle: { ...typography.sectionTitle, fontSize: 15 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 2 },
   meta: { ...typography.caption, fontSize: 10 },
-  progressTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  sectionTitle: { ...typography.sectionTitle, fontSize: 16 },
-  progressValue: { fontSize: 19, fontWeight: "900" },
-  progressTrack: { width: "100%", height: 6, borderRadius: 5, overflow: "hidden" },
-  progressFill: { height: 6, borderRadius: 5 },
-  toolbar: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
-  toolButton: { minHeight: 38, borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 14, justifyContent: "center" },
-  toolText: { ...typography.caption, fontWeight: "900", fontSize: 11 },
-  contents: { borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 12 },
-  contentsItem: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  chapterNumber: { width: 25, height: 25, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  progressTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionTitle: { ...typography.sectionTitle, fontSize: 14 },
+  progressValue: { fontSize: 17, fontWeight: "900" },
+  progressTrack: { width: "100%", height: 5, borderRadius: 5, overflow: "hidden" },
+  progressFill: { height: 5, borderRadius: 5 },
+  toolbar: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  toolButton: { minHeight: 34, borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 12, justifyContent: "center" },
+  toolText: { ...typography.caption, fontWeight: "900", fontSize: 10 },
+  contents: { borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 8 },
+  contentsItem: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  chapterNumber: { width: 24, height: 24, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   chapterNumberText: { fontSize: 10, fontWeight: "900" },
-  contentsLabel: { flex: 1, ...typography.caption, fontSize: 11, fontWeight: "800" },
-  chapter: { gap: 12 },
-  chapterEyebrow: { ...typography.eyebrow, fontSize: 9 },
-  chapterTitle: { ...typography.heading, fontSize: 19 },
-  paragraph: { ...typography.body, fontSize: 13, lineHeight: 21 },
-  subheading: { ...typography.sectionTitle, fontSize: 14, marginTop: 4 },
+  contentsLabel: { flex: 1, ...typography.caption, fontSize: 10, fontWeight: "800" },
+  chapter: { gap: 9 },
+  chapterEyebrow: { ...typography.eyebrow, fontSize: 8 },
+  chapterTitle: { ...typography.heading, fontSize: 17, lineHeight: 22 },
+  paragraph: { ...typography.body, fontSize: 12, lineHeight: 19 },
+  subheading: { ...typography.sectionTitle, fontSize: 13, marginTop: 3 },
   bullet: { paddingLeft: 4 },
-  pageActions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
-  primaryButton: { minHeight: 48, borderRadius: radii.pill, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", flex: 1 },
-  primaryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900", textAlign: "center" },
-  secondaryButton: { minHeight: 46, borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 18, justifyContent: "center" },
-  secondaryText: { ...typography.caption, fontWeight: "900" },
-  completePill: { minHeight: 42, borderRadius: radii.pill, paddingHorizontal: 15, alignItems: "center", justifyContent: "center" },
-  checkRow: { flexDirection: "row", alignItems: "flex-start", gap: 11 },
-  checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, alignItems: "center", justifyContent: "center", marginTop: 1 },
-  checkmark: { color: "#FFFFFF", fontWeight: "900", fontSize: 15 },
-  acceptanceText: { flex: 1, ...typography.bodyStrong, fontSize: 12, lineHeight: 19 },
-  notice: { ...typography.caption, lineHeight: 17 },
-  error: { ...typography.caption, fontWeight: "800", lineHeight: 18 },
-  signOut: { minHeight: 34, alignItems: "center", justifyContent: "center" },
+  pageActions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  primaryButton: { minHeight: 42, borderRadius: radii.pill, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", flex: 1 },
+  primaryText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900", textAlign: "center" },
+  secondaryButton: { minHeight: 40, borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 14, justifyContent: "center" },
+  secondaryText: { ...typography.caption, fontWeight: "900", fontSize: 10 },
+  completePill: { minHeight: 36, borderRadius: radii.pill, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
+  checkRow: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, alignItems: "center", justifyContent: "center", marginTop: 1 },
+  checkmark: { color: "#FFFFFF", fontWeight: "900", fontSize: 14 },
+  acceptanceText: { flex: 1, ...typography.bodyStrong, fontSize: 11, lineHeight: 17 },
+  notice: { ...typography.caption, lineHeight: 16 },
+  error: { ...typography.caption, fontWeight: "800", lineHeight: 17 },
+  signOut: { minHeight: 30, alignItems: "center", justifyContent: "center" },
   signOutText: { ...typography.caption, fontWeight: "800" },
   footer: { ...typography.caption, textAlign: "center", fontSize: 9, lineHeight: 14, paddingHorizontal: 8 },
-  statusCard: { flex: 1, margin: 20, borderRadius: radii.xl, borderWidth: 1, padding: spacing.xl, gap: 14, alignItems: "flex-start", justifyContent: "center" },
-  statusTitle: { ...typography.heading, fontSize: 22 },
+  statusCard: { flex: 1, margin: 18, borderRadius: radii.xl, borderWidth: 1, padding: 18, gap: 11, alignItems: "flex-start", justifyContent: "center" },
+  statusTitle: { ...typography.heading, fontSize: 20 },
 });
