@@ -1038,7 +1038,9 @@ export function AdminFinancialAnalyticsWorkspace() {
           </div>
           <StatusBadge tone="neutral">LPG + Fuel · {currency}</StatusBadge>
         </div>
-        {supplierFunds.error ? (
+        {supplierFunds.isPending ? (
+          <LoadingState label="Loading supplier balances and cash movement history…" />
+        ) : supplierFunds.error ? (
           <ErrorState title="Supplier funds unavailable" message={readError(supplierFunds.error)} onRetry={() => void supplierFunds.refetch()} />
         ) : (
           <>
