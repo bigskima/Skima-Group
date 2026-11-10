@@ -737,7 +737,7 @@ export function AdminFinancialAnalyticsWorkspace() {
         {
           contentType,
           fileName: fuelEvidenceFile.name,
-          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.upload", fuelEvidenceFile.name),
+          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.upload", `${fuelPayableOrderId}:${fuelEvidenceFile.name}`),
           storageBucket: "skima-platform-media",
         },
         UploadSessionSchema,
@@ -755,7 +755,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           assetTypeKey: "media.fuel.supplier_payment_evidence",
           byteSize: fuelEvidenceFile.size,
           contentType,
-          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.asset", fuelEvidenceFile.name),
+          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.asset", `${fuelPayableOrderId}:${fuelEvidenceFile.name}`),
           metadata: {
             originalFileName: fuelEvidenceFile.name,
             purpose: "SKIMA Fuel station cash payment evidence",
@@ -1330,6 +1330,9 @@ export function AdminFinancialAnalyticsWorkspace() {
                     setFuelCashPaymentReference("");
                     setFuelCashPaymentDate(localDateTimeInput(new Date()));
                     setFuelCashPaymentNote("");
+                    setFuelEvidenceFile(null);
+                    setFuelEvidenceMediaAssetId(null);
+                    setFuelEvidenceFileName(null);
                   }}
                 />
                 <div className="skima-form-grid">
