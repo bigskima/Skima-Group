@@ -166,16 +166,14 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
       rate: 0.94,
       onDone: () => {
         if (!active) return;
-        setVisited((current) => {
-          const updated = new Set(current);
-          updated.add(sectionIndex);
-          return updated;
-        });
-        if (sectionIndex < sections.length - 1) {
-          setIndex(sectionIndex + 1);
-        } else {
-          setAutoRead(false);
-        }
+        const completed = new Set(visited);
+        completed.add(sectionIndex);
+        setVisited(completed);
+        const nextChapter = sectionIndex + 1 < sections.length && !completed.has(sectionIndex + 1)
+          ? sectionIndex + 1
+          : sections.findIndex((_, chapterIndex) => !completed.has(chapterIndex));
+        if (nextChapter >= 0) setIndex(nextChapter);
+        else setAutoRead(false);
       },
       onError: () => {
         if (active) setAutoRead(false);
@@ -185,7 +183,7 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
       active = false;
       void Speech.stop();
     };
-  }, [autoRead, section, sectionIndex, sections.length]);
+  }, [autoRead, section, sectionIndex, sections.length, visited]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.canvas }]}>
