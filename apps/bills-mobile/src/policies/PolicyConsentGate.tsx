@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, spacing, typography } from "../theme/tokens";
+import { radii, typography } from "../theme/tokens";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 
 const APP_KEY = "bills";
