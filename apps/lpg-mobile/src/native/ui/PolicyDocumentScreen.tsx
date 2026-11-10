@@ -252,9 +252,6 @@ export function PolicyDocumentScreen({
 
       {document?.published ? (
         <>
-
-      {document?.published ? (
-        <>
           {!reading ? (
             <>
               <Card padding="sm" gap={10}>
@@ -525,7 +522,6 @@ export function PolicyDocumentScreen({
             </>
           )}
         </>
-      ) : null}
       ) : null}
     </Screen>
   );
