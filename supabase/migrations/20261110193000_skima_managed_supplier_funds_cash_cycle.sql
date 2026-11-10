@@ -395,11 +395,14 @@ begin
     'note',movement.note
   ) order by movement.occurred_at desc),'[]'::jsonb)
   into movements_value
-  from public.platform_supplier_cash_movements movement
+  from (
+    select * from public.platform_supplier_cash_movements
+    where currency_code=currency_value
+    order by occurred_at desc
+    limit 100
+  ) movement
   join public.wallet_accounts source_wallet on source_wallet.id=movement.source_wallet_id
-  join public.wallet_accounts destination_wallet on destination_wallet.id=movement.destination_wallet_id
-  where movement.currency_code=currency_value
-  limit 100;
+  join public.wallet_accounts destination_wallet on destination_wallet.id=movement.destination_wallet_id;
 
   select coalesce(jsonb_agg(jsonb_build_object(
     'orderId',order_record.id,
