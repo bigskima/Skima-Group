@@ -36,6 +36,9 @@ export function CompanyFinanceScreen() {
   const [bankCode,setBankCode]=useState("");
   const [accountNumber,setAccountNumber]=useState("");
   const [newBeneficiary,setNewBeneficiary]=useState(false);
+  const [withdrawalDestination,setWithdrawalDestination]=useState<"personal"|"bank">("personal");
+  const [personalWalletId,setPersonalWalletId]=useState("");
+  const [personalTransferKey,setPersonalTransferKey]=useState(()=>idempotency("logistics-company-owner-transfer"));
   const [preview,setPreview]=useState<Record<string,unknown>|null>(null);
   const [payingBooking,setPayingBooking]=useState<Record<string,unknown>|null>(null);
   const [driverAmount,setDriverAmount]=useState("");
@@ -48,8 +51,13 @@ export function CompanyFinanceScreen() {
   const earningsBalance = walletBalance(earningsWallet);
   const operatingBalance = operatingWallets.reduce((sum,w)=>sum+walletBalance(w),0);
   const walletId = asString(earningsWallet,"id");
+  const ownerUserId = session.session?.user.id ?? "";
+  const personalWallets = (wallets.data ?? []).filter((w) => asString(w,"wallet_type")==="customer" && asString(w,"owner_entity_type")==="user" && asString(w,"owner_entity_id")===ownerUserId && asString(w,"currency_code")===currency && asString(w,"status")==="active");
+  const personalWalletKey = personalWallets.map((w)=>asString(w,"id")??"").join("|");
+  useEffect(()=>{ if(!personalWallets.some((w)=>asString(w,"id")===personalWalletId)) setPersonalWalletId(asString(personalWallets[0],"id")??""); },[personalWalletKey,personalWalletId]);
   useEffect(()=>{ setBeneficiaryId(""); setPreview(null); setAmount(""); },[walletId]);
   const payoutBeneficiaries = (beneficiaries.data??[]).filter((item)=>asString(item,"wallet_id")===walletId && asString(item,"status")==="verified");
+  const personalWallet = personalWallets.find((w)=>asString(w,"id")===personalWalletId) ?? null;
 
   const settings = useQuery({
     queryKey:["logistics-company-payment-settings",organizationId],
@@ -134,6 +142,21 @@ export function CompanyFinanceScreen() {
     onError:(e)=>Alert.alert("Withdrawal failed",e instanceof Error?e.message:"Please try again."),
   });
 
+  const transferToPersonal=useMutation({
+    mutationFn:()=>{
+      if(!organizationId || !personalWalletId || !Number.isFinite(Number(amount)) || Number(amount)<=0) throw new Error("Choose your personal SKIMA Wallet and enter a valid amount.");
+      return session.api.post("/runtime/logistics/company/earnings/transfer-to-personal",{
+        organizationId,customerWalletId:personalWalletId,amount:Number(amount),idempotencyKey:personalTransferKey,
+      },MoneySchema);
+    },
+    onSuccess:async(result)=>{
+      setAmount("");setPreview(null);setPersonalTransferKey(idempotency("logistics-company-owner-transfer"));
+      await Promise.all([wallets.refetch(),balances.refetch(),withdrawals.refetch(),queryClient.invalidateQueries({queryKey:["skima-logistics","wallets"]}),queryClient.invalidateQueries({queryKey:["skima-logistics","wallet-balances"]})]);
+      Alert.alert("Transfer completed",formatMoney(Number(asNumber(record(result),"transferred_amount")??Number(amount)),currency)+" was moved to your personal SKIMA Wallet.");
+    },
+    onError:(e)=>Alert.alert("Transfer failed",e instanceof Error?e.message:"Please check the amount and available company balance."),
+  });
+
   const recordDriverPayment=useMutation({
     mutationFn:async()=>{
       if(!organizationId || !payingBooking) throw new Error("Select a completed job.");
@@ -156,6 +179,7 @@ export function CompanyFinanceScreen() {
   });
 
   const canWithdraw=Boolean(walletId && Number(amount)>0 && (beneficiaryId || payoutBeneficiaries.length) && earningsBalance>=Number(asNumber(preview,"totalDebitAmount")??Number(amount)));
+  const canTransferPersonal=Boolean(walletId && personalWalletId && Number.isFinite(Number(amount)) && Number(amount)>0 && earningsBalance>=Number(amount));
   if(companyQuery.isPending) return <Screen title="Company wallet" denseHeader><ScreenSkeleton cards={2}/></Screen>;
   if(!company || !organizationId) return <Screen title="Company wallet" denseHeader><StatePanel title="Company profile unavailable" description="Set up the company profile before accessing company funds." retry={()=>void companyQuery.refetch()}/></Screen>;
 
@@ -178,6 +202,29 @@ export function CompanyFinanceScreen() {
         <Text style={[styles.panelTitle,{color:palette.ink}]}>Withdraw earnings</Text>
         {!walletId ? <Text style={[styles.hint,{color:palette.muted}]}>Your earnings wallet will appear after the first online booking is confirmed by its customer.</Text> : (
           <>
+            <View style={styles.destinationChoices}>
+              <Method label="My SKIMA Wallet" detail="Transfer into your personal wallet" active={withdrawalDestination==="personal"} onPress={()=>{setWithdrawalDestination("personal");setPreview(null);}}/>
+              <Method label="External bank" detail="Pay out to a verified bank account" active={withdrawalDestination==="bank"} onPress={()=>{setWithdrawalDestination("bank");setPreview(null);}}/>
+            </View>
+            {withdrawalDestination === "personal" ? (
+              <View style={{gap:9}}>
+                <Text style={[styles.hint,{color:palette.muted}]}>Choose one of your active personal SKIMA Wallets in {currency}. Only the verified company owner can receive this internal transfer.</Text>
+                {personalWallets.length ? personalWallets.map((item)=>{
+                  const id=asString(item,"id")??"";
+                  const selected=id===personalWalletId;
+                  const balance=walletBalance(item);
+                  return <Pressable key={id} onPress={()=>{setPersonalWalletId(id);setAmount("");setPreview(null);}} style={[styles.beneficiary,{borderColor:selected?palette.brand:palette.border,backgroundColor:selected?palette.brandSoft:palette.surfaceSubtle}]}>
+                    <WalletCards color={palette.brand} size={17}/>
+                    <View style={{flex:1}}><Text style={[styles.beneficiaryName,{color:palette.ink}]}>Personal {currency} Wallet</Text><Text style={[styles.hint,{color:palette.muted}]}>Available · {formatMoney(balance,currency)}</Text></View>
+                    {selected?<CheckCircle2 color={palette.success} size={16}/>:null}
+                  </Pressable>;
+                }) : <StatePanel title="No personal SKIMA Wallet found" description="Create a personal customer wallet in SKIMA first, then return here to receive company earnings."/>}
+                <TextInput value={amount} onChangeText={(v)=>{setAmount(v);setPreview(null);setPersonalTransferKey(idempotency("logistics-company-owner-transfer"));}} keyboardType="decimal-pad" placeholder={`Transfer amount (${currency})`} placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>
+                <Text style={[styles.hint,{color:palette.muted}]}>This moves funds from settled company earnings to your personal SKIMA Wallet. It is not a bank payout.</Text>
+                <Action label="Transfer to personal SKIMA Wallet" busy={transferToPersonal.isPending} disabled={!canTransferPersonal} onPress={()=>transferToPersonal.mutate()}/>
+              </View>
+            ) : (
+              <View style={{gap:8}}>
             {payoutBeneficiaries.length ? payoutBeneficiaries.map((item)=>(
               <Pressable key={String(item.id)} onPress={()=>setBeneficiaryId(String(item.id))} style={[styles.beneficiary,{borderColor:(beneficiaryId||asString(payoutBeneficiaries[0],"id"))===String(item.id)?palette.brand:palette.border,backgroundColor:palette.surfaceSubtle}]}>
                 <Banknote color={palette.brand} size={17}/><View style={{flex:1}}><Text style={[styles.beneficiaryName,{color:palette.ink}]}>{asString(item,"account_name")??"Verified account"}</Text><Text style={[styles.hint,{color:palette.muted}]}>•••• {asString(item,"account_number_last4")??""}</Text></View><CheckCircle2 color={palette.success} size={16}/>
@@ -195,6 +242,8 @@ export function CompanyFinanceScreen() {
             <Action label="Preview withdrawal fee" busy={makePreview.isPending} disabled={!walletId || !Number(amount)||!Number.isFinite(Number(amount))||Number(amount)<=0} onPress={()=>makePreview.mutate()}/>
             {preview ? <Text style={[styles.hint,{color:palette.muted}]}>Fee: {formatMoney(Number(asNumber(preview,"calculatedFeeAmount")??0),currency)} · Total debit: {formatMoney(Number(asNumber(preview,"totalDebitAmount")??Number(amount)),currency)}</Text>:null}
             <Action label="Withdraw to bank" busy={withdraw.isPending} disabled={!canWithdraw|| (payoutBeneficiaries.length===0&&!beneficiaryId)} onPress={()=>withdraw.mutate()}/>
+              </View>
+            )}
           </>
         )}
       </View>
@@ -255,7 +304,7 @@ const styles=StyleSheet.create({
  addBank:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",paddingVertical:6},input:{minHeight:42,borderWidth:1,borderRadius:radii.md,paddingHorizontal:10,fontSize:12},
  bankGrid:{flexDirection:"row",flexWrap:"wrap",gap:7},bankChip:{maxWidth:"48%",paddingHorizontal:9,paddingVertical:8,borderWidth:1,borderRadius:radii.md},
  action:{minHeight:42,borderRadius:radii.md,alignItems:"center",justifyContent:"center",paddingHorizontal:12},actionText:{color:"#fff",fontSize:11,fontWeight:"900"},
- methodRow:{flexDirection:"row",gap:8},methodGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},method:{flex:1,minWidth:"46%",minHeight:64,borderWidth:1,borderRadius:radii.md,padding:10,gap:4,justifyContent:"center"},
+ destinationChoices:{flexDirection:"row",flexWrap:"wrap",gap:8},methodRow:{flexDirection:"row",gap:8},methodGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},method:{flex:1,minWidth:"46%",minHeight:64,borderWidth:1,borderRadius:radii.md,padding:10,gap:4,justifyContent:"center"},
  booking:{flexDirection:"row",alignItems:"center",gap:8,paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth},smallButton:{paddingHorizontal:10,paddingVertical:8,borderRadius:radii.md},
  payForm:{borderWidth:1,borderRadius:radii.md,padding:10,gap:8},withdrawRow:{flexDirection:"row",justifyContent:"space-between",paddingVertical:6,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:"#8884"}
 });
