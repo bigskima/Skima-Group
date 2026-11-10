@@ -2,9 +2,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { ChevronRight, ClipboardList, Fuel, MapPin, PackageCheck, PhoneCall, QrCode, ReceiptText, ShieldCheck, ShoppingBag, Truck } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useState } from "react";
-import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { isSkimaInternalFulfillmentChannel } from "../api/lpgFulfillment";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
 import {
   displayReference,
@@ -209,10 +210,7 @@ export function CustomerOrdersScreen() {
       </ScrollView>
 
       {isPending && allItems.length === 0 ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading your orders…</Text>
-        </View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : sourceErrors.length > 0 ? (
         <Text style={[styles.sourceNotice, { color: palette.muted }]}>
           Some of your latest activity couldn’t be refreshed. The information shown may be out of date.
@@ -389,10 +387,7 @@ export function CustomerOrderDetailScreen() {
       }
     >
       {detail.isPending && orders.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading order details…</Text>
-        </View>
+        <ScreenSkeleton variant="detail" cards={2} />
       ) : detail.error && orders.error ? (
         <EmptyState
           title="Couldn't load this order"
