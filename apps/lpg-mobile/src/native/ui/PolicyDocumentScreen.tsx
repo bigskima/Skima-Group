@@ -179,6 +179,7 @@ export function PolicyDocumentScreen({
 
   return (
     <Screen
+      denseHeader
       key={safeIndex}
       eyebrow="SKIMA policy centre"
       title={document?.title ?? "Privacy & policy"}
@@ -196,7 +197,7 @@ export function PolicyDocumentScreen({
       {policy.isLoading ? <ScreenSkeleton variant="policy" cards={1} /> : null}
 
       {policy.error ? (
-        <Card>
+        <Card padding="sm" gap={10}>
           <Text style={[styles.error, { color: palette.danger }]}>
             {friendlyError(policy.error, "We couldn't load the current policy. Please try again.")}
           </Text>
@@ -207,7 +208,7 @@ export function PolicyDocumentScreen({
 
 
       {document && !document.published ? (
-        <Card>
+        <Card padding="sm" gap={10}>
           <View style={styles.iconRow}>
             <View style={[styles.iconBox, { backgroundColor: palette.brandSoft }]}>
               <FileText color={palette.brand} size={22} />
@@ -234,7 +235,7 @@ export function PolicyDocumentScreen({
 
       {document?.published ? (
         <>
-          <Card>
+          <Card padding="sm" gap={10}>
             {document.summary ? (
               <View style={styles.summaryBlock}>
                 <Text style={[styles.kicker, { color: palette.brand }]}>AT A GLANCE</Text>
@@ -392,7 +393,7 @@ export function PolicyDocumentScreen({
           ) : null}
 
           {allowAcceptance ? (
-            <Card>
+            <Card padding="sm" gap={10}>
               {acceptance.data ? (
                 <View style={styles.acceptedRow}>
                   <CheckCircle2 color={palette.success} size={22} />
@@ -575,30 +576,30 @@ const styles = StyleSheet.create({
   iconBox: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   iconCopy: { flex: 1, minWidth: 0, gap: 4 },
   kicker: { ...typography.eyebrow, fontSize: 9 },
-  summaryBlock: { gap: 7, paddingBottom: spacing.xs },
-  sectionTitle: { ...typography.subheading, fontSize: 16 },
-  body: { ...typography.body, fontSize: 14, lineHeight: 22 },
-  notice: { ...typography.caption, lineHeight: 18, marginTop: spacing.sm },
+  summaryBlock: { gap: 5, paddingBottom: 0 },
+  sectionTitle: { ...typography.subheading, fontSize: 15 },
+  body: { ...typography.body, fontSize: 13, lineHeight: 20 },
+  notice: { ...typography.caption, lineHeight: 17, marginTop: spacing.xs },
   metaRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
   metaCopy: { flex: 1, gap: 3 },
   metaTitle: { ...typography.bodyStrong },
   meta: { ...typography.caption },
-  progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
   progressCopy: { flex: 1, gap: 2 },
-  progressValue: { fontSize: 22, fontWeight: "900" },
-  progressTrack: { height: 7, borderRadius: radii.pill, overflow: "hidden", marginTop: spacing.sm },
-  progressFill: { height: 7, borderRadius: radii.pill },
-  readerToolbar: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
+  progressValue: { fontSize: 18, fontWeight: "900" },
+  progressTrack: { height: 5, borderRadius: radii.pill, overflow: "hidden", marginTop: spacing.xs },
+  progressFill: { height: 5, borderRadius: radii.pill },
+  readerToolbar: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.xs },
   contents: { marginTop: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, overflow: "hidden" },
-  contentsRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
+  contentsRow: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth },
   chapterBadge: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   chapterBadgeText: { fontSize: 11, fontWeight: "900" },
   contentsLabel: { flex: 1, ...typography.bodyStrong, fontSize: 12, lineHeight: 17 },
-  chapter: { marginTop: spacing.lg, gap: spacing.sm },
+  chapter: { marginTop: spacing.md, gap: spacing.sm },
   chapterEyebrow: { ...typography.eyebrow, fontSize: 9 },
-  chapterTitle: { ...typography.heading, fontSize: 20, lineHeight: 26 },
-  documentBody: { gap: spacing.sm },
-  pageActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.lg },
+  chapterTitle: { ...typography.heading, fontSize: 18, lineHeight: 23 },
+  documentBody: { gap: spacing.xs },
+  pageActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.xs, marginTop: spacing.md },
   h2: { ...typography.subheading, fontSize: 16, lineHeight: 22, marginTop: spacing.sm },
   h3: { ...typography.bodyStrong, fontSize: 14, lineHeight: 20, marginTop: spacing.sm },
   bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingLeft: 2 },
@@ -606,6 +607,6 @@ const styles = StyleSheet.create({
   bulletText: { flex: 1 },
   checkboxRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, alignItems: "center", justifyContent: "center", marginTop: 1 },
-  acceptanceStatement: { flex: 1, ...typography.bodyStrong, fontSize: 13, lineHeight: 20 },
+  acceptanceStatement: { flex: 1, ...typography.bodyStrong, fontSize: 12, lineHeight: 18 },
   error: { ...typography.caption, fontWeight: "700" },
 });
