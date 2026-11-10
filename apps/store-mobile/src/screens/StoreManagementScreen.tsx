@@ -315,7 +315,7 @@ export function StoreManagementScreen() {
 
       <Card>
         <SectionTitle title="Order fulfilment" caption="Move every SKIMA Store order through acceptance, preparation, hand-off and customer confirmation." />
-        {ordersQuery.isPending ? <ActivityIndicator color={palette.brand} /> :
+        {ordersQuery.isPending ? <ScreenSkeleton variant="list" cards={3} /> :
           ordersQuery.error ? <State title="Orders unavailable" body="The order queue could not be loaded. Refresh and try again." retry={() => void ordersQuery.refetch()} /> :
           storeOrders.length ? storeOrders.map((order) => {
             const id = asString(order, "id") ?? "";
