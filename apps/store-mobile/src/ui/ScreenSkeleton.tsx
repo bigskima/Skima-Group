@@ -127,6 +127,10 @@ export function ScreenSkeleton({
     );
   }
 
+  if (variant === "list") {
+    return <View style={styles.stack}><SkeletonRows rows={cards} compact={compact} /></View>;
+  }
+
   return (
     <View style={styles.stack}>
       {variant !== "list" ? <Animated.View style={[styles.hero, { backgroundColor: fill, opacity, height: variant === "dashboard" ? 142 : compact ? 74 : 112 }]} /> : null}
