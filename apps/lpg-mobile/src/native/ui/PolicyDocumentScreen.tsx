@@ -142,16 +142,14 @@ export function PolicyDocumentScreen({
       rate: 0.94,
       onDone: () => {
         if (!active) return;
-        setVisited((current) => {
-          const updated = new Set(current);
-          updated.add(safeIndex);
-          return updated;
-        });
-        if (safeIndex < sections.length - 1) {
-          setSectionIndex(safeIndex + 1);
-        } else {
-          setAutoReading(false);
-        }
+        const completed = new Set(visited);
+        completed.add(safeIndex);
+        setVisited(completed);
+        const nextChapter = safeIndex + 1 < sections.length && !completed.has(safeIndex + 1)
+          ? safeIndex + 1
+          : sections.findIndex((_, chapterIndex) => !completed.has(chapterIndex));
+        if (nextChapter >= 0) setSectionIndex(nextChapter);
+        else setAutoReading(false);
       },
       onError: () => {
         if (active) setAutoReading(false);
@@ -161,7 +159,7 @@ export function PolicyDocumentScreen({
       active = false;
       void Speech.stop();
     };
-  }, [autoReading, currentSection, safeIndex, sections.length]);
+  }, [autoReading, currentSection, safeIndex, sections.length, visited]);
 
   const submitAcceptance = async () => {
     if (!document?.versionId || !document.acceptanceStatement) return;
