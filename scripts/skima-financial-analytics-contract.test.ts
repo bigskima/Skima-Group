@@ -77,10 +77,12 @@ Deno.test("Fleet analytics separates customer collection, procurement, explicit 
   assertStringIncludes(migration, "'earningRecords'");
 });
 
-Deno.test("Admin analytics distinguishes supplier cash or bank payments and Driver wallet payouts", () => {
+Deno.test("Admin analytics records physical supplier cash payments and distinguishes Driver wallet payouts", () => {
   assertStringIncludes(workspace, "The customer payment is held in SKIMA-controlled escrow");
   assertStringIncludes(workspace, "How SKIMA paid the station");
-  assertStringIncludes(workspace, "Bank transfer reference (required)");
+  assertStringIncludes(workspace, "Cash voucher / signed station receipt reference (required)");
+  assertStringIncludes(workspace, "Supplier Fund · not revenue");
+  assertStringIncludes(workspace, "Cash On Hand · ready for station");
   assertStringIncludes(workspace, "Actual supplier payment date and time");
   assertStringIncludes(workspace, "Paid into Driver Wallets");
   assertStringIncludes(workspace, "externally withdrawn are different states");
