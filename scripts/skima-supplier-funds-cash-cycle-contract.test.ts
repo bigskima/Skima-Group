@@ -29,7 +29,7 @@ Deno.test("supplier fund and cash float accounts remain separate from platform r
 
 Deno.test("supplier cash movement records are immutable, audited and inaccessible through direct authenticated table access", () => {
   includes(migration, "create table if not exists public.platform_supplier_cash_movements", "cash movement history exists");
-  includes(migration, "movement_type in ('cash_withdrawal','station_cash_payment')", "only the two cash-cycle movements are recognized");
+  includes(migration, "movement_type in ('cash_withdrawal','station_cash_payment','fund_reclassification')", "only recognized supplier cash-cycle movements are allowed");
   includes(migration, "alter table public.platform_supplier_cash_movements enable row level security", "cash movement table enables RLS");
   includes(migration, "revoke all on table public.platform_supplier_cash_movements from public,anon,authenticated", "direct API access to cash movements is revoked");
   includes(migration, "using(false) with check(false)", "authenticated direct table policy is deny-all");
