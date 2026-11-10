@@ -152,3 +152,11 @@ Deno.test("Fuel controls are consolidated into the existing Money & Revenue dash
   includes(pricing, "public.has_permission('platform.revenue.manage',null)", "revenue managers can read the controls they manage");
   includes(adminRevenue, 'supabase.rpc("set_platform_fee_amount"', "existing platform revenue markup controls remain in the same dashboard");
 });
+
+
+Deno.test("Customer Fuel catalogue failures are isolated from optional checkout data", () => {
+  includes(customerOrder, "const catalogueLoadError = products.error ?? offers.error", "only product and station-offer reads block Fuel catalogue browsing");
+  includes(customerOrder, "managedPrices.error ? \"SKIMA Managed pricing\" : null", "managed pricing failures are surfaced as a checkout warning");
+  includes(customerOrder, "Current station offers remain visible", "optional checkout data failures do not hide valid station offers");
+  includes(customerOrder, "No compatible delivery container is configured for this fuel product yet", "an empty live container catalogue is explained instead of appearing as a load failure");
+});
