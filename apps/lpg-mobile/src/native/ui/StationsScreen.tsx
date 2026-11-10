@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { ChevronRight, Gauge, MapPin, ShieldCheck } from "lucide-react-native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import { displayStatus, firstNumber, firstString, recordId, type PlatformRecord } from "../api/records";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -40,10 +41,7 @@ export function StationsScreen() {
       subtitle="Find verified LPG stations available through SKIMA in your area."
     >
       {locations.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Finding available stations…</Text>
-        </View>
+        <ScreenSkeleton variant="list" cards={2} />
       ) : locations.error ? (
         <EmptyState
           title="Your delivery location couldn't be loaded"
@@ -57,10 +55,7 @@ export function StationsScreen() {
           action={<AppButton label="Choose location" onPress={() => router.push("/(customer)/locations")} />}
         />
       ) : stations.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Finding nearby stations…</Text>
-        </View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : stations.error ? (
         <EmptyState
           title="Nearby stations couldn't be loaded"
