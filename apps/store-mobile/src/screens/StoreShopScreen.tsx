@@ -102,7 +102,10 @@ export function StoreShopScreen(){
    </View></GuideTarget>
    <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:10}}>
     <SectionTitle title={search.trim()?"Search results":"Picked for everyday"} caption={filtered.length+" available options"}/>
-
+    {cart.length?<GuideTarget page="shop" targetKey="store.shop.basket"><Pressable accessibilityRole="button" accessibilityLabel={`Open basket with ${itemCount} items`} onPress={()=>setCheckoutStep("basket")} style={{flexDirection:"row",alignItems:"center",gap:6,paddingHorizontal:11,paddingVertical:9,borderRadius:13,backgroundColor:palette.brandSoft}}>
+     <ShoppingCart color={palette.brand} size={15}/>
+     <Text style={{fontSize:10,fontWeight:"900",color:palette.brand}}>Basket · {itemCount} · {money(subtotal,currency)}</Text>
+    </Pressable></GuideTarget>:null}
    </View>
    {store.items.isPending||store.prices.isPending||store.availability.isPending?<State title="Finding products" body="Checking live prices and stock for you."/>:store.items.error||store.prices.error||store.availability.error?<State title="Products unavailable" body="Refresh the shop and try again." retry={refresh}/>:filtered.length?<View style={styles.grid}>{filtered.map(p=><StorefrontProductCard key={p.id+":"+(p.variantId??"base")} palette={palette} width={width>=1100?"23.8%":width>=700?"31.8%":"48.5%"} media={<StoreImage assetId={p.imageAssetId} label={p.name}/>} categoryLabel={asString(p.item,"category_name","category")??"SKIMA Store"} name={p.name} variantName={p.variantName} priceLabel={money(p.amount,p.currency)} compareAtLabel={p.compareAtAmount&&p.compareAtAmount>p.amount?money(p.compareAtAmount,p.currency):null} stockLabel={p.stock===null?"Available":p.stock+" in stock"} onDetails={()=>setSelectedProduct(p)} addDisabled={checkout.isPending} onAdd={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setCart(cur=>{const found=cur.find(x=>x.itemId===p.id&&x.variantId===p.variantId);if(found)return cur.map(x=>x===found?{...x,quantity:p.stock===null?x.quantity+1:Math.min(p.stock,x.quantity+1)}:x);return [...cur,{itemId:p.id,variantId:p.variantId,name:p.name,variantName:p.variantName,quantity:1,unitAmount:p.amount,currencyCode:p.currency,stock:p.stock}];});}}/>)}</View>:<State title="No products found" body="Try another category or a different search."/>}
    
