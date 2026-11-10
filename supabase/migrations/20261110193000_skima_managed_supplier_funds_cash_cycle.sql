@@ -20,7 +20,7 @@ create unique index if not exists wallet_accounts_supplier_cash_cycle_purpose_ui
 create table if not exists public.platform_supplier_cash_movements (
   id uuid primary key default gen_random_uuid(),
   module_key text not null check (module_key in ('lpg','fuel')),
-  movement_type text not null check (movement_type in ('cash_withdrawal','station_cash_payment')),
+  movement_type text not null check (movement_type in ('cash_withdrawal','station_cash_payment','fund_reclassification')),
   currency_code text not null references public.currency_definitions(code) on delete restrict,
   amount numeric(28,8) not null check (amount>0),
   source_wallet_id uuid not null references public.wallet_accounts(id) on delete restrict,
@@ -44,6 +44,8 @@ create table if not exists public.platform_supplier_cash_movements (
       (module_key='lpg' and lpg_procurement_id is not null and fuel_order_id is null)
       or (module_key='fuel' and fuel_order_id is not null and lpg_procurement_id is null)
     ))
+    or (movement_type='fund_reclassification' and module_key='lpg'
+        and lpg_procurement_id is null and fuel_order_id is null)
   ),
   unique(module_key,idempotency_key)
 );
@@ -342,6 +344,7 @@ declare
   accounts_value jsonb;
   movements_value jsonb;
   fuel_payables_value jsonb;
+  legacy_lpg_value jsonb;
 begin
   if not (
     public.is_platform_super_admin()
@@ -448,11 +451,79 @@ begin
     and hold.status in ('held','partially_released','released')
     and supplier_amount.amount>supplier_amount.paid_amount;
 
+  select jsonb_build_object(
+    'supplierPrincipalCredited',coalesce(sum(
+      case when ledger.direction='credit' and ledger.metadata->>'role'='internal_lpg_cost_recovery'
+        then ledger.amount else 0 end
+    ),0),
+    'recordedSupplierCashPaid',coalesce(sum(
+      case when ledger.direction='debit' and ledger.metadata->>'role'='skima_fleet_funds_disbursed_to_supplier'
+        then ledger.amount else 0 end
+    ),0),
+    'reclassifiedAmount',coalesce(sum(
+      case when ledger.direction='debit' and ledger.metadata->>'role'='legacy_lpg_supplier_fund_reclassified'
+        then ledger.amount else 0 end
+    ),0),
+    'legacyClearingBalance',coalesce(balance.balance,0),
+    'reclassifiableAmount',least(
+      greatest(
+        coalesce(sum(case
+          when ledger.direction='credit' and ledger.metadata->>'role'='internal_lpg_cost_recovery' then ledger.amount
+          else 0 end),0)
+        -coalesce(sum(case
+          when ledger.direction='debit' and ledger.metadata->>'role'='skima_fleet_funds_disbursed_to_supplier' then ledger.amount
+          else 0 end),0)
+        -coalesce(sum(case
+          when ledger.direction='debit' and ledger.metadata->>'role'='legacy_lpg_supplier_fund_reclassified' then ledger.amount
+          else 0 end),0),
+        0
+      ),
+      greatest(coalesce(balance.balance,0),0)
+    ),
+    'unreconciledDifference',greatest(
+      coalesce(sum(case
+        when ledger.direction='credit' and ledger.metadata->>'role'='internal_lpg_cost_recovery' then ledger.amount
+        else 0 end),0)
+      -coalesce(sum(case
+        when ledger.direction='debit' and ledger.metadata->>'role'='skima_fleet_funds_disbursed_to_supplier' then ledger.amount
+        else 0 end),0)
+      -coalesce(sum(case
+        when ledger.direction='debit' and ledger.metadata->>'role'='legacy_lpg_supplier_fund_reclassified' then ledger.amount
+        else 0 end),0)
+      -coalesce(balance.balance,0),
+      0
+    ),
+    'currencyCode',currency_value
+  )
+  into legacy_lpg_value
+  from public.wallet_accounts wallet
+  left join public.wallet_balances balance
+    on balance.wallet_id=wallet.id and balance.currency_code=currency_value
+  left join public.wallet_ledger_entries ledger
+    on ledger.wallet_id=wallet.id
+  where wallet.wallet_type='platform_clearing'
+    and wallet.owner_entity_type='platform'
+    and wallet.owner_entity_id is null
+    and wallet.currency_code=currency_value
+    and wallet.status='active'
+    and wallet.metadata->>'wallet_purpose'='settlement_clearing'
+  group by balance.balance;
+
+  if legacy_lpg_value is null then
+    legacy_lpg_value:=jsonb_build_object(
+      'supplierPrincipalCredited',0,'recordedSupplierCashPaid',0,
+      'reclassifiedAmount',0,'legacyClearingBalance',0,
+      'reclassifiableAmount',0,'unreconciledDifference',0,
+      'currencyCode',currency_value
+    );
+  end if;
+
   return jsonb_build_object(
     'currencyCode',currency_value,
     'accounts',accounts_value,
     'recentMovements',movements_value,
-    'fuelPayables',fuel_payables_value
+    'fuelPayables',fuel_payables_value,
+    'legacyLpg',legacy_lpg_value
   );
 end;
 $function$;
