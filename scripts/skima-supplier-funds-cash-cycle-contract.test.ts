@@ -105,5 +105,9 @@ Deno.test("Finance workspace exposes the withdrawal and physical station cash cy
   includes(workspace, "Record a physical cash payment SKIMA has already made to the LPG supplier", "LPG station cash payment help text reflects the real process");
   includes(workspace, "Fuel supplier payables", "Finance can reconcile Fuel supplier amounts by order");
   includes(workspace, "Supplier fund withdrawals and station cash payments", "cash movement history is visible to Finance");
+  includes(workspace, "media.fuel.supplier_payment_evidence", "Fuel supplier cash receipts are registered as private media evidence");
+  includes(workspace, "Upload Fuel payment evidence", "Finance can upload signed Fuel station payment evidence");
+  includes(workspace, "target_evidence_media_asset_id: fuelEvidenceMediaAssetId", "Fuel cash payment attaches its uploaded evidence asset");
+
   includes(workspace, "value=\"cash\"", "LPG station payment is cash-only");
 });
