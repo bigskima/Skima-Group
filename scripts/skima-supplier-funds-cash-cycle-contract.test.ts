@@ -83,6 +83,10 @@ Deno.test("customer-funded SKIMA Managed Fuel orders can pay the station at hand
   includes(migration, "public.ensure_skima_supplier_wallet('fuel',order_record.currency_code,'cash_on_hand')", "Fuel station payment draws from Fuel cash on hand");
   includes(migration, "if not found or available_balance<round(target_amount,2) then", "Fuel station payment cannot overdraw the cash float");
   includes(migration, "'role','skima_fuel_cash_paid_to_station'", "Fuel cash payment is an operating disbursement");
+  includes(migration, "media.asset_type_key='media.fuel.supplier_payment_evidence'", "Fuel cash evidence must use the dedicated evidence type");
+  includes(migration, "media.metadata->>'fuelOrderId'=target_order_id::text", "Fuel cash evidence must be linked to the selected order");
+  includes(migration, "hold.subject_id=request.id", "Fuel payable read model is scoped to the exact service-request escrow");
+
   includes(migration, "operation.stage_key in ('ready_for_driver','station_handover','out_for_delivery','delivered','completed')", "the Finance read model shows station-ready Fuel payables before final delivery");
 });
 
