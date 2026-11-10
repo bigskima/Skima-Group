@@ -1069,6 +1069,7 @@ declare
   existing_movement public.platform_supplier_cash_movements%rowtype;
   legacy_balance numeric(28,8);
   supplier_principal_remaining numeric(28,8);
+  supplier_fund_balance_after numeric(28,8);
   reclassifiable_amount numeric(28,8);
 begin
   if not (
@@ -1203,11 +1204,15 @@ begin
     )
   );
 
+  select coalesce(balance.balance,0) into supplier_fund_balance_after
+  from public.wallet_balances balance
+  where balance.wallet_id=supplier_wallet_id;
+
   return jsonb_build_object(
     'movementId',movement_id,'financialTransactionId',transaction_id,
     'amount',round(target_amount,2),'currencyCode',currency_value,
     'paymentReference',reference_value,
-    'supplierFundBalanceAfter',supplier_principal_remaining,
+    'supplierFundBalanceAfter',coalesce(supplier_fund_balance_after,0),
     'legacyClearingBalanceAfter',legacy_balance-round(target_amount,2),
     'status','posted'
   );
