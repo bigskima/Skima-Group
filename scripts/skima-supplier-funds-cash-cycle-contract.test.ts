@@ -87,7 +87,7 @@ Deno.test("customer-funded SKIMA Managed Fuel orders can pay the station at hand
 });
 
 Deno.test("LPG supplier cash payments require approved procurement and active customer escrow, not final delivery settlement", () => {
-  includes(migration, "lpgPayables_value", "the Finance read model contains LPG supplier payables");
+  includes(migration, "lpg_payables_value", "the Finance read model contains LPG supplier payables");
   includes(migration, "order_record.payment_status in ('reserved','settled')", "LPG supplier payments require a reserved or settled customer payment");
   includes(migration, "hold.status in ('held','partially_released','released')", "LPG payable queue excludes expired and cancelled customer escrow");
   includes(migration, "order_record.escrow_hold_id", "LPG payments are linked to their actual escrow hold");
