@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   hero: { width: "100%", borderRadius: radii.xl },
   metricRow: { flexDirection: "row", gap: spacing.sm },
   metric: { flex: 1, minHeight: 82, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md, justifyContent: "center", gap: 12 },
-  policy: { width: "100%", maxWidth: 820, alignSelf: "center", gap: spacing.md, padding: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.xl },
+  policy: { flex: 1, width: "100%", maxWidth: 820, alignSelf: "center", justifyContent: "center", gap: spacing.md, padding: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   policyIntro: { gap: 10, paddingBottom: spacing.xs },
   brandMark: { width: 42, height: 42, borderRadius: 14, marginBottom: 2 },
   panel: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md, gap: 11 },
