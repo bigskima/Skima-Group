@@ -66,15 +66,24 @@ declare
   new_count text;
   old_metadata text;
   new_metadata text;
+  old_message text;
+  new_message text;
 begin
   select pg_get_functiondef('public.initialize_fuel_order_operation()'::regprocedure)
   into function_sql;
 
   old_mode:=$old$or requested_container_mode not in ('purchase','rental')$old$;
-  new_mode:=$new$or requested_container_mode not in ('purchase','rental','exchange')$new$;
+  new_mode:=$new$or requested_container_mode is null or requested_container_mode not in ('purchase','rental','exchange')$new$;
   if position(old_mode in function_sql)=0 then
     raise exception 'Fuel order container-mode guard changed; refusing exchange patch';
   end if;
+  old_message:=$old$Fuel order payload must contain a valid product, litres, purchase/rental choice and supported fulfilment mode$old$;
+  new_message:=$new$Fuel order payload must contain a valid product, litres, purchase, rental or container exchange choice and supported fulfilment mode$new$;
+  if position(old_message in function_sql)=0 then
+    raise exception 'Fuel order validation message changed; refusing wording patch';
+  end if;
+  function_sql:=replace(function_sql,old_message,new_message);
+
   function_sql:=replace(function_sql,old_mode,new_mode);
 
   old_count:=$old$requested_container_count:=ceil(requested_litres/container_type_record.nominal_capacity_litres)::integer;
