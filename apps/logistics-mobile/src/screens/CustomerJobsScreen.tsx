@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { ClipboardList, Package, Plus, Route, Truck } from "lucide-react-native";
 import { asString, useLogisticsQuery } from "../api/logistics";
