@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Gift, Share2, UsersRound, Trophy, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useAppTheme } from "../theme/ThemeProvider";
 
 type Row = Record<string, unknown>;
@@ -64,7 +65,7 @@ export function ReferralsScreen() {
   };
 
   if (dashboard.isPending) {
-    return <View style={styles.loading}><ActivityIndicator color={palette.brand} /><Text style={[styles.meta, { color: palette.muted }]}>Loading your referral dashboard…</Text></View>;
+    return <ScreenSkeleton variant="dashboard" cards={3} />;
   }
   if (dashboard.error) {
     return <View style={styles.loading}><Text style={[styles.cardTitle, { color: palette.ink }]}>Referrals are unavailable</Text><Text style={[styles.meta, { color: palette.muted }]}>{dashboard.error instanceof Error ? dashboard.error.message : "Please try again."}</Text><Pressable onPress={() => void dashboard.refetch()}><Text style={{ color: palette.brand }}>Retry</Text></Pressable></View>;

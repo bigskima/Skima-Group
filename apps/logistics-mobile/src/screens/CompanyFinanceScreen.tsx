@@ -9,7 +9,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, typography } from "../theme/tokens";
 import { Screen } from "../ui/Screen";
-import { ScreenSkeleton } from "../ui/ScreenSkeleton";
+import { ScreenSkeleton, SkeletonRows } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
 
 const MoneySchema = z.record(z.string(), z.unknown());
@@ -186,7 +186,7 @@ export function CompanyFinanceScreen() {
             <Pressable onPress={()=>setNewBeneficiary((v)=>!v)} style={styles.addBank}><Text style={{color:palette.brand,fontSize:11,fontWeight:"900"}}>{newBeneficiary?"Close":"Add payout bank account"}</Text><ChevronRight color={palette.brand} size={16}/></Pressable>
             {newBeneficiary ? (
               <View style={{gap:8}}>
-                {banksQuery.isPending?<ActivityIndicator color={palette.brand}/>:<View style={styles.bankGrid}>{bankRows.slice(0,12).map((bank)=>{const code=asString(bank,"code")??"";return <Pressable key={code} onPress={()=>setBankCode(code)} style={[styles.bankChip,{borderColor:bankCode===code?palette.brand:palette.border,backgroundColor:bankCode===code?palette.brandSoft:palette.surface}]}><Text numberOfLines={1} style={{fontSize:9,fontWeight:"800",color:palette.ink}}>{asString(bank,"name","display_name")??code}</Text></Pressable>;})}</View>}
+                {banksQuery.isPending?<SkeletonRows rows={2} compact/>:<View style={styles.bankGrid}>{bankRows.slice(0,12).map((bank)=>{const code=asString(bank,"code")??"";return <Pressable key={code} onPress={()=>setBankCode(code)} style={[styles.bankChip,{borderColor:bankCode===code?palette.brand:palette.border,backgroundColor:bankCode===code?palette.brandSoft:palette.surface}]}><Text numberOfLines={1} style={{fontSize:9,fontWeight:"800",color:palette.ink}}>{asString(bank,"name","display_name")??code}</Text></Pressable>;})}</View>}
                 <TextInput value={accountNumber} onChangeText={setAccountNumber} keyboardType="number-pad" maxLength={10} placeholder="10-digit account number" placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>
                 <Action label="Verify & save bank" busy={configureBeneficiary.isPending} onPress={()=>configureBeneficiary.mutate()}/>
               </View>

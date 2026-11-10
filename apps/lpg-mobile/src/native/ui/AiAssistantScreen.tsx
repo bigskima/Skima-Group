@@ -23,6 +23,7 @@ import { friendlyError } from "../utilities/friendlyError";
 import { Screen } from "./Screen";
 import { BrandMark } from "./BrandMark";
 import { AiRichText } from "./AiRichText";
+import { SkeletonRows } from "./ScreenSkeleton";
 import { speechText } from "./AiMarkdown";
 import { AppModal } from "./AppModal";
 
@@ -395,10 +396,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
 
                 <Text style={[styles.supportLabel, { color: palette.mutedStrong }]}>Refill order</Text>
                 {supportOrders.isLoading ? (
-                  <View style={styles.supportLoading}>
-                    <ActivityIndicator color={palette.brand} size="small" />
-                    <Text style={[styles.supportLoadingText, { color: palette.muted }]}>Loading your orders…</Text>
-                  </View>
+                  <SkeletonRows rows={2} compact />
                 ) : supportOrders.data?.length ? (
                   <View style={styles.supportChoiceWrap}>
                     {supportOrders.data.slice(0, 5).map((order) => {

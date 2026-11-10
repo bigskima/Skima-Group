@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, ShieldCheck, WalletCards } from "lucide-react-native";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { domainQueries } from "../api/domains";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -100,10 +101,7 @@ export function CustomerOrderPaymentScreen() {
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {orders.isPending || wallets.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.caption, { color: palette.muted }]}>Loading the saved order and wallet…</Text>
-        </View>
+        <ScreenSkeleton variant="detail" cards={2} />
       ) : orders.error || !order ? (
         <EmptyState
           title="This order could not be loaded"

@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react-native";
 import { useState } from "react";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import {
   ActivityIndicator,
   Image,
@@ -198,7 +199,7 @@ export function DriverIdCardScreen() {
       }
     >
       {card.isPending ? (
-        <ActivityIndicator color={colors.brand} />
+        <ScreenSkeleton variant="detail" cards={2} />
       ) : card.error ? (
         <Text style={styles.error}>
           {friendlyError(card.error, "Your Driver Pass could not be loaded.")}

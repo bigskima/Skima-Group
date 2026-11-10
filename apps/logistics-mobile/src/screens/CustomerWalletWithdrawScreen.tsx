@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { z } from "zod";
+import { ScreenSkeleton, SkeletonRows } from "../ui/ScreenSkeleton";
 import { useLogisticsQuery, asString, asNumber } from "../api/logistics";
 import { useLogisticsFinanceMutation, useLogisticsFinanceQuery } from "../api/finance";
 import { useSession } from "../session/SessionProvider";
@@ -153,12 +154,12 @@ export function CustomerWalletWithdrawScreen() {
 
   return <Screen title="Withdraw from SKIMA Wallet" denseHeader>
     <Pressable onPress={() => router.back()}><Text style={{ color: palette.brand, fontSize: 11, fontWeight: "900" }}>‹ Back to wallet</Text></Pressable>
-    {wallets.isPending || balances.isPending ? <ActivityIndicator color={palette.brand} /> : !walletId ? <StatePanel title="Customer wallet unavailable" description="We could not find the shared customer wallet for this account." retry={() => void Promise.all([wallets.refetch(), balances.refetch()])} /> : <>
+    {wallets.isPending || balances.isPending ? <ScreenSkeleton variant="detail" cards={2} /> : !walletId ? <StatePanel title="Customer wallet unavailable" description="We could not find the shared customer wallet for this account." retry={() => void Promise.all([wallets.refetch(), balances.refetch()])} /> : <>
       <View style={[styles.hero, { backgroundColor: palette.brand }]}><Text style={styles.kicker}>AVAILABLE TO WITHDRAW</Text><Text style={styles.balance}>{money(available, currency)}</Text><Text style={styles.hint}>Payouts use the same customer wallet balance shared with LPG and Logistics Store.</Text></View>
       {receipt ? <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}><View style={styles.row}><CheckCircle2 color={receiptStatus === "failed" || transferStatus === "failed" ? palette.danger : palette.success} size={20} /><Text style={[styles.heading, { color: palette.ink }]}>{receiptStatus === "succeeded" || transferStatus === "succeeded" ? "Withdrawal sent" : receiptStatus === "processing" || transferStatus === "processing" ? "Transfer processing" : "Withdrawal submitted"}</Text></View><Text style={[styles.hintDark, { color: palette.muted }]}>Status: {receiptStatus || transferStatus || "processing"}{reference ? ` · Ref ${reference}` : ""}</Text>{receiptStatus === "approved" ? <Pressable onPress={() => void retryTransfer()} disabled={retry.isPending} style={[styles.button, { backgroundColor: palette.brand }]}>{retry.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Retry bank transfer</Text>}</Pressable> : null}<Pressable onPress={() => router.replace("/(customer)/wallet" as never)}><Text style={{ color: palette.brand, fontWeight: "900", fontSize: 11 }}>Done</Text></Pressable></View> : <>
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={styles.row}><ShieldCheck color={palette.success} size={18} /><Text style={[styles.heading, { color: palette.ink }]}>Verified payout account</Text></View>
-          {beneficiaryQuery.isPending ? <ActivityIndicator color={palette.brand} /> : beneficiaries.length ? beneficiaries.map(b => {
+          {beneficiaryQuery.isPending ? <SkeletonRows rows={2} compact /> : beneficiaries.length ? beneficiaries.map(b => {
             const id = asString(b, "id") ?? "";
             const code = asString(b, "bank_code", "bankCode") ?? "";
             const active = id === destination;
@@ -167,7 +168,7 @@ export function CustomerWalletWithdrawScreen() {
           <Pressable onPress={() => { setAddingAccount(v => !v); setMessage(""); }} style={styles.addLink}><Plus color={palette.brand} size={16} /><Text style={{ color: palette.brand, fontWeight: "900", fontSize: 11 }}>{addingAccount ? "Close account form" : "Add payout account"}</Text></Pressable>
           {addingAccount ? <View style={styles.form}>
             <TextInput value={bankSearch} onChangeText={setBankSearch} placeholder="Search Nigerian bank" placeholderTextColor={palette.muted} style={[styles.input, { color: palette.ink, borderColor: palette.border }]} />
-            {bankQuery.isPending ? <ActivityIndicator color={palette.brand} /> : filteredBanks.slice(0, 8).map(b => <Pressable key={b.code} onPress={() => { setBankCode(b.code); setAccountName(""); }} style={[styles.bankOption, { backgroundColor: bankCode === b.code ? palette.brandSoft : palette.surfaceSubtle, borderColor: bankCode === b.code ? palette.brand : palette.border }]}><Text style={{ color: palette.ink, fontSize: 11 }}>{b.name}</Text></Pressable>)}
+            {bankQuery.isPending ? <SkeletonRows rows={3} compact /> : filteredBanks.slice(0, 8).map(b => <Pressable key={b.code} onPress={() => { setBankCode(b.code); setAccountName(""); }} style={[styles.bankOption, { backgroundColor: bankCode === b.code ? palette.brandSoft : palette.surfaceSubtle, borderColor: bankCode === b.code ? palette.brand : palette.border }]}><Text style={{ color: palette.ink, fontSize: 11 }}>{b.name}</Text></Pressable>)}
             <TextInput value={accountNumber} onChangeText={v => { setAccountNumber(v.replace(/\D/g, "").slice(0, 10)); setAccountName(""); }} keyboardType="number-pad" maxLength={10} placeholder="10-digit account number" placeholderTextColor={palette.muted} style={[styles.input, { color: palette.ink, borderColor: palette.border }]} />
             {accountName ? <Text style={{ color: palette.success, fontSize: 11, fontWeight: "900" }}>Verified: {accountName}</Text> : null}
             {!verificationAvailable ? <Text style={[styles.hintDark, { color: palette.muted }]}>{providerMessage ?? "New account verification is temporarily unavailable. Existing verified accounts can still be used."}</Text> : <Pressable disabled={resolveAccount.isPending} onPress={() => void verifyAccount()} style={[styles.button, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border, borderWidth: 1 }]}>{resolveAccount.isPending ? <ActivityIndicator color={palette.brand} /> : <Text style={{ color: palette.brand, fontWeight: "900" }}>Verify account</Text>}</Pressable>}

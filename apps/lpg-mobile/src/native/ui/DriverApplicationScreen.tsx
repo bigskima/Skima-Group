@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import { domainQueries, useApplicationPayload } from "../api/domains";
+import { ScreenSkeleton, SkeletonRows } from "./ScreenSkeleton";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -576,7 +577,7 @@ export function DriverApplicationScreen() {
   if (applications.isPending || types.isPending || requirements.isPending) {
     return (
       <Screen eyebrow="driver application" title="Application">
-        <ActivityIndicator color={colors.brand} />
+        <ScreenSkeleton variant="form" cards={2} />
       </Screen>
     );
   }
@@ -738,10 +739,7 @@ export function DriverApplicationScreen() {
               Choose every area you can reliably serve. SKIMA will review your request before you can receive jobs there.
             </Text>
             {loadingServiceAreas ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color={colors.brand} size="small" />
-                <Text style={styles.helperText}>Loading available service areas…</Text>
-              </View>
+              <SkeletonRows rows={3} compact />
             ) : serviceAreas.length === 0 ? (
               <View style={styles.emptyAreaBox}>
                 <Text style={styles.emptyAreaTitle}>No service areas are available yet</Text>

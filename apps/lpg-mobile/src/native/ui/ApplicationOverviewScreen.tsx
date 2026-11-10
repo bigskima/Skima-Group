@@ -19,6 +19,7 @@ import {
   domainQueries,
   useApplicationPayload,
 } from "../api/domains";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useGatewayMutation } from "../api/gateway";
 import {
   satisfiedVerificationDocumentKeys,
@@ -621,7 +622,7 @@ export function ApplicationOverviewScreen({
   if (applications.isPending || types.isPending || requirements.isPending) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
-        <ActivityIndicator color={palette.brand} />
+        <ScreenSkeleton variant="form" cards={2} />
       </Screen>
     );
   }

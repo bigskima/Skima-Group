@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useAppTheme } from "../theme/ThemeProvider";
 
 type ServiceLink = {
@@ -92,10 +93,7 @@ export function ServiceDiscoveryModal(props: Props) {
           <Text style={[styles.title, { color: palette.ink }]}>{props.title}</Text>
           <Text style={[styles.message, { color: palette.muted }]}>{props.message}</Text>
           {links.isPending ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={palette.brand} />
-              <Text style={[styles.message, { color: palette.muted }]}>Loading services…</Text>
-            </View>
+            <ScreenSkeleton variant="list" cards={3} compact />
           ) : choices.length ? (
             <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
               {choices.map((item) => (

@@ -3,13 +3,26 @@ const decoder = new TextDecoder();
 async function read(path: string) {
   return decoder.decode(await Deno.readFile(path));
 }
-const [refillGate, refillApi, refillReader, logisticsGate, storeGate, billsGate, docsMigration, versionsMigration, admin] = await Promise.all([
+const [
+  refillGate, refillApi, refillReader, logisticsGate, storeGate, billsGate,
+  lpgSkeleton, logisticsSkeleton, storeSkeleton, billsSkeleton,
+  lpgEntry, logisticsEntry, storeEntry, billsEntry,
+  docsMigration, versionsMigration, admin,
+] = await Promise.all([
   read("apps/lpg-mobile/src/native/policies/RefillCustomerPolicyGate.tsx"),
   read("apps/lpg-mobile/src/native/api/policies.ts"),
   read("apps/lpg-mobile/src/native/ui/PolicyDocumentScreen.tsx"),
   read("apps/logistics-mobile/src/policies/PolicyConsentGate.tsx"),
   read("apps/store-mobile/src/policies/PolicyConsentGate.tsx"),
   read("apps/bills-mobile/src/policies/PolicyConsentGate.tsx"),
+  read("apps/lpg-mobile/src/native/ui/ScreenSkeleton.tsx"),
+  read("apps/logistics-mobile/src/ui/ScreenSkeleton.tsx"),
+  read("apps/store-mobile/src/ui/ScreenSkeleton.tsx"),
+  read("apps/bills-mobile/src/ui/ScreenSkeleton.tsx"),
+  read("apps/lpg-mobile/app/index.tsx"),
+  read("apps/logistics-mobile/app/index.tsx"),
+  read("apps/store-mobile/app/index.tsx"),
+  read("apps/bills-mobile/app/index.tsx"),
   read("supabase/migrations/20261108001245_add_customer_terms_for_logistics_store_bills.sql"),
   read("supabase/migrations/20261108001644_publish_initial_customer_terms_v1.sql"),
   read("apps/admin/src/features/experience/PolicyWorkspaceV2.tsx"),
@@ -36,6 +49,40 @@ Deno.test("policy readers include progressive reading, contents, read aloud and 
     assertStringIncludes(source, "acceptanceStatement");
   }
   assertStringIncludes(refillReader, "mandatory = false");
+});
+Deno.test("all four customer apps use contextual skeleton loaders for policy and app startup", () => {
+  for (const skeleton of [lpgSkeleton, logisticsSkeleton, storeSkeleton, billsSkeleton]) {
+    assertStringIncludes(skeleton, 'variant === "policy"');
+    assertStringIncludes(skeleton, 'variant === "dashboard"');
+    assertStringIncludes(skeleton, 'variant === "list"');
+    assertStringIncludes(skeleton, "export function ScreenSkeleton");
+  }
+  for (const gate of [refillGate, logisticsGate, storeGate, billsGate]) {
+    assertStringIncludes(gate, "ScreenSkeleton");
+    assertStringIncludes(gate, 'variant="policy"');
+  }
+  for (const entry of [lpgEntry, logisticsEntry, storeEntry, billsEntry]) {
+    assertStringIncludes(entry, "ScreenSkeleton");
+  }
+});
+Deno.test("Read aloud automatically covers every chapter and stops cleanly", () => {
+  for (const [source, setter] of [
+    [refillReader, "setAutoReading"],
+    [logisticsGate, "setAutoRead"],
+    [storeGate, "setAutoRead"],
+    [billsGate, "setAutoRead"],
+  ] as const) {
+    assertStringIncludes(source, "Speech.speak");
+    assertStringIncludes(source, "onDone:");
+    assertStringIncludes(source, "nextChapter");
+    assertStringIncludes(source, setter);
+    assertStringIncludes(source, "void Speech.stop()");
+    assertStringIncludes(source, "Read aloud");
+  }
+  for (const source of [logisticsGate, storeGate, billsGate]) {
+    assertStringIncludes(source, "scrollRef.current?.scrollTo");
+  }
+  assertStringIncludes(refillReader, "key={safeIndex}");
 });
 Deno.test("admin can draft, edit, publish and review app-specific policies", () => {
   for (const scope of ["lpg", "logistics", "store", "bills"]) assertStringIncludes(admin, scope);

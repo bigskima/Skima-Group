@@ -7,6 +7,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii } from "../theme/tokens";
 import { Screen } from "../ui/Screen";
 import { StatePanel } from "../ui/StatePanel";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 
 const SUCCESS = new Set(["completed", "confirmed", "credited", "succeeded", "successful"]);
 const FAILED = new Set(["cancelled", "failed", "rejected", "expired"]);
@@ -32,14 +33,14 @@ export function PaymentReturnScreen() {
   const succeeded = SUCCESS.has(paymentStatus);
   const failed = FAILED.has(paymentStatus);
 
-  if (status === "loading") return <View style={[styles.loading, { backgroundColor: palette.canvas }]}><ActivityIndicator color={palette.brand} size="large" /></View>;
+  if (status === "loading") return <View style={[styles.loading, { backgroundColor: palette.canvas }]}><ScreenSkeleton variant="dashboard" cards={2}/></View>;
   if (status !== "authenticated") return <Redirect href="/(auth)/sign-in" />;
 
   async function refresh() {
     await Promise.all([deposits.refetch(), wallets.refetch(), balances.refetch()]);
   }
   return <Screen title="Payment status" denseHeader>
-    {deposits.isPending ? <View style={styles.loading}><ActivityIndicator color={palette.brand} /></View> :
+    {deposits.isPending ? <ScreenSkeleton variant="detail" cards={2}/> :
       deposits.error ? <StatePanel title="Payment status unavailable" description="Your payment may still be processing. Refresh to check the provider confirmation." retry={() => void refresh()} /> :
       <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <Text style={[styles.title, { color: succeeded ? palette.success : failed ? palette.danger : palette.ink }]}>{succeeded ? "Payment confirmed" : failed ? "Payment not completed" : "Waiting for payment confirmation"}</Text>

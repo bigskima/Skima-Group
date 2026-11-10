@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
+import { SkeletonRows } from "./ScreenSkeleton";
 import {
   ActivityIndicator,
   Pressable,
@@ -450,7 +451,7 @@ export function StationLocationEditorScreen() {
           placeholderTextColor={palette.muted}
           style={[styles.searchInput, { color: palette.ink }]}
         />
-        {maps.autocomplete.isPending ? <ActivityIndicator color={palette.brand} size="small" /> : null}
+        {maps.autocomplete.isPending ? <SkeletonRows rows={2} compact /> : null}
       </View>
 
       {predictions.length ? (

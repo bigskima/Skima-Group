@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, Text, View } from "react-native";
+import { RefreshControl, Text, View } from "react-native";
 import { CheckCircle2, Clock3, Package, ReceiptText } from "lucide-react-native";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
@@ -58,7 +59,7 @@ export function StoreOrdersScreen() {
       <GuideTarget page="orders" targetKey="store.orders.history"><SectionTitle title="Your orders" caption="Follow each Store purchase from checkout through delivery and receipt." /></GuideTarget>
       {confirmReceipt.isError ? <Notice tone="error" text={confirmReceipt.error instanceof Error ? confirmReceipt.error.message : "Receipt confirmation could not be completed. Try again."} /> : null}
       {confirmReceipt.isSuccess ? <Notice tone="success" text="Your receipt has been confirmed and the order settlement has been updated." /> : null}
-      {orders.isPending ? <ActivityIndicator color={palette.brand} /> :
+      {orders.isPending ? <ScreenSkeleton variant="list" cards={3} /> :
         orders.error ? <State title="Orders unavailable" body="Your Store purchases are safe. Refresh to try again." retry={refresh} /> :
         !rows.length ? <State title="No orders yet" body="Your first SKIMA Store purchase will appear here with its delivery status and receipt." /> :
         <View style={{ gap: 10 }}>

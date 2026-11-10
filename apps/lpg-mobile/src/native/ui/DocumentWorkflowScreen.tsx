@@ -2,6 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
 import { AlertCircle, CheckCircle2, FileCheck2, Send, Upload } from "lucide-react-native";
 import { useMemo, useState } from "react";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import {
   ActivityIndicator,
   Pressable,
@@ -320,7 +321,7 @@ export function DocumentWorkflowScreen({
       }
     >
       {loading ? (
-        <ActivityIndicator color={colors.brand} />
+        <ScreenSkeleton variant="form" cards={2} />
       ) : !applicationId ? (
         <Card>
           <Text style={styles.title}>Application required</Text>

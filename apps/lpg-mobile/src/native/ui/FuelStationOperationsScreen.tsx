@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { CheckCircle2, Fuel, MapPin, Package, PhoneCall, ShieldCheck, Truck } from "lucide-react-native";
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 
 import { domainQueries, useStationInventory } from "../api/domains";
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
@@ -726,7 +727,7 @@ export function FuelStationOperationsScreen() {
           action={<AppButton label="Retry branch lookup" variant="secondary" onPress={() => void stationContext.refetch()} />}
         />
       ) : loading ? (
-        <View style={styles.loading}><ActivityIndicator /><Text style={[styles.muted, { color: palette.muted }]}>Loading Fuel station operations…</Text></View>
+        <ScreenSkeleton variant="dashboard" cards={3} />
       ) : failed ? (
         <EmptyState
           title="Fuel operations could not be loaded"

@@ -3,7 +3,6 @@ import * as Linking from "expo-linking";
 import { CheckCircle2, ShieldCheck, X, Copy, Landmark, RefreshCw, Check, ExternalLink } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { SkeletonRows } from "./ScreenSkeleton";
 import { useGatewayQuery } from "../api/gateway";
 import { RecordArraySchema, displayStatus, firstString, recordId } from "../api/records";
 import { colors, radii, spacing } from "../theme/tokens";
@@ -200,7 +200,7 @@ export function BankTransferModal({
               {/* Live Polling Card */}
               <View style={styles.pollingCard}>
                 {deposits.isFetching || checking ? (
-                  <ActivityIndicator color={colors.brand} size="small" />
+                  <SkeletonRows rows={1} compact />
                 ) : (
                   <View style={styles.pulseDot} />
                 )}

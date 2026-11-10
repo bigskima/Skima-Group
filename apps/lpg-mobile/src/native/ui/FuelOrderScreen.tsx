@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { CheckCircle2, Fuel, Gauge, MapPin, Package, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ScreenSkeleton } from "./ScreenSkeleton";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
@@ -399,10 +400,7 @@ export function FuelOrderScreen() {
       action={<AppButton label="My orders" size="sm" variant="secondary" onPress={() => router.push("/(customer)/fuel-orders" as never)} />}
     >
       {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.muted, { color: palette.muted }]}>Loading live fuel products and station offers…</Text>
-        </View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : loadingError ? (
         <EmptyState
           title="Fuel offers could not be loaded"
