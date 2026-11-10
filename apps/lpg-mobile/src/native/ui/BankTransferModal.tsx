@@ -3,7 +3,6 @@ import * as Linking from "expo-linking";
 import { CheckCircle2, ShieldCheck, X, Copy, Landmark, RefreshCw, Check, ExternalLink } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
