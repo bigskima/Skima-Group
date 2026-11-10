@@ -612,6 +612,114 @@ export function AdminFinancialAnalyticsWorkspace() {
     },
   });
 
+
+  const recordSupplierCashWithdrawal = useMutation({
+    mutationFn: async () => {
+      const amount = Number(supplierWithdrawalAmount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("Enter a positive amount to withdraw into SKIMA's physical cash float.");
+      }
+      const reference = supplierWithdrawalReference.trim();
+      if (reference.length < 3) {
+        throw new Error("Enter the bank withdrawal slip, teller or cash-withdrawal reference.");
+      }
+      const withdrawnAt = new Date(supplierWithdrawalDate);
+      if (!supplierWithdrawalDate || !Number.isFinite(withdrawnAt.getTime())) {
+        throw new Error("Enter a valid cash withdrawal date and time.");
+      }
+      const fingerprint = JSON.stringify([
+        supplierWithdrawalModule, currency, amount, reference, withdrawnAt.toISOString(),
+      ]);
+      const idempotencyKey = supplierWithdrawalAttemptsRef.current.get(fingerprint)
+        ?? createClientIdempotencyKey("admin.supplier-cash.withdrawal", fingerprint);
+      supplierWithdrawalAttemptsRef.current.set(fingerprint, idempotencyKey);
+      const { data, error } = await supabase.rpc("record_platform_supplier_cash_withdrawal", {
+        target_module_key: supplierWithdrawalModule,
+        target_currency_code: currency,
+        target_amount: amount,
+        target_withdrawal_reference: reference,
+        target_note: "Physical cash withdrawn from SKIMA's operating bank account for station procurement.",
+        target_evidence_media_asset_id: null,
+        target_idempotency_key: idempotencyKey,
+        target_withdrawn_at: withdrawnAt.toISOString(),
+      });
+      if (error) throw error;
+      return data as RecordValue;
+    },
+    onSuccess: async (result) => {
+      setNotice(
+        `${label(supplierWithdrawalModule)} Supplier Fund cash withdrawal recorded · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)}`,
+      );
+      setNoticeTone("success");
+      setSupplierWithdrawalAmount("");
+      setSupplierWithdrawalReference("");
+      setSupplierWithdrawalDate(localDateTimeInput(new Date()));
+      supplierWithdrawalAttemptsRef.current.clear();
+      await refresh();
+      await supplierFunds.refetch();
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
+  const recordFuelSupplierCashPayment = useMutation({
+    mutationFn: async () => {
+      const payable = supplierFunds.data?.fuelPayables.find(
+        (row) => recordString(row, "orderId") === fuelPayableOrderId,
+      );
+      if (!payable) throw new Error("Choose a current SKIMA Managed Fuel order with an outstanding station amount.");
+      const amount = Number(fuelCashPaymentAmount);
+      const outstanding = numberValue(payable, "outstandingAmount");
+      if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) {
+        throw new Error("Enter a positive cash amount no greater than this Fuel order's unpaid station supply amount.");
+      }
+      const reference = fuelCashPaymentReference.trim();
+      if (reference.length < 3) throw new Error("Enter the station cash receipt or signed handover voucher reference.");
+      const paidAt = new Date(fuelCashPaymentDate);
+      if (!fuelCashPaymentDate || !Number.isFinite(paidAt.getTime())) {
+        throw new Error("Enter a valid Fuel station cash-payment date and time.");
+      }
+      const note = fuelCashPaymentNote.trim();
+      const fingerprint = JSON.stringify([
+        fuelPayableOrderId, amount, reference, paidAt.toISOString(), note,
+      ]);
+      const idempotencyKey = fuelCashPaymentAttemptsRef.current.get(fingerprint)
+        ?? createClientIdempotencyKey("admin.fuel.supplier-cash-payment", fingerprint);
+      fuelCashPaymentAttemptsRef.current.set(fingerprint, idempotencyKey);
+      const { data, error } = await supabase.rpc("record_fuel_supplier_cash_payment", {
+        target_order_id: fuelPayableOrderId,
+        target_amount: amount,
+        target_payment_reference: reference,
+        target_note: note || null,
+        target_evidence_media_asset_id: null,
+        target_idempotency_key: idempotencyKey,
+        target_paid_at: paidAt.toISOString(),
+      });
+      if (error) throw error;
+      return data as RecordValue;
+    },
+    onSuccess: async (result) => {
+      setNotice(
+        `Fuel station cash payment recorded · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)} · ${recordString(result, "orderReference") ?? ""}`,
+      );
+      setNoticeTone("success");
+      setFuelPayableOrderId("");
+      setFuelCashPaymentAmount("");
+      setFuelCashPaymentReference("");
+      setFuelCashPaymentDate(localDateTimeInput(new Date()));
+      setFuelCashPaymentNote("");
+      fuelCashPaymentAttemptsRef.current.clear();
+      await refresh();
+      await supplierFunds.refetch();
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
   if (!canRead) {
     return (
       <ErrorState
