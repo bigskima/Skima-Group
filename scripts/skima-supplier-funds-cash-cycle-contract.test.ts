@@ -125,6 +125,9 @@ Deno.test("Finance workspace exposes the withdrawal and physical station cash cy
   includes(workspace, "media.fuel.supplier_payment_evidence", "Fuel supplier cash receipts are registered as private media evidence");
   includes(workspace, "Upload Fuel payment evidence", "Finance can upload signed Fuel station payment evidence");
   includes(workspace, "target_evidence_media_asset_id: fuelEvidenceMediaAssetId", "Fuel cash payment attaches its uploaded evidence asset");
+  includes(workspace, 'createClientIdempotencyKey("admin.fuel.supplier-payment.upload", `${fuelPayableOrderId}:${fuelEvidenceFile.name}`)', "Fuel evidence upload idempotency is scoped to the selected order");
+  includes(workspace, "setFuelEvidenceMediaAssetId(null)", "changing orders clears the previous Fuel evidence asset");
+
 
   includes(workspace, "value=\"cash\"", "LPG station payment is cash-only");
 });
