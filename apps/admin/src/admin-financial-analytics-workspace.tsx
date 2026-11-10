@@ -113,6 +113,7 @@ const SupplierFundsSchema = z.object({
   accounts: z.array(RecordSchema).default([]),
   recentMovements: z.array(RecordSchema).default([]),
   fuelPayables: z.array(RecordSchema).default([]),
+  lpgPayables: z.array(RecordSchema).default([]),
   legacyLpg: RecordSchema.default({}),
 }).passthrough();
 
@@ -1040,20 +1041,20 @@ export function AdminFinancialAnalyticsWorkspace() {
         <DataTable columns={orderColumns} caption="SKIMA Fleet orders and supplier balances" records={fleet.orders as FleetOrder[]}
           getRowKey={(row) => recordString(row, "orderId") ?? JSON.stringify(row)}
           emptyTitle="No SKIMA Fleet orders" emptyMessage="No settled SKIMA Fleet procurement records are available for this period." />
-        {canRecordSupplierPayment && fleet.orders.some((order) => numberValue(order, "supplierOutstanding") > 0) ? (
+        {canRecordSupplierPayment && (supplierFunds.data?.lpgPayables ?? []).some((order) => numberValue(order, "supplierOutstanding") > 0) ? (
           <div className="skima-form-grid">
             <SelectInput
               label="Order with supplier amount not yet recorded as paid"
               value={recordString(selectedOrder, "orderId") ?? ""}
-              options={fleet.orders
+              options={(supplierFunds.data?.lpgPayables ?? [])
                 .filter((order) => numberValue(order, "supplierOutstanding") > 0)
                 .map((order) => ({
-                  label: `${recordString(order, "orderReference") ?? "Order"} · ${money(numberValue(order, "supplierOutstanding"), currency)} not yet recorded`,
+                  label: `${recordString(order, "orderReference") ?? "Order"} · ${recordString(order, "supplierName") ?? "Station"} · ${money(numberValue(order, "supplierOutstanding"), currency)} outstanding`,
                   value: recordString(order, "orderId") ?? "",
                 }))}
               onChange={(event) => {
                 const selectedId = event.currentTarget.value;
-                const selected = fleet.orders.find((order) => recordString(order, "orderId") === selectedId) ?? null;
+                const selected = (supplierFunds.data?.lpgPayables ?? []).find((order) => recordString(order, "orderId") === selectedId) ?? null;
                 setSelectedOrder(selected);
                 setPaymentAmount(selected ? String(numberValue(selected, "supplierOutstanding")) : "");
                 setPaymentReference("");
@@ -1236,6 +1237,27 @@ export function AdminFinancialAnalyticsWorkspace() {
                   Reclassify verified legacy funds
                 </Button>
               ) : null}
+            </div>
+            <div className="sk-panel stack-md">
+              <div>
+                <h3>SKIMA LPG supplier payables · customer escrow funded</h3>
+                <p className="skima-muted">Only approved SKIMA-managed refill procurements with an active customer-funded escrow appear here. Expired holds and cancelled/refunded orders are excluded.</p>
+              </div>
+              <DataTable
+                columns={[
+                  { key: "orderReference", header: "LPG order", render: (row) => recordString(row, "orderReference") ?? "—" },
+                  { key: "supplierName", header: "Station", render: (row) => recordString(row, "supplierName") ?? "—" },
+                  { key: "supplierAmount", header: "Supplier amount", render: (row) => money(numberValue(row, "supplierAmount"), currency) },
+                  { key: "paidAmount", header: "Cash already paid", render: (row) => money(numberValue(row, "paidAmount"), currency) },
+                  { key: "supplierOutstanding", header: "Still outstanding", render: (row) => money(numberValue(row, "supplierOutstanding"), currency) },
+                  { key: "holdStatus", header: "Customer escrow", render: (row) => label(recordString(row, "holdStatus")) },
+                ]}
+                caption="Eligible LPG station cash payments"
+                records={(supplierFunds.data?.lpgPayables ?? []) as RecordValue[]}
+                getRowKey={(row) => recordString(row, "procurementId") ?? JSON.stringify(row)}
+                emptyTitle="No eligible LPG supplier payables"
+                emptyMessage="No approved SKIMA LPG procurements currently have an active customer-funded escrow and unpaid supplier balance."
+              />
             </div>
             {canRecordSupplierPayment ? (
               <div className="sk-panel stack-md">
