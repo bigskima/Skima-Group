@@ -19,6 +19,7 @@ import {
   domainQueries,
   useApplicationPayload,
 } from "../api/domains";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useGatewayMutation } from "../api/gateway";
 import {
   satisfiedVerificationDocumentKeys,
