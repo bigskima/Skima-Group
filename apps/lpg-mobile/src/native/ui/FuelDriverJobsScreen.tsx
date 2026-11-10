@@ -18,6 +18,7 @@ import { StatusPill } from "./StatusPill";
 export function FuelDriverJobsScreen() {
   const { palette } = useAppTheme();
   const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [exchangeConfirmationOrderId, setExchangeConfirmationOrderId] = useState<string | null>(null);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -59,6 +60,8 @@ export function FuelDriverJobsScreen() {
   const selectedOrder = records.find((row) => firstString(row, ["order_id"]) === selectedOrderId) ?? null;
   const selectedAllocations = (allocations.data ?? []).filter((row) => firstString(row, ["order_id"]) === selectedOrderId);
   const isRental = firstString(selectedOrder, ["container_mode"]) === "rental";
+  const isExchange = firstString(selectedOrder, ["container_mode"]) === "exchange";
+  const exchangeCollectionConfirmed = exchangeConfirmationOrderId === selectedOrderId;
   const currentStage = firstString(selectedOrder, ["stage_key"]) ?? "";
   const productKey = firstString(selectedOrder, ["product_key"]) ?? "fuel.pms";
   const productName = productNameForKey(productKey);
@@ -98,11 +101,14 @@ export function FuelDriverJobsScreen() {
       await confirmDelivery.mutateAsync({
         orderId: selectedOrderId,
         idempotencyKey: idempotencyKey("fuel-order-customer-delivery", selectedOrderId),
+        containerExchangeCollected: isExchange ? exchangeCollectionConfirmed : false,
         metadata: { customer_handover_confirmed: true, delivery_mode: firstString(selectedOrder, ["fulfillment_mode"]) },
       });
     }, isRental
-      ? "Delivery confirmed once for the full order. The customer must now transfer the fuel and return every SKIMA rental container to you."
-      : "Delivery confirmed once for the full order. The customer owns the purchased containers and this delivery is complete.");
+      ? "Delivery confirmed. The customer must now transfer the fuel and return every SKIMA rental container to you."
+      : isExchange
+        ? "The exchange is recorded: the empty customer container was collected and a filled SKIMA container was handed over."
+        : "Delivery confirmed. The customer owns the purchased container and this delivery is complete.");
   };
 
   const confirmCustomerReturn = async () => {
@@ -138,7 +144,7 @@ export function FuelDriverJobsScreen() {
       );
     }
     if (currentStage === "out_for_delivery") {
-      return <AppButton label="Confirm customer delivery" fullWidth loading={busyOrderId === selectedOrderId || confirmDelivery.isPending} onPress={() => void completeCustomerHandover()} icon={<CheckCircle2 color="#FFFFFF" size={18} />} />;
+      return <AppButton label="Confirm customer delivery" fullWidth loading={busyOrderId === selectedOrderId || confirmDelivery.isPending} disabled={isExchange && !exchangeCollectionConfirmed} onPress={() => void completeCustomerHandover()} icon={<CheckCircle2 color="#FFFFFF" size={18} />} />;
     }
     if (currentStage === "return_due") {
       return <AppButton label="Confirm all rental containers received" fullWidth loading={busyOrderId === selectedOrderId || confirmRentalReturn.isPending} onPress={() => void confirmCustomerReturn()} icon={<RotateCcw color="#FFFFFF" size={18} />} />;
@@ -175,12 +181,13 @@ export function FuelDriverJobsScreen() {
                 const stage = firstString(order, ["stage_key"]) ?? "unknown";
                 const selected = orderId === selectedOrderId;
                 const isRentalOrder = firstString(order, ["container_mode"]) === "rental";
+                const isExchangeOrder = firstString(order, ["container_mode"]) === "exchange";
                 return (
-                  <Pressable key={orderId} onPress={() => { setSelectedOrderId(orderId); void allocations.refetch(); }} style={[styles.jobRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
+                  <Pressable key={orderId} onPress={() => { setSelectedOrderId(orderId); setExchangeConfirmationOrderId(null); void allocations.refetch(); }} style={[styles.jobRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
                     <View style={[styles.icon, { backgroundColor: selected ? palette.brand : palette.surfaceSubtle }]}><Fuel color={selected ? "#FFFFFF" : palette.brand} size={20} /></View>
                     <View style={styles.jobCopy}>
                       <Text style={[styles.jobTitle, { color: palette.ink }]}>{product} · {firstNumber(order, ["requested_litres"]) ?? 0} L</Text>
-                      <Text style={[styles.muted, { color: palette.muted }]}>{modeLabel(firstString(order, ["fulfillment_mode"]) ?? "")} · {isRentalOrder ? "Rental containers" : "Purchased containers"} · {orderId.slice(0, 8).toUpperCase()}</Text>
+                      <Text style={[styles.muted, { color: palette.muted }]}>{modeLabel(firstString(order, ["fulfillment_mode"]) ?? "")} · {isRentalOrder ? "Rental containers" : isExchangeOrder ? "Container exchange" : "Purchased containers"} · {orderId.slice(0, 8).toUpperCase()}</Text>
                     </View>
                     <StatusPill label={humanize(stage)} tone={stageTone(stage)} />
                   </Pressable>
@@ -190,7 +197,7 @@ export function FuelDriverJobsScreen() {
           </Card>
 
           {selectedOrder ? (
-            <Card title={productName + " delivery"} description={stageDescription(currentStage, isRental)}>
+            <Card title={productName + " delivery"} description={stageDescription(currentStage, isRental, isExchange)}>
               <View style={[styles.returnCard, { backgroundColor: palette.surfaceSubtle, alignItems: "flex-start" }]}>
                 <MapPin color={palette.brand} size={20} />
                 <View style={{ flex: 1, gap: 4 }}>
@@ -212,8 +219,18 @@ export function FuelDriverJobsScreen() {
               <View style={styles.metrics}>
                 <Metric label="Ordered" value={`${requestedLitres} L`} />
                 <Metric label="Containers" value={String(firstNumber(selectedOrder, ["container_count"]) ?? 0)} />
-                <Metric label="Type" value={isRental ? "Rental" : "Purchase"} />
+                <Metric label="Type" value={isRental ? "Rental" : isExchange ? "Exchange" : "Purchase"} />
               </View>
+
+              {isExchange && currentStage === "out_for_delivery" ? (
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: exchangeCollectionConfirmed }}
+                  onPress={() => setExchangeConfirmationOrderId(exchangeCollectionConfirmed ? null : selectedOrderId)}
+                  style={[styles.returnCard, { backgroundColor: palette.surfaceSubtle, borderWidth: 1, borderColor: exchangeCollectionConfirmed ? palette.brand : palette.border }]}
+                >
+                  <CheckCircle2 color={exchangeCollectionConfirmed ? palette.success : palette.muted} size={21} />
+                  <Text style={[styles.muted, { color: palette.ink }]}>I collected the customer's empty container and handed over a filled SKIMA container of the same size.</Text>
+                </Pressable>
+              ) : null}
               {isRental ? (
                 <View style={[styles.returnCard, { backgroundColor: palette.surfaceSubtle }]}>
                   <RotateCcw color={palette.brand} size={20} />
@@ -255,12 +272,12 @@ function stageTone(stage: string): "neutral" | "brand" | "success" | "warning" |
   return "brand";
 }
 
-function stageDescription(stage: string, rental: boolean): string {
+function stageDescription(stage: string, rental: boolean, exchange: boolean): string {
   const descriptions: Record<string,string> = {
     driver_assigned: "CURRENT STEP — Meet the station team. Verify the product, ordered litres, order reference and the assigned vehicle. Wait until the station physically hands over every filled container. Do not leave before custody is recorded.",
     station_handover: "The station recorded the complete handover. SKIMA is starting the delivery leg automatically; no second departure confirmation is needed.",
     out_for_delivery: "CURRENT STEP — Take the assigned containers to the customer's delivery address. Let the customer check the fuel and confirm the delivered quantity. Then tap Confirm customer delivery once for the entire order. No second scan per container is required.",
-    delivered: rental ? "DELIVERY CONFIRMED — The customer must transfer the fuel into their own container(s), then return every empty SKIMA rental container to you." : "DELIVERY CONFIRMED — The customer owns the purchased containers. There is no further driver action.",
+    delivered: rental ? "DELIVERY CONFIRMED — The customer must transfer the fuel into their own container(s), then return every empty SKIMA rental container to you." : exchange ? "DELIVERY CONFIRMED — The customer received a filled SKIMA container in exchange for their empty container. There is no further driver action." : "DELIVERY CONFIRMED — The customer owns the purchased containers. There is no further driver action.",
     return_due: "CURRENT STEP — Wait for the customer to transfer the fuel and return the full set of empty SKIMA rental containers. Count the containers, then confirm the return once for the whole order.",
     returned_to_driver: "CURRENT STEP — You have received the complete set of rental containers from the customer. Take all of them back to the same station shown on the order and hand them to station staff.",
     received_at_station: "STATION RETURN RECORDED — The station team is responsible for inspection. Do not reuse or release these containers until inspection is passed.",

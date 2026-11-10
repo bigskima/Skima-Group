@@ -132,7 +132,9 @@ export function FuelOrderDetailsScreen() {
       setDeliveryChallengeId(null);
       setVerificationNotice(isRental
         ? "Your delivery is verified. The rental container return is still open; settlement and deposit release wait for station inspection."
-        : "Your delivery is verified. SKIMA has closed the purchase and released the protected settlement.");
+        : isExchange
+          ? "Your delivery is verified. Your empty container has been exchanged for a filled SKIMA container."
+          : "Your delivery is verified. SKIMA has closed the purchase and released the protected settlement.");
     } catch (error) {
       setVerificationError(friendlyError(error, "SKIMA could not verify this Fuel delivery. Your funds remain protected; refresh and retry."));
     }
@@ -152,6 +154,7 @@ export function FuelOrderDetailsScreen() {
   const delivered = firstNumber(order, ["delivered_litres"]) ?? 0;
   const count = firstNumber(order, ["container_count"]) ?? 0;
   const isRental = firstString(order, ["container_mode"]) === "rental";
+  const isExchange = firstString(order, ["container_mode"]) === "exchange";
   const fulfillment = firstString(order, ["fulfillment_mode"]) ?? "independent_driver";
   const rentalReturnPending = isRental && ["return_due", "returned_to_driver", "received_at_station", "inspection", "inspection_passed"].includes(stage);
   const deliveryVerified = Boolean(firstString(order, ["delivery_verified_at"]) || order?.delivery_verified_at);
@@ -197,9 +200,11 @@ export function FuelOrderDetailsScreen() {
             <View style={[styles.progressTrack, { backgroundColor: palette.soft }]}>
               <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, litres > 0 ? delivered / litres * 100 : 0))}%`, backgroundColor: palette.brand }]} />
             </View>
-            <Text style={[styles.muted, { color: palette.muted }]}>{count} delivery container(s) · {isRental ? "SKIMA rental" : "Purchased container"}</Text>
+            <Text style={[styles.muted, { color: palette.muted }]}>{count} delivery container(s) · {isRental ? "SKIMA rental" : isExchange ? "Container exchange" : "Purchased container"}</Text>
           </Card>
 
+
+          {isExchange ? <Card title="Container exchange" description="Have your empty container ready at the delivery address. The driver will collect it and give you a filled SKIMA container of the same size. There is no container purchase, rental fee or deposit, and no previous SKIMA purchase is required." /> : null}
           {rentalReturnPending ? (
             <Card variant="warning" title="Return your SKIMA container" description="After transferring the fuel, give the empty rental container back to the same driver. The container will remain out of circulation until the station receives and inspects it.">
               <View style={styles.returnNotice}>
@@ -221,12 +226,12 @@ export function FuelOrderDetailsScreen() {
 
           <Card title="Order details">
             <DetailRow icon={<Fuel color={palette.brand} size={18} />} label="Fuel product" value={product} />
-            <DetailRow icon={<Package color={palette.brand} size={18} />} label="Container option" value={isRental ? "Rent — return after transfer" : "Buy — keep after delivery"} />
+            <DetailRow icon={<Package color={palette.brand} size={18} />} label="Container option" value={isRental ? "Rent — return after transfer" : isExchange ? "Use my container — exchange at delivery" : "Buy — keep after delivery"} />
             <DetailRow icon={<Truck color={palette.brand} size={18} />} label="Fulfilment" value={humanize(fulfillment)} />
             <DetailRow icon={<ShieldCheck color={palette.brand} size={18} />} label="Payment protection" value="Wallet funds held in SKIMA escrow" />
           </Card>
 
-          <Card title="Payment settlement" description={settlementReleased ? "SKIMA has posted the verified financial distribution for this order." : "Your funds remain protected in SKIMA escrow until the delivery and any rental-container return checks are complete."}>
+          <Card title="Payment settlement" description={settlementReleased ? "SKIMA has posted the verified financial distribution for this order." : "Your funds remain protected in SKIMA escrow until delivery is verified and any required rental-container return checks are complete."}>
             <View style={styles.statusLine}>
               <Text style={[styles.muted, { color: palette.muted }]}>Settlement status</Text>
               <StatusPill label={settlementReleased ? "Settled" : "Protected in escrow"} tone={settlementReleased ? "success" : "warning"} />
@@ -344,7 +349,9 @@ export function FuelOrderDetailsScreen() {
               <Text style={[styles.muted, { color: palette.muted }]}>
                 {isRental
                   ? "This confirms delivery only. Return every empty SKIMA rental container to the assigned driver; station inspection completes the rental order."
-                  : "Your verified confirmation automatically closes the purchase and releases the accepted station, driver and SKIMA settlement shares."}
+                  : isExchange
+                    ? "This confirms the delivery. Your empty container should already have been collected by the driver in exchange for the filled SKIMA container."
+                    : "Your verified confirmation automatically closes the purchase and releases the accepted station, driver and SKIMA settlement shares."}
               </Text>
             </Card>
           ) : null}

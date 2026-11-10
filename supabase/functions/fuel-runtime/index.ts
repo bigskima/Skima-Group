@@ -1036,7 +1036,7 @@ async function handleFuelRuntimeRequest(
     const idempotencyKeyValue = requireString(payload.idempotencyKey, "idempotencyKey");
     const operationResult = await supabase
       .from("fuel_order_operations")
-      .select("order_id,requested_litres,filled_litres,fulfillment_mode,stage_key")
+      .select("order_id,requested_litres,filled_litres,fulfillment_mode,container_mode,stage_key")
       .eq("order_id", orderId)
       .maybeSingle();
     if (operationResult.error) return databaseError(operationResult.error, id);
@@ -1047,6 +1047,10 @@ async function handleFuelRuntimeRequest(
     if (assignedDriver.error) return databaseError(assignedDriver.error, id);
     if (!assignedDriver.assignment || assignedDriver.userId !== authResult.user.id) {
       return jsonResponse({ ok: false, error: "forbidden", message: "Only the assigned Fuel driver can confirm this delivery.", requestId: id }, 403);
+    }
+    const isContainerExchange = operationResult.data.container_mode === "exchange";
+    if (isContainerExchange && payload.containerExchangeCollected !== true) {
+      return jsonResponse({ ok: false, error: "fuel_container_exchange_not_confirmed", message: "Confirm that you collected the customer's empty container and handed over the filled SKIMA container before completing this delivery.", requestId: id }, 409);
     }
     // The RPC independently sums the locked with-driver allocation rows and
     // checks each station fill against this accepted order quantity.
@@ -1067,6 +1071,9 @@ async function handleFuelRuntimeRequest(
           initiated_by: "assigned_fuel_driver",
           confirmed_at_runtime: new Date().toISOString(),
           fulfillment_mode: operationResult.data.fulfillment_mode,
+          customer_container_exchange: isContainerExchange,
+          customer_container_collected: !isContainerExchange || payload.containerExchangeCollected === true,
+          customer_container_collected_by: isContainerExchange ? authResult.user.id : null,
         },
       }),
       id,

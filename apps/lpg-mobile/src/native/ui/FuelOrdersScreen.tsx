@@ -27,6 +27,10 @@ export function FuelOrdersScreen() {
     refetchInterval: 15000,
   });
 
+  const records = orders.data ?? [];
+  const hasRentalOrders = records.some((order) => firstString(order, ["container_mode"]) === "rental");
+  const hasExchangeOrders = records.some((order) => firstString(order, ["container_mode"]) === "exchange");
+
   const productNameForKey = (key: string) =>
     firstString((products.data ?? []).find((item) => firstString(item, ["key"]) === key), ["display_name"]) || key || "Fuel";
 
@@ -34,7 +38,7 @@ export function FuelOrdersScreen() {
     <Screen
       eyebrow="SKIMA Fuel"
       title="My fuel orders"
-      subtitle="Follow station preparation, driver delivery and rental container returns."
+      subtitle="Follow station preparation, driver delivery and any container returns."
       action={<AppButton label="Order fuel" size="sm" onPress={() => router.push("/(customer)/fuel" as never)} />}
     >
       {orders.isPending ? (
@@ -48,7 +52,7 @@ export function FuelOrdersScreen() {
           description="Refresh the list and try again."
           action={<AppButton label="Refresh" variant="secondary" onPress={() => void orders.refetch()} />}
         />
-      ) : (orders.data ?? []).length === 0 ? (
+      ) : records.length === 0 ? (
         <EmptyState
           icon={<Fuel color={palette.brand} size={28} />}
           title="No fuel orders yet"
@@ -57,13 +61,14 @@ export function FuelOrdersScreen() {
         />
       ) : (
         <View style={styles.list}>
-          {(orders.data ?? []).map((order, index) => {
+          {records.map((order, index) => {
             const orderId = firstString(order, ["order_id"]) ?? String(index);
             const productKey = firstString(order, ["product_key"]) ?? "fuel";
             const product = productNameForKey(productKey);
             const litres = firstNumber(order, ["requested_litres"]) ?? 0;
             const status = firstString(order, ["stage_key"]) ?? "awaiting_station_acceptance";
-            const containerMode = firstString(order, ["container_mode"]) === "rental" ? "Rental container" : "Purchased container";
+            const savedMode = firstString(order, ["container_mode"]);
+            const containerMode = savedMode === "rental" ? "Rental container" : savedMode === "exchange" ? "Container exchange" : "Purchased container";
             const count = firstNumber(order, ["container_count"]) ?? 1;
             return (
               <Pressable
@@ -91,7 +96,8 @@ export function FuelOrdersScreen() {
           })}
         </View>
       )}
-      <Card variant="subtle" title="Rental container reminder" description="After transferring the fuel, return the SKIMA rental container to the delivery driver. It becomes available for reuse only after station receipt and inspection." />
+      {hasRentalOrders ? <Card variant="subtle" title="Rental container reminder" description="After transferring the fuel, return the SKIMA rental container to your delivery driver. It can be reused only after the station receives and inspects it." /> : null}
+      {hasExchangeOrders ? <Card variant="subtle" title="Container exchange" description="For these orders, have your empty container ready. The driver will collect it and give you a filled SKIMA container of the same size. No previous SKIMA purchase is required." /> : null}
     </Screen>
   );
 }

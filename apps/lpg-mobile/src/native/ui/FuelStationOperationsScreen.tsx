@@ -992,12 +992,13 @@ export function FuelStationOperationsScreen() {
                   const customerName = firstString(customerContact, ["name"]) ?? "Customer contact unavailable";
                   const customerPhone = firstString(customerContact, ["phone"]);
                   const customerAddress = firstString(customerContact, ["address", "label"]) ?? "Delivery address not recorded";
+                  const orderContainerMode = firstString(order, ["container_mode"]);
                   const selected = orderId === focusedOrderId;
                   return (
                     <Pressable key={orderId} onPress={() => { setFocusedOrderId(orderId); setSelectedDriverQualificationId(""); void reservations.refetch(); void allocations.refetch(); }} style={[styles.orderRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
                       <View style={styles.orderCopy}>
                         <Text style={[styles.orderTitle, { color: palette.ink }]}>{productNameForKey(productKey)} · {firstNumber(order, ["requested_litres"]) ?? 0} L</Text>
-                        <Text style={[styles.muted, { color: palette.muted }]}>{orderId.slice(0, 8).toUpperCase()} · {firstNumber(order, ["container_count"]) ?? 0} container(s)</Text>
+                        <Text style={[styles.muted, { color: palette.muted }]}>{orderId.slice(0, 8).toUpperCase()} · {orderContainerMode === "exchange" ? "Container exchange" : orderContainerMode === "rental" ? "Rental container" : "Purchased container"}</Text>
                         <Text style={[styles.muted, { color: palette.ink }]}>{customerName} · {customerPhone ?? "Phone unavailable"}</Text>
                         <Text style={[styles.muted, { color: palette.muted }]} numberOfLines={2}>{customerAddress}</Text>
                       </View>
@@ -1015,12 +1016,17 @@ export function FuelStationOperationsScreen() {
                 <View style={[styles.focusIcon, { backgroundColor: palette.brandSoft }]}><Package size={22} /></View>
                 <View style={styles.orderCopy}>
                   <Text style={[styles.orderTitle, { color: palette.ink }]}>{productNameForKey(focusedProduct)} · {focusedLitres} L</Text>
-                  <Text style={[styles.muted, { color: palette.muted }]}>{focusedMode === "rental" ? "SKIMA rental containers" : "Purchased containers"} · {firstNumber(focusedOrder, ["container_count"]) ?? 0} total</Text>
+                  <Text style={[styles.muted, { color: palette.muted }]}>{focusedMode === "rental" ? "SKIMA rental containers" : focusedMode === "exchange" ? "Container exchange" : "Purchased containers"} · {firstNumber(focusedOrder, ["container_count"]) ?? 0} total</Text>
                 </View>
                 <StatusPill label={humanize(focusedStage)} tone={stageTone(focusedStage)} />
                 <Text style={[styles.muted, { color: palette.muted }]}>{fulfillmentModeLabel(focusedFulfillmentMode)}</Text>
               </View>
 
+              {focusedMode === "exchange" ? (
+                <View style={styles.operationInfo}>
+                  <Text style={[styles.muted, { color: palette.ink }]}>CONTAINER EXCHANGE: Prepare one filled SKIMA container matching the selected size. At delivery, the assigned driver must collect the customer's empty container and hand over this filled one. No container purchase, rental charge or deposit is applied.</Text>
+                </View>
+              ) : null}
               <View style={{ gap: spacing.xs, padding: spacing.md, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceSubtle }}>
                 <Text style={[styles.sectionLabel, { color: palette.ink }]}>CUSTOMER DELIVERY DETAILS</Text>
                 <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.sm }}>
