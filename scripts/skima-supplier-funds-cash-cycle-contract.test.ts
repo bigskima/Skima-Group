@@ -41,6 +41,13 @@ Deno.test("LPG customer procurement settlement credits the supplier fund, not sh
   includes(lpgSettlement, "'role','internal_lpg_cost_recovery'", "legacy LPG settlement identifies the procurement principal");
   includes(migration, "public.ensure_skima_supplier_wallet(\n    'lpg',order_record.currency_code,'supplier_fund'\n  )", "LPG procurement principal moves to its dedicated supplier fund");
   includes(migration, "public.record_platform_supplier_cash_withdrawal", "LPG cash withdrawals have a separate Finance operation");
+  includes(migration, "public.record_platform_legacy_lpg_fund_reclassification", "old LPG supplier funds can be reclassified only through an explicit Finance operation");
+  includes(migration, "reclassifiable_amount", "legacy reclassification is capped by supplier allocations and actual clearing balance");
+  includes(migration, "legacy_lpg_supplier_fund_reclassified", "legacy reclassification is traceable in the ledger");
+  includes(workspace, "Legacy LPG supplier funds · reconciliation before use", "legacy supplier pool is visible in Finance");
+  includes(workspace, "Reclassify verified legacy funds", "legacy pool reclassification requires an explicit Finance action");
+  includes(workspace, "unreconciledDifference", "legacy pool shows any clearing mismatch");
+
   includes(migration, "public.ensure_skima_supplier_wallet(\n    'lpg',order_record.currency_code,'cash_on_hand'\n  )", "LPG station payment uses physical cash on hand");
   const patchStart = migration.indexOf("-- Preserve the LPG supplier-payment record");
   const lpgPaymentStart = migration.indexOf("do $patch$", patchStart);
