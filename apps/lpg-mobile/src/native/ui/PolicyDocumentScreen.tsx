@@ -193,7 +193,6 @@ export function PolicyDocumentScreen({
 
   return (
     <Screen
-      denseHeader
       key={safeIndex}
       denseHeader
       eyebrow={reading ? "SKIMA policy reader" : "SKIMA policy centre"}
