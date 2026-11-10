@@ -43,6 +43,7 @@ on:
       - "scripts/payout-runtime-production-contract.test.ts"
       - "scripts/verification-runtime-contract.test.ts"
       - "scripts/fuel-*.test.ts"
+      - "scripts/skima-supplier-funds-cash-cycle-contract.test.ts"
       - "scripts/ai-*.test.ts"
       - "package.json"
       - "vercel.json"
@@ -87,6 +88,8 @@ jobs:
         run: npm run ai-runtime:contract
       - name: Verify LPG refill production contracts
         run: npm run lpg-refill:contract
+      - name: Verify supplier fund and cash-cycle accounting contracts
+        run: npm run supplier-funds:contract
       - name: Verify independent driver vehicle onboarding contracts
         run: npm run lpg-driver-vehicle:contract
       - name: Verify independent driver vehicle location review contracts
