@@ -53,6 +53,7 @@ export function LogisticsStoreScreen() {
   const [locationId, setLocationId] = useState("");
   const [note, setNote] = useState("");
   const [checkoutKey, setCheckoutKey] = useState(idempotency());
+  const [activeSection, setActiveSection] = useState<"shop" | "basket" | "orders">("shop");
 
   const confirmReceipt = useMutation({
     mutationFn: async (orderId: string) => session.api.post(
@@ -224,6 +225,8 @@ export function LogisticsStoreScreen() {
       ) : (
         <>
           <StorefrontHero palette={palette} walletValue={walletId ? money(walletBalance, currency) : "Wallet unavailable"} basketCount={cart.reduce((sum,line)=>sum+line.quantity,0)} basketSubtotal={money(cartTotal,cartCurrency)} />
+          <View style={styles.sectionNavigation}>{([["shop","Shop"],["basket","Basket"],["orders","Orders"]] as const).map(([key,label])=>{const selected=activeSection===key;const title=key==="basket"?label+" · "+cart.reduce((sum,line)=>sum+line.quantity,0):label;return <Pressable key={key} accessibilityRole="button" accessibilityState={{selected}} onPress={()=>setActiveSection(key)} style={[styles.sectionTab,{backgroundColor:selected?palette.brandSoft:palette.surface,borderColor:selected?palette.brand:palette.border}]}><Text style={{color:selected?palette.brand:palette.ink,fontSize:10,fontWeight:"900"}}>{title}</Text></Pressable>;})}</View>
+          {activeSection === "shop" ? <View style={{gap:10}}>
       <View style={[styles.toolbar,{borderColor:palette.border,backgroundColor:palette.surface}]}>
             <View style={styles.search}><Search color={palette.muted} size={16}/><TextInput value={search} onChangeText={setSearch} placeholder="Search products" placeholderTextColor={palette.muted} style={[styles.searchInput,{color:palette.ink}]}/>{search?<Pressable onPress={()=>setSearch("")}><X color={palette.muted} size={16}/></Pressable>:null}</View>
             <View style={styles.walletPill}><ShoppingBag color={palette.brand} size={14}/><Text style={{color:palette.ink,fontSize:10,fontWeight:"800"}}>{walletId?money(walletBalance,currency):"Wallet unavailable"}</Text></View>
@@ -283,7 +286,8 @@ export function LogisticsStoreScreen() {
               />
             )}
            </>}
-          {cart.length? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
+          </View> : null}
+          {activeSection === "basket" ? (cart.length ? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
             <View style={styles.cartHead}><View style={styles.cartTitleRow}><ShoppingCart color={palette.brand} size={18}/><Text style={[styles.cartTitle,{color:palette.ink}]}>Basket ({cart.reduce((sum,line)=>sum+line.quantity,0)})</Text></View><Text style={[styles.cartTotal,{color:palette.ink}]}>{money(cartTotal,cartCurrency)}</Text></View>
             {cart.map(line=><StorefrontBasketLine key={`${line.itemId}:${line.variantId??"base"}`} palette={palette} name={line.name} variantName={line.variantName} quantity={line.quantity} amountLabel={money(line.unitAmount*line.quantity,line.currencyCode)} onDecrease={()=>changeQuantity(line.itemId,line.variantId,-1)} onIncrease={()=>changeQuantity(line.itemId,line.variantId,1)}/>)}
             {cart.length?<>
@@ -297,7 +301,8 @@ export function LogisticsStoreScreen() {
               {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Orders are accepted nationwide in Nigeria. SKIMA Store reviews serviceability after checkout; locations we cannot serve will be cancelled and refunded.</Text>:null}
               <Pressable disabled={checkout.isPending||!cartReady||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!cartReady||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
             </>:<Text style={[styles.productDescription,{color:palette.muted}]}>Add a product to your basket to continue.</Text>}
-          </View> : null}
+          </View> : <StatePanel title="Your basket is empty" description="Browse the Store and add an item to begin checkout."/> ) : null}
+          {activeSection === "orders" ? <View style={{gap:10}}>
           <View style={styles.sectionHead}>
             <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>Your Store orders</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>Track fulfilment and confirm receipt</Text></View>
           </View>
@@ -329,6 +334,7 @@ export function LogisticsStoreScreen() {
             </View>;
           }) : <StatePanel title="No Store orders yet" description="Your Store purchases and delivery updates will appear here."/>}
           {confirmReceipt.error ? <Text style={[styles.error,{color:palette.danger}]}>{confirmReceipt.error.message}</Text> : null}
+          </View> : null}
         </>
       )}
       <StorefrontDetailSheet
@@ -398,6 +404,7 @@ function Filter({label,active,onPress}:{label:string;active:boolean;onPress:()=>
  return <Pressable onPress={onPress} style={[styles.filter,{backgroundColor:active?palette.brandSoft:palette.surface,borderColor:active?palette.brand:palette.border}]}><Text style={{color:active?palette.brand:palette.ink,fontSize:10,fontWeight:"800"}}>{label}</Text></Pressable>;
 }
 const styles=StyleSheet.create({
+ sectionNavigation:{flexDirection:"row",gap:7},sectionTab:{flex:1,minHeight:42,borderWidth:1,borderRadius:radii.md,alignItems:"center",justifyContent:"center",paddingHorizontal:8},
  back:{flexDirection:"row",alignItems:"center",gap:7,marginBottom:5},backText:{fontSize:11,fontWeight:"800"},
   hero:{minHeight:104,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:12,flexDirection:"row",alignItems:"center",gap:10},
   heroCopy:{flex:1,gap:4},heroEyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1},heroTitle:{fontSize:17,lineHeight:20,fontWeight:"900"},heroBody:{fontSize:9,lineHeight:13},
