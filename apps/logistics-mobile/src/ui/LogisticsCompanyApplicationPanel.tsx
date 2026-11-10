@@ -39,6 +39,13 @@ function isValidNin(value: string) {
   return /^[0-9]{11}$/.test(value.trim());
 }
 
+const safeVerificationFallback = "The automatic identity check is temporarily unavailable. You can upload the applicant's identity document below and SKIMA will review it manually. Please try the secure check again later.";
+
+function safeVerificationMessage(value: string | null | undefined) {
+  if (!value) return null;
+  return /didit|billable|credit|provider|workflow/i.test(value) ? safeVerificationFallback : value;
+}
+
 export function LogisticsCompanyApplicationPanel({
   organizationId,
   displayName,
@@ -69,6 +76,7 @@ export function LogisticsCompanyApplicationPanel({
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [verificationBusy, setVerificationBusy] = useState(false);
   const [verificationSessionId, setVerificationSessionId] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<"details" | "identity" | "documents" | "terms" | "submit">("details");
 
   const applicationType = types.data?.find((item) => asString(item, "key") === "application.logistics.company") ?? null;
   const applicationTypeId = asString(applicationType, "id");
@@ -388,7 +396,7 @@ export function LogisticsCompanyApplicationPanel({
       }
       await verification.refetch();
     } catch (cause) {
-      setVerificationMessage(cause instanceof Error ? cause.message : "The secure identity check could not be started. You can still upload the required identity document for SKIMA review.");
+      setVerificationMessage(safeVerificationMessage(cause instanceof Error ? cause.message : null) ?? safeVerificationFallback);
     } finally {
       setVerificationBusy(false);
     }
@@ -417,7 +425,7 @@ export function LogisticsCompanyApplicationPanel({
             : "Your identity check is still processing.");
       await verification.refetch();
     } catch (cause) {
-      setVerificationMessage(cause instanceof Error ? cause.message : "The identity result could not be refreshed.");
+      setVerificationMessage(safeVerificationMessage(cause instanceof Error ? cause.message : null) ?? "The identity result could not be refreshed. You can still submit the identity evidence below for manual review.");
     } finally {
       setVerificationBusy(false);
     }
@@ -586,7 +594,30 @@ export function LogisticsCompanyApplicationPanel({
             ) : null}
           </Card>
 
-          {showApplicantFields ? (
+          <View style={styles.progressSections}>
+            {([
+              ["details", "Company & applicant", "Company profile and responsible person"],
+              ["identity", "Identity check", identityPassed ? "Identity check completed" : "Secure check or manual evidence"],
+              ["documents", "Business documents", (identityEvidenceUploaded ? "Identity evidence uploaded" : "Identity evidence required") + " · CAC is optional"],
+              ["terms", "Partner terms", termsAccepted ? "Current terms accepted" : "Review and accept the terms"],
+              ["submit", "Final submission", canSubmit ? "Ready to submit" : "Complete the steps above"],
+            ] as const).map(([key, label, detail], index) => {
+              const selected = activeSection === key;
+              return (
+                <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected }}
+                  onPress={() => setActiveSection(key)}
+                  style={[styles.progressStep, { backgroundColor: selected ? palette.brandSoft : palette.surface, borderColor: selected ? palette.brand : palette.border }]}>
+                  <View style={styles.progressStepHead}>
+                    <Text style={[styles.progressIndex, { color: selected ? palette.brand : palette.muted }]}>{index + 1}</Text>
+                    <Text style={[styles.progressLabel, { color: selected ? palette.brand : palette.ink }]}>{label}</Text>
+                  </View>
+                  <Text style={[styles.progressCopy, { color: palette.muted }]}>{detail}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {activeSection === "details" && showApplicantFields ? (
             <Card padding="lg">
               <Text style={[styles.heading, { color: palette.ink }]}>Applicant identity</Text>
               <AppField label="Applicant full name" value={applicantName} onChangeText={setApplicantName}
@@ -613,6 +644,7 @@ export function LogisticsCompanyApplicationPanel({
             </Card>
           ) : null}
 
+          {activeSection === "identity" ? (
           <Card padding="lg">
             <View style={styles.statusRow}>
               <View style={styles.statusCopy}>
@@ -639,15 +671,16 @@ export function LogisticsCompanyApplicationPanel({
             ) : null}
             {verificationMessage || asString(identityCheck, "failureMessage", "failure_message") ? (
               <Text style={[styles.copy, { color: palette.muted }]}>
-                {verificationMessage ?? asString(identityCheck, "failureMessage", "failure_message")}
+                {safeVerificationMessage(verificationMessage ?? asString(identityCheck, "failureMessage", "failure_message")) ?? safeVerificationFallback}
               </Text>
             ) : null}
             {!identityAvailable ? (
               <Text style={[styles.copy, { color: palette.muted }]}>Automatic verification is unavailable. Upload the applicant's required identity document; SKIMA can review the evidence manually.</Text>
             ) : null}
           </Card>
+          ) : null}
 
-          {configuredRequirements.map((requirement) => {
+          {activeSection === "documents" ? configuredRequirements.map((requirement) => {
             const requirementId = asString(requirement, "id");
             const key = asString(requirement, "key") ?? "";
             const submitted = (documents.data ?? []).filter((document) =>
@@ -680,8 +713,9 @@ export function LogisticsCompanyApplicationPanel({
                 </View>
               </Card>
             );
-          })}
+          }) : null}
 
+          {activeSection === "terms" ? (
           <Card padding="lg">
             <Text style={[styles.heading, { color: palette.ink }]}>{currentPolicyTitle}</Text>
             <Text style={[styles.copy, { color: palette.muted }]}>{currentPolicySummary}</Text>
@@ -712,7 +746,9 @@ export function LogisticsCompanyApplicationPanel({
               <Text style={[styles.copy, { color: palette.danger }]}>SKIMA could not check the current partner terms. Retry before submitting.</Text>
             ) : null}
           </Card>
+          ) : null}
 
+          {activeSection === "submit" ? (
           {canEdit && applicationCanBeSubmitted ? (
             <Card padding="lg">
               <Text style={[styles.heading, { color: palette.ink }]}>Submit for SKIMA review</Text>
@@ -737,6 +773,7 @@ export function LogisticsCompanyApplicationPanel({
               </Text>
             </Card>
           ) : null}
+          ) : null}
         </>
       )}
       {message ? <Text style={[styles.copy, { color: palette.success }]}>{message}</Text> : null}
@@ -747,6 +784,12 @@ export function LogisticsCompanyApplicationPanel({
 
 const styles = StyleSheet.create({
   section: { gap: spacing.md },
+  progressSections: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  progressStep: { width: "48%", minHeight: 68, borderWidth: 1, borderRadius: radii.md, padding: spacing.sm, gap: 6 },
+  progressStepHead: { flexDirection: "row", alignItems: "center", gap: 7 },
+  progressIndex: { fontSize: 10, fontWeight: "900" },
+  progressLabel: { fontSize: 10, fontWeight: "900", flex: 1 },
+  progressCopy: { fontSize: 9, lineHeight: 13 },
   heading: { ...typography.bodyStrong, fontSize: 14 },
   documentTitle: { ...typography.bodyStrong, fontSize: 12 },
   copy: { ...typography.caption, fontSize: 10, lineHeight: 15 },
