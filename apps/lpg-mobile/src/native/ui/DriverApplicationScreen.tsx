@@ -576,7 +576,7 @@ export function DriverApplicationScreen() {
   if (applications.isPending || types.isPending || requirements.isPending) {
     return (
       <Screen eyebrow="driver application" title="Application">
-        <ActivityIndicator color={colors.brand} />
+        <ScreenSkeleton variant="form" cards={2} />
       </Screen>
     );
   }
