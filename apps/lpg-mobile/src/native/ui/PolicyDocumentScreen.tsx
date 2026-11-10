@@ -25,6 +25,7 @@ import { AppButton } from "./AppButton";
 import { Card } from "./Card";
 import type { PolicyBlock } from "./policyPagination";
 import { Screen } from "./Screen";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 
 export type PolicyKey =
   | "policy.customer.terms"
@@ -65,7 +66,7 @@ export function PolicyDocumentScreen({
   const [sectionIndex, setSectionIndex] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(() => new Set());
   const [contentsOpen, setContentsOpen] = useState(false);
-  const [reading, setReading] = useState(false);
+  const [autoReading, setAutoReading] = useState(false);
   const [acceptanceError, setAcceptanceError] = useState<string | null>(null);
 
   const blocks = useMemo(
@@ -88,7 +89,7 @@ export function PolicyDocumentScreen({
     setContentsOpen(false);
     setAcceptanceError(null);
     void Speech.stop();
-    setReading(false);
+    setAutoReading(false);
   }, [document?.versionId, sections.length]);
 
   useEffect(() => () => {
@@ -110,8 +111,8 @@ export function PolicyDocumentScreen({
 
   const goToSection = (next: number) => {
     const bounded = Math.max(0, Math.min(next, sections.length - 1));
+    setAutoReading(false);
     void Speech.stop();
-    setReading(false);
     setSectionIndex(bounded);
     setVisited((current) => {
       const updated = new Set(current);
@@ -120,26 +121,47 @@ export function PolicyDocumentScreen({
     });
   };
 
-  const readCurrentSection = async () => {
-    if (!currentSection) return;
-    if (reading) {
-      await Speech.stop();
-      setReading(false);
+  const toggleReadAloud = () => {
+    if (autoReading) {
+      setAutoReading(false);
+      void Speech.stop();
       return;
     }
+    setAutoReading(true);
+  };
+
+  useEffect(() => {
+    if (!autoReading || !currentSection) return;
+    let active = true;
     const speechText = [
       currentSection.title,
       ...currentSection.blocks.map((block) => block.text),
     ].join(". ");
-    setReading(true);
     Speech.speak(speechText, {
       language: "en-NG",
       rate: 0.94,
-      onDone: () => setReading(false),
-      onStopped: () => setReading(false),
-      onError: () => setReading(false),
+      onDone: () => {
+        if (!active) return;
+        setVisited((current) => {
+          const updated = new Set(current);
+          updated.add(safeIndex);
+          return updated;
+        });
+        if (safeIndex < sections.length - 1) {
+          setSectionIndex(safeIndex + 1);
+        } else {
+          setAutoReading(false);
+        }
+      },
+      onError: () => {
+        if (active) setAutoReading(false);
+      },
     });
-  };
+    return () => {
+      active = false;
+      void Speech.stop();
+    };
+  }, [autoReading, currentSection, safeIndex, sections.length]);
 
   const submitAcceptance = async () => {
     if (!document?.versionId || !document.acceptanceStatement) return;
@@ -159,10 +181,11 @@ export function PolicyDocumentScreen({
 
   return (
     <Screen
+      key={safeIndex}
       eyebrow="SKIMA policy centre"
       title={document?.title ?? "Privacy & policy"}
       subtitle={mandatory
-        ? "Review the current customer terms before entering SKIMA Refill. Open each chapter, then confirm your agreement."
+        ? "Review the current customer terms before entering SKIMA Refill. Read aloud can guide you through every chapter automatically."
         : document?.published
         ? `Version ${document.versionLabel ?? "current"} • Read chapter by chapter or use Read aloud.`
         : "Read the summary here. The external source remains available when a published in-app copy is unavailable."}
@@ -172,11 +195,7 @@ export function PolicyDocumentScreen({
         </Pressable>
       )}
     >
-      {policy.isLoading ? (
-        <Card>
-          <Text style={[styles.body, { color: palette.muted }]}>Loading current policy…</Text>
-        </Card>
-      ) : null}
+      {policy.isLoading ? <ScreenSkeleton variant="policy" cards={1} /> : null}
 
       {policy.error ? (
         <Card>
@@ -187,18 +206,7 @@ export function PolicyDocumentScreen({
         </Card>
       ) : null}
 
-      {document?.summary ? (
-        <Card>
-          <Text style={[styles.kicker, { color: palette.brand }]}>AT A GLANCE</Text>
-          <Text style={[styles.sectionTitle, { color: palette.ink }]}>What this document covers</Text>
-          <Text style={[styles.body, { color: palette.muted }]}>
-            {cleanInlineMarkdown(document.summary)}
-          </Text>
-          <Text style={[styles.notice, { color: palette.muted }]}>
-            The summary is only a reading aid. The published version below is the full policy.
-          </Text>
-        </Card>
-      ) : null}
+
 
       {document && !document.published ? (
         <Card>
@@ -229,21 +237,21 @@ export function PolicyDocumentScreen({
       {document?.published ? (
         <>
           <Card>
+            {document.summary ? (
+              <View style={styles.summaryBlock}>
+                <Text style={[styles.kicker, { color: palette.brand }]}>AT A GLANCE</Text>
+                <Text style={[styles.body, { color: palette.muted }]}>{cleanInlineMarkdown(document.summary)}</Text>
+              </View>
+            ) : null}
             <View style={styles.metaRow}>
-              <ShieldCheck color={palette.brand} size={19} />
+              <ShieldCheck color={palette.brand} size={17} />
               <View style={styles.metaCopy}>
                 <Text style={[styles.metaTitle, { color: palette.ink }]}>Published source</Text>
                 <Text style={[styles.meta, { color: palette.muted }]}>
-                  Version {document.versionLabel} • {formatDate(document.effectiveFrom ?? document.publishedAt)}
-                </Text>
-                <Text style={[styles.meta, { color: palette.muted }]}>
-                  {sections.length} chapters • about {estimateMinutes(blocks)} min read
+                  Version {document.versionLabel} • {formatDate(document.effectiveFrom ?? document.publishedAt)} • {sections.length} chapters • about {estimateMinutes(blocks)} min
                 </Text>
               </View>
             </View>
-          </Card>
-
-          <Card>
             <View style={styles.progressHeader}>
               <View style={styles.progressCopy}>
                 <Text style={[styles.kicker, { color: palette.brand }]}>PROGRESSIVE READING</Text>
@@ -273,13 +281,13 @@ export function PolicyDocumentScreen({
                 onPress={() => setContentsOpen((value) => !value)}
               />
               <AppButton
-                label={reading ? "Stop" : "Read aloud"}
+                label={autoReading ? "Stop reading" : "Read aloud"}
                 size="sm"
-                variant={reading ? "secondary" : "ghost"}
-                icon={reading
+                variant={autoReading ? "secondary" : "ghost"}
+                icon={autoReading
                   ? <Square color={palette.brand} size={15} />
                   : <Volume2 color={palette.brand} size={17} />}
-                onPress={() => void readCurrentSection()}
+                onPress={toggleReadAloud}
               />
             </View>
 
@@ -430,7 +438,7 @@ export function PolicyDocumentScreen({
                   </Pressable>
                   {!allRead ? (
                     <Text style={[styles.notice, { color: palette.muted }]}>
-                      Open every chapter before confirming acceptance. Read aloud is available for each chapter.
+                      Open every chapter before confirming acceptance. Read aloud automatically moves through every chapter; you can stop it at any time.
                     </Text>
                   ) : null}
                   {acceptanceError || accept.error ? (
@@ -569,6 +577,7 @@ const styles = StyleSheet.create({
   iconBox: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   iconCopy: { flex: 1, minWidth: 0, gap: 4 },
   kicker: { ...typography.eyebrow, fontSize: 9 },
+  summaryBlock: { gap: 7, paddingBottom: spacing.xs },
   sectionTitle: { ...typography.subheading, fontSize: 16 },
   body: { ...typography.body, fontSize: 14, lineHeight: 22 },
   notice: { ...typography.caption, lineHeight: 18, marginTop: spacing.sm },
@@ -581,7 +590,7 @@ const styles = StyleSheet.create({
   progressValue: { fontSize: 22, fontWeight: "900" },
   progressTrack: { height: 7, borderRadius: radii.pill, overflow: "hidden", marginTop: spacing.sm },
   progressFill: { height: 7, borderRadius: radii.pill },
-  readerToolbar: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
+  readerToolbar: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
   contents: { marginTop: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, overflow: "hidden" },
   contentsRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
   chapterBadge: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
@@ -589,7 +598,7 @@ const styles = StyleSheet.create({
   contentsLabel: { flex: 1, ...typography.bodyStrong, fontSize: 12, lineHeight: 17 },
   chapter: { marginTop: spacing.lg, gap: spacing.sm },
   chapterEyebrow: { ...typography.eyebrow, fontSize: 9 },
-  chapterTitle: { ...typography.heading, fontSize: 22, lineHeight: 28 },
+  chapterTitle: { ...typography.heading, fontSize: 20, lineHeight: 26 },
   documentBody: { gap: spacing.sm },
   pageActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.lg },
   h2: { ...typography.subheading, fontSize: 16, lineHeight: 22, marginTop: spacing.sm },
