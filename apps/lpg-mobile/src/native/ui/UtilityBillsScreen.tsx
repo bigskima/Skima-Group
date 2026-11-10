@@ -12,8 +12,9 @@ import {
   Zap,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
@@ -383,10 +384,7 @@ export function UtilityBillsScreen() {
       ) : null}
 
       {catalog.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} size="large" />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading bill services…</Text>
-        </View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : catalog.error ? (
         <EmptyState
           title="Bills are unavailable"
