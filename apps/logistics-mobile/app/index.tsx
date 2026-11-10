@@ -1,8 +1,8 @@
 import { Redirect } from "expo-router";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useSession } from "../src/session/SessionProvider";
 import { useAppTheme } from "../src/theme/ThemeProvider";
-import { BrandMark } from "../src/ui/BrandMark";
+import { ScreenSkeleton } from "../src/ui/ScreenSkeleton";
 
 export default function IndexRoute() {
   const { status } = useSession();
@@ -10,11 +10,10 @@ export default function IndexRoute() {
   if (status === "loading") {
     return (
       <View style={[styles.loading, { backgroundColor: palette.canvas }]}>
-        <BrandMark />
-        <ActivityIndicator color={palette.brand} size="large" />
+        <ScreenSkeleton variant="dashboard" cards={2} />
       </View>
     );
   }
   return <Redirect href={status === "authenticated" ? "/(customer)" : "/(auth)/sign-in"} />;
 }
-const styles = StyleSheet.create({ loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 24 } });
+const styles = StyleSheet.create({ loading: { flex: 1, justifyContent: "center", gap: 24, padding: 18, paddingTop: 52 } });
