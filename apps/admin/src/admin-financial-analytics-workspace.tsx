@@ -1036,6 +1036,184 @@ export function AdminFinancialAnalyticsWorkspace() {
 
       <section className="sk-panel stack-md">
         <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Supplier funds · Cash operations</p>
+            <h2>SKIMA procurement funds and physical cash float</h2>
+            <p className="skima-muted">Customer-funded procurement principal is held outside SKIMA revenue. Record the physical cash withdrawal into Cash On Hand first; station cash payments can only be posted from that cash float.</p>
+          </div>
+          <StatusBadge tone="neutral">LPG + Fuel · {currency}</StatusBadge>
+        </div>
+        {supplierFunds.error ? (
+          <ErrorState title="Supplier funds unavailable" message={readError(supplierFunds.error)} onRetry={() => void supplierFunds.refetch()} />
+        ) : (
+          <>
+            <div className="skima-grid skima-grid--compact">
+              {(["lpg", "fuel"] as const).map((moduleKey) => {
+                const fund = supplierFunds.data?.accounts.find((row) =>
+                  recordString(row, "moduleKey") === moduleKey && recordString(row, "accountKind") === "supplier_fund"
+                );
+                const cash = supplierFunds.data?.accounts.find((row) =>
+                  recordString(row, "moduleKey") === moduleKey && recordString(row, "accountKind") === "cash_on_hand"
+                );
+                return (
+                  <div className="sk-panel stack-sm" key={moduleKey}>
+                    <strong>{moduleKey === "lpg" ? "SKIMA LPG" : "SKIMA Fuel"} supplier funds</strong>
+                    <MetricTile label="Supplier Fund · not revenue" value={money(numberValue(fund, "balance"), currency)} />
+                    <MetricTile label="Cash On Hand · ready for station" value={money(numberValue(cash, "balance"), currency)} />
+                  </div>
+                );
+              })}
+            </div>
+            {canRecordSupplierPayment ? (
+              <div className="sk-panel stack-md">
+                <div>
+                  <h3>Withdraw supplier funds into physical cash</h3>
+                  <p className="skima-muted">Use after cash is physically withdrawn from SKIMA's operating bank account. This records an internal movement from Supplier Fund to Cash On Hand; it does not send money to a station or initiate a bank transfer.</p>
+                </div>
+                <div className="skima-form-grid">
+                  <SelectInput
+                    label="Supplier fund"
+                    value={supplierWithdrawalModule}
+                    options={[
+                      { label: "LPG Supplier Fund", value: "lpg" },
+                      { label: "Fuel Supplier Fund", value: "fuel" },
+                    ]}
+                    onChange={(event) => setSupplierWithdrawalModule(event.currentTarget.value as "lpg" | "fuel")}
+                  />
+                  <TextInput
+                    label="Cash withdrawn"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={supplierWithdrawalAmount}
+                    onChange={(event) => setSupplierWithdrawalAmount(event.currentTarget.value)}
+                    placeholder="Amount physically withdrawn"
+                  />
+                  <TextInput
+                    label="Bank teller / cash withdrawal reference"
+                    value={supplierWithdrawalReference}
+                    onChange={(event) => setSupplierWithdrawalReference(event.currentTarget.value)}
+                    placeholder="ATM, teller or cash voucher reference"
+                  />
+                  <TextInput
+                    label="Actual withdrawal date and time"
+                    type="datetime-local"
+                    value={supplierWithdrawalDate}
+                    onChange={(event) => setSupplierWithdrawalDate(event.currentTarget.value)}
+                  />
+                </div>
+                <Button
+                  disabled={recordSupplierCashWithdrawal.isPending || Number(supplierWithdrawalAmount) <= 0 || supplierWithdrawalReference.trim().length < 3}
+                  isLoading={recordSupplierCashWithdrawal.isPending}
+                  onClick={() => recordSupplierCashWithdrawal.mutate()}
+                >
+                  Record cash withdrawal to Cash On Hand
+                </Button>
+              </div>
+            ) : null}
+            {canRecordSupplierPayment ? (
+              <div className="sk-panel stack-md">
+                <div>
+                  <h3>Record Fuel station cash payment</h3>
+                  <p className="skima-muted">For SKIMA Managed Fuel only. The payment consumes the Fuel Cash On Hand balance and is matched to the station branch and its order. It never credits the station wallet.</p>
+                </div>
+                <SelectInput
+                  label="SKIMA Managed Fuel order"
+                  value={fuelPayableOrderId}
+                  options={[
+                    { label: "Choose an order with an outstanding supplier amount", value: "" },
+                    ...(supplierFunds.data?.fuelPayables ?? []).map((row) => ({
+                      label: `${recordString(row, "orderReference") ?? "Fuel order"} · ${recordString(row, "supplierName") ?? recordString(row, "branchName") ?? "Station"} · ${money(numberValue(row, "outstandingAmount"), currency)} outstanding`,
+                      value: recordString(row, "orderId") ?? "",
+                    })),
+                  ]}
+                  onChange={(event) => {
+                    const id = event.currentTarget.value;
+                    const row = supplierFunds.data?.fuelPayables.find((item) => recordString(item, "orderId") === id);
+                    setFuelPayableOrderId(id);
+                    setFuelCashPaymentAmount(row ? String(numberValue(row, "outstandingAmount")) : "");
+                    setFuelCashPaymentReference("");
+                    setFuelCashPaymentDate(localDateTimeInput(new Date()));
+                    setFuelCashPaymentNote("");
+                  }}
+                />
+                <div className="skima-form-grid">
+                  <TextInput
+                    label="Cash paid to station"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={fuelCashPaymentAmount}
+                    disabled={!fuelPayableOrderId}
+                    onChange={(event) => setFuelCashPaymentAmount(event.currentTarget.value)}
+                  />
+                  <TextInput
+                    label="Station cash receipt / signed voucher reference"
+                    value={fuelCashPaymentReference}
+                    disabled={!fuelPayableOrderId}
+                    onChange={(event) => setFuelCashPaymentReference(event.currentTarget.value)}
+                    placeholder="Reference for the physical cash handover"
+                  />
+                  <TextInput
+                    label="Actual station payment date and time"
+                    type="datetime-local"
+                    value={fuelCashPaymentDate}
+                    disabled={!fuelPayableOrderId}
+                    onChange={(event) => setFuelCashPaymentDate(event.currentTarget.value)}
+                  />
+                </div>
+                <TextAreaInput
+                  label="Payment note (optional)"
+                  value={fuelCashPaymentNote}
+                  disabled={!fuelPayableOrderId}
+                  onChange={(event) => setFuelCashPaymentNote(event.currentTarget.value)}
+                  rows={2}
+                />
+                <Button
+                  disabled={!fuelPayableOrderId || recordFuelSupplierCashPayment.isPending || Number(fuelCashPaymentAmount) <= 0 || fuelCashPaymentReference.trim().length < 3}
+                  isLoading={recordFuelSupplierCashPayment.isPending}
+                  onClick={() => recordFuelSupplierCashPayment.mutate()}
+                >
+                  Record Fuel station cash payment
+                </Button>
+                <DataTable
+                  columns={[
+                    { key: "orderReference", header: "Fuel order", render: (row) => recordString(row, "orderReference") ?? "—" },
+                    { key: "supplierName", header: "Station", render: (row) => recordString(row, "supplierName") ?? "—" },
+                    { key: "supplierAmount", header: "Station supply amount", render: (row) => money(numberValue(row, "supplierAmount"), currency) },
+                    { key: "paidAmount", header: "Cash already paid", render: (row) => money(numberValue(row, "paidAmount"), currency) },
+                    { key: "outstandingAmount", header: "Still outstanding", render: (row) => money(numberValue(row, "outstandingAmount"), currency) },
+                    { key: "stageKey", header: "Order stage", render: (row) => label(recordString(row, "stageKey")) },
+                  ]}
+                  caption="SKIMA Managed Fuel supplier payables"
+                  records={(supplierFunds.data?.fuelPayables ?? []) as RecordValue[]}
+                  getRowKey={(row) => recordString(row, "orderId") ?? JSON.stringify(row)}
+                  emptyTitle="No Fuel supplier payables"
+                  emptyMessage="No SKIMA Managed Fuel orders currently have an unpaid supplier amount."
+                />
+              </div>
+            ) : null}
+            <h3>Supplier cash movement history</h3>
+            <DataTable
+              columns={[
+                { key: "moduleKey", header: "App", render: (row) => label(recordString(row, "moduleKey")) },
+                { key: "movementType", header: "Movement", render: (row) => recordString(row, "movementType") === "cash_withdrawal" ? "Supplier Fund → Cash On Hand" : "Cash paid to station" },
+                { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? currency) },
+                { key: "paymentReference", header: "Cash reference", render: (row) => recordString(row, "paymentReference") ?? "—" },
+                { key: "occurredAt", header: "Date", render: (row) => recordString(row, "occurredAt") ? new Date(recordString(row, "occurredAt") as string).toLocaleString() : "—" },
+              ]}
+              caption="Supplier fund withdrawals and station cash payments"
+              records={(supplierFunds.data?.recentMovements ?? []) as RecordValue[]}
+              getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
+              emptyTitle="No supplier cash movements recorded"
+              emptyMessage="Cash withdrawals and station payments will appear here after they are recorded."
+            />
+          </>
+        )}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header">
           <div><p className="admin-section-kicker">Supplier expenses</p><h2>Admin-recorded SKIMA payments to stations</h2></div>
           <StatusBadge tone="neutral">Separate from customer collections</StatusBadge>
         </div>
