@@ -712,18 +712,40 @@ async function parseGatewayEnvelope(response: Response): Promise<GatewayEnvelope
     };
   }
 
+  let value: unknown;
   try {
-    const parsed = GatewayEnvelopeSchema.parse(JSON.parse(text));
-
-    return parsed as GatewayEnvelope;
+    value = JSON.parse(text);
   } catch (error) {
     throw new ApiGatewayError({
       status: response.status,
       code: "invalid_json_response",
-      message: "The backend returned an invalid JSON response.",
+      message: "The backend returned a non-JSON response.",
       details: error,
     });
   }
+
+  const parsed = GatewayEnvelopeSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data as GatewayEnvelope;
+  }
+
+  // Some older module handlers and edge routes return their JSON payload
+  // directly instead of the shared { ok, data } envelope. Accept that shape
+  // only for successful HTTP responses; the caller still validates the
+  // payload against its route-specific schema before exposing it to the UI.
+  if (response.ok) {
+    return {
+      ok: true,
+      data: value,
+    };
+  }
+
+  throw new ApiGatewayError({
+    status: response.status,
+    code: "invalid_gateway_envelope",
+    message: "The backend returned an unsupported JSON error response.",
+    details: parsed.error.flatten(),
+  });
 }
 
 function normalizeGatewayError(response: Response, envelope: GatewayEnvelope): ApiGatewayError {
