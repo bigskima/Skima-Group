@@ -1,11 +1,12 @@
 import * as Speech from "expo-speech";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 
 const APP_KEY = "logistics";
 const APP_NAME = "Logistics";
@@ -100,14 +101,15 @@ function GateStatus({ title, message, busy = false, onRetry }: { title: string; 
   const { palette } = useAppTheme();
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.canvas }]}>
+      {busy ? <ScreenSkeleton variant="policy" cards={1} /> : (
       <View style={[styles.statusCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={[styles.brandMark, { backgroundColor: palette.brandSoft }]}><Text style={[styles.brandMarkText, { color: palette.brand }]}>S</Text></View>
         <Text style={[styles.eyebrow, { color: palette.brand }]}>SKIMA · CUSTOMER TERMS</Text>
         <Text style={[styles.statusTitle, { color: palette.ink }]}>{title}</Text>
         <Text style={[styles.copy, { color: palette.muted }]}>{message}</Text>
-        {busy ? <ActivityIndicator color={palette.brand} /> : null}
         {onRetry ? <Pressable onPress={onRetry} style={[styles.primaryButton, { backgroundColor: palette.brand }]}><Text style={styles.primaryText}>Try again</Text></Pressable> : null}
       </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -117,10 +119,11 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
 }) {
   const { palette } = useAppTheme();
   const sections = useMemo(() => buildSections(document.content), [document.content]);
+  const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(() => new Set([0]));
   const [contentsOpen, setContentsOpen] = useState(false);
-  const [reading, setReading] = useState(false);
+  const [autoRead, setAutoRead] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const sectionIndex = Math.min(index, Math.max(0, sections.length - 1));
   const section = sections[sectionIndex];
@@ -129,28 +132,64 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
   const minutes = Math.max(1, Math.ceil(document.content.split(/\s+/).filter(Boolean).length / 190));
 
   useEffect(() => {
-    setIndex(0); setVisited(new Set([0])); setConfirmed(false); setContentsOpen(false); setReading(false); void Speech.stop();
+    setIndex(0); setVisited(new Set([0])); setConfirmed(false); setContentsOpen(false); setAutoRead(false); void Speech.stop();
   }, [document.versionId]);
   useEffect(() => () => { void Speech.stop(); }, []);
 
   const goTo = (next: number) => {
     const bounded = Math.max(0, Math.min(next, sections.length - 1));
-    void Speech.stop(); setReading(false); setIndex(bounded);
+    setAutoRead(false);
+    void Speech.stop();
+    setIndex(bounded);
     setVisited((current) => { const updated = new Set(current); updated.add(bounded); return updated; });
   };
-  const readAloud = () => {
-    if (!section) return;
-    if (reading) { void Speech.stop(); setReading(false); return; }
-    setReading(true);
-    Speech.speak([section.title, ...section.lines].join(". "), {
-      language: "en-NG", rate: 0.94,
-      onDone: () => setReading(false), onStopped: () => setReading(false), onError: () => setReading(false),
-    });
+
+  const toggleReadAloud = () => {
+    if (autoRead) {
+      setAutoRead(false);
+      void Speech.stop();
+      return;
+    }
+    setAutoRead(true);
   };
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [sectionIndex]);
+
+  useEffect(() => {
+    if (!autoRead || !section) return;
+    let active = true;
+    const speech = [section.title, ...section.lines].join(". ");
+    Speech.speak(speech, {
+      language: "en-NG",
+      rate: 0.94,
+      onDone: () => {
+        if (!active) return;
+        setVisited((current) => {
+          const updated = new Set(current);
+          updated.add(sectionIndex);
+          return updated;
+        });
+        if (sectionIndex < sections.length - 1) {
+          setIndex(sectionIndex + 1);
+        } else {
+          setAutoRead(false);
+        }
+      },
+      onError: () => {
+        if (active) setAutoRead(false);
+      },
+    });
+    return () => {
+      active = false;
+      void Speech.stop();
+    };
+  }, [autoRead, section, sectionIndex, sections.length]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.canvas }]}>
-      <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={[styles.brandMark, { backgroundColor: palette.brandSoft }]}><Text style={[styles.brandMarkText, { color: palette.brand }]}>S</Text></View>
           <Text style={[styles.eyebrow, { color: palette.brand }]}>SKIMA · {APP_NAME.toUpperCase()}</Text>
@@ -158,14 +197,10 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
           <Text style={[styles.copy, { color: palette.muted }]}>Please review the current customer terms for {APP_NAME}. Open every chapter, then confirm that you agree.</Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.eyebrow, { color: palette.brand }]}>AT A GLANCE</Text>
+        <View style={styles.summary}>
+          <Text style={[styles.eyebrow, { color: palette.brand }]}>CURRENT DOCUMENT · VERSION {document.versionLabel || "CURRENT"} · ABOUT {minutes} MIN</Text>
           <Text style={[styles.documentTitle, { color: palette.ink }]}>{document.title}</Text>
-          <Text style={[styles.copy, { color: palette.muted }]}>{document.summary}</Text>
-          <View style={styles.metaRow}>
-            <Text style={[styles.meta, { color: palette.muted }]}>Version {document.versionLabel || "Current"}</Text>
-            <Text style={[styles.meta, { color: palette.muted }]}>About {minutes} min read</Text>
-          </View>
+          {document.summary ? <Text style={[styles.copy, { color: palette.muted }]}>{document.summary}</Text> : null}
         </View>
 
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -179,7 +214,7 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
           <View style={[styles.progressTrack, { backgroundColor: palette.border }]}><View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, progress * 100))}%` as `${number}%`, backgroundColor: palette.brand }]} /></View>
           <View style={styles.toolbar}>
             <Pressable onPress={() => setContentsOpen((value) => !value)} style={[styles.toolButton, { borderColor: palette.border }]}><Text style={[styles.toolText, { color: palette.brand }]}>{contentsOpen ? "Hide contents" : "Contents"}</Text></Pressable>
-            <Pressable onPress={readAloud} style={[styles.toolButton, { borderColor: palette.border }]}><Text style={[styles.toolText, { color: palette.brand }]}>{reading ? "Stop reading" : "Read aloud"}</Text></Pressable>
+            <Pressable onPress={toggleReadAloud} style={[styles.toolButton, { borderColor: palette.border }]}><Text style={[styles.toolText, { color: palette.brand }]}>{autoRead ? "Stop reading" : "Read aloud"}</Text></Pressable>
           </View>
           {contentsOpen ? (
             <View style={[styles.contents, { borderColor: palette.border }]}>
@@ -218,7 +253,7 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
             <View style={[styles.checkbox, { borderColor: confirmed ? palette.brand : palette.borderStrong, backgroundColor: confirmed ? palette.brand : palette.surface, opacity: allRead ? 1 : 0.45 }]}>{confirmed ? <Text style={styles.checkmark}>✓</Text> : null}</View>
             <Text style={[styles.acceptanceText, { color: palette.ink }]}>{document.acceptanceStatement}</Text>
           </Pressable>
-          {!allRead ? <Text style={[styles.notice, { color: palette.muted }]}>Open every chapter before confirming. Read aloud is available for each chapter.</Text> : null}
+          {!allRead ? <Text style={[styles.notice, { color: palette.muted }]}>Open every chapter before confirming. Read aloud moves through the chapters automatically; you can stop it at any time.</Text> : null}
           {error ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
           <Pressable disabled={!allRead || !confirmed || busy} onPress={onAccept} style={[styles.primaryButton, { backgroundColor: palette.brand, opacity: !allRead || !confirmed || busy ? 0.45 : 1 }]}><Text style={styles.primaryText}>{busy ? "Saving agreement…" : "Accept and continue"}</Text></Pressable>
           <Pressable disabled={busy} onPress={onSignOut} style={styles.signOut}><Text style={[styles.signOutText, { color: palette.muted }]}>Sign out instead</Text></Pressable>
@@ -252,13 +287,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   page: { width: "100%", maxWidth: 820, alignSelf: "center", paddingHorizontal: 18, paddingTop: 22, paddingBottom: 46, gap: 14 },
   header: { gap: 8, paddingBottom: 4 },
-  brandMark: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  brandMark: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   brandMarkText: { fontSize: 24, fontWeight: "900" },
   eyebrow: { ...typography.eyebrow, fontSize: 9 },
-  heroTitle: { ...typography.title, fontSize: 27, lineHeight: 33 },
+  heroTitle: { ...typography.title, fontSize: 24, lineHeight: 29 },
   copy: { ...typography.body, fontSize: 13, lineHeight: 20 },
-  card: { borderRadius: radii.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing.lg, gap: 12 },
-  documentTitle: { ...typography.sectionTitle, fontSize: 17 },
+  card: { borderRadius: radii.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing.md, gap: 11 },
+  summary: { gap: 7, paddingHorizontal: 2, paddingVertical: 4 },
+  documentTitle: { ...typography.sectionTitle, fontSize: 16 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 2 },
   meta: { ...typography.caption, fontSize: 10 },
   progressTop: { flexDirection: "row", alignItems: "center", gap: 12 },
@@ -276,7 +312,7 @@ const styles = StyleSheet.create({
   contentsLabel: { flex: 1, ...typography.caption, fontSize: 11, fontWeight: "800" },
   chapter: { gap: 12 },
   chapterEyebrow: { ...typography.eyebrow, fontSize: 9 },
-  chapterTitle: { ...typography.heading, fontSize: 21 },
+  chapterTitle: { ...typography.heading, fontSize: 19 },
   paragraph: { ...typography.body, fontSize: 13, lineHeight: 21 },
   subheading: { ...typography.sectionTitle, fontSize: 14, marginTop: 4 },
   bullet: { paddingLeft: 4 },
