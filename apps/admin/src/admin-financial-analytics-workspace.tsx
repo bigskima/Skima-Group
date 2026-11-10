@@ -404,6 +404,9 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [fuelCashPaymentReference, setFuelCashPaymentReference] = useState("");
   const [fuelCashPaymentDate, setFuelCashPaymentDate] = useState(() => localDateTimeInput(new Date()));
   const [fuelCashPaymentNote, setFuelCashPaymentNote] = useState("");
+  const [fuelEvidenceFile, setFuelEvidenceFile] = useState<File | null>(null);
+  const [fuelEvidenceMediaAssetId, setFuelEvidenceMediaAssetId] = useState<string | null>(null);
+  const [fuelEvidenceFileName, setFuelEvidenceFileName] = useState<string | null>(null);
   const fuelCashPaymentAttemptsRef = useRef(new Map<string, string>());
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
@@ -716,6 +719,69 @@ export function AdminFinancialAnalyticsWorkspace() {
     },
   });
 
+  const uploadFuelSupplierEvidence = useMutation({
+    mutationFn: async () => {
+      if (!fuelEvidenceFile) throw new Error("Choose a Fuel station cash voucher or signed receipt first.");
+      const ownerUserId = context?.user.id;
+      if (!ownerUserId) throw new Error("The authenticated Admin identity is unavailable.");
+      if (fuelEvidenceFile.size <= 0 || fuelEvidenceFile.size > 10 * 1024 * 1024) {
+        throw new Error("Fuel payment evidence must be a non-empty file no larger than 10 MB.");
+      }
+      const contentType = fuelEvidenceFile.type || "application/octet-stream";
+      if (!(contentType.startsWith("image/") || contentType === "application/pdf")) {
+        throw new Error("Fuel payment evidence must be an image or PDF document.");
+      }
+      const upload = await api.post(
+        "/runtime/media/upload-sessions",
+        {
+          contentType,
+          fileName: fuelEvidenceFile.name,
+          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.upload", fuelEvidenceFile.name),
+          storageBucket: "skima-platform-media",
+        },
+        UploadSessionSchema,
+      );
+      const stored = await supabase.storage
+        .from(upload.storageBucket)
+        .uploadToSignedUrl(upload.storagePath, upload.token, fuelEvidenceFile, {
+          contentType,
+          upsert: true,
+        });
+      if (stored.error) throw new Error(stored.error.message || "The Fuel payment evidence upload did not complete.");
+      const media = await api.post(
+        "/runtime/media/assets",
+        {
+          assetTypeKey: "media.fuel.supplier_payment_evidence",
+          byteSize: fuelEvidenceFile.size,
+          contentType,
+          idempotencyKey: createClientIdempotencyKey("admin.fuel.supplier-payment.asset", fuelEvidenceFile.name),
+          metadata: {
+            originalFileName: fuelEvidenceFile.name,
+            purpose: "SKIMA Fuel station cash payment evidence",
+            fuelOrderId: fuelPayableOrderId,
+            moduleKey: "fuel",
+          },
+          ownerUserId,
+          source: "skima.admin.financial.analytics",
+          storageBucket: upload.storageBucket,
+          storagePath: upload.storagePath,
+        },
+        MediaAssetSchema,
+      );
+      return { id: media.id, fileName: fuelEvidenceFile.name };
+    },
+    onSuccess: (result) => {
+      setFuelEvidenceMediaAssetId(result.id);
+      setFuelEvidenceFileName(result.fileName);
+      setNotice("Fuel station cash evidence uploaded and registered.");
+      setNoticeTone("success");
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
   const recordFuelSupplierCashPayment = useMutation({
     mutationFn: async () => {
       const payable = supplierFunds.data?.fuelPayables.find(
@@ -729,6 +795,9 @@ export function AdminFinancialAnalyticsWorkspace() {
       }
       const reference = fuelCashPaymentReference.trim();
       if (reference.length < 3) throw new Error("Enter the station cash receipt or signed handover voucher reference.");
+      if (fuelEvidenceFile && !fuelEvidenceMediaAssetId) {
+        throw new Error("Upload the selected Fuel station cash evidence before recording the payment.");
+      }
       const paidAt = new Date(fuelCashPaymentDate);
       if (!fuelCashPaymentDate || !Number.isFinite(paidAt.getTime())) {
         throw new Error("Enter a valid Fuel station cash-payment date and time.");
@@ -745,7 +814,7 @@ export function AdminFinancialAnalyticsWorkspace() {
         target_amount: amount,
         target_payment_reference: reference,
         target_note: note || null,
-        target_evidence_media_asset_id: null,
+        target_evidence_media_asset_id: fuelEvidenceMediaAssetId,
         target_idempotency_key: idempotencyKey,
         target_paid_at: paidAt.toISOString(),
       });
@@ -762,6 +831,9 @@ export function AdminFinancialAnalyticsWorkspace() {
       setFuelCashPaymentReference("");
       setFuelCashPaymentDate(localDateTimeInput(new Date()));
       setFuelCashPaymentNote("");
+      setFuelEvidenceFile(null);
+      setFuelEvidenceMediaAssetId(null);
+      setFuelEvidenceFileName(null);
       fuelCashPaymentAttemptsRef.current.clear();
       await refresh();
       await supplierFunds.refetch();
@@ -1262,6 +1334,34 @@ export function AdminFinancialAnalyticsWorkspace() {
                     disabled={!fuelPayableOrderId}
                     onChange={(event) => setFuelCashPaymentDate(event.currentTarget.value)}
                   />
+                </div>
+                <TextInput
+                  label="Station cash receipt / payment evidence file (optional)"
+                  type="file"
+                  accept="image/*,.pdf"
+                  disabled={!fuelPayableOrderId || uploadFuelSupplierEvidence.isPending}
+                  onChange={(event) => {
+                    setFuelEvidenceFile(event.currentTarget.files?.[0] ?? null);
+                    setFuelEvidenceMediaAssetId(null);
+                    setFuelEvidenceFileName(null);
+                  }}
+                />
+                <div className="skima-action-row">
+                  <Button
+                    variant="outline"
+                    disabled={!fuelPayableOrderId || !fuelEvidenceFile || uploadFuelSupplierEvidence.isPending}
+                    isLoading={uploadFuelSupplierEvidence.isPending}
+                    onClick={() => uploadFuelSupplierEvidence.mutate()}
+                  >
+                    Upload Fuel payment evidence
+                  </Button>
+                  {fuelEvidenceMediaAssetId ? (
+                    <StatusBadge tone="success">Evidence attached: {fuelEvidenceFileName ?? "File uploaded"}</StatusBadge>
+                  ) : fuelEvidenceFile ? (
+                    <StatusBadge tone="warning">File selected · upload required before recording</StatusBadge>
+                  ) : (
+                    <StatusBadge>Optional · 10 MB maximum · image or PDF</StatusBadge>
+                  )}
                 </div>
                 <TextAreaInput
                   label="Payment note (optional)"
