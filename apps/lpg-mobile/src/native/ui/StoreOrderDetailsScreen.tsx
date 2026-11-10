@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { z } from "zod";
 import { MapPin, PackageCheck, ShieldCheck, ShoppingBag } from "lucide-react-native";
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { ScreenSkeleton } from "./ScreenSkeleton";
+import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
 import { idempotencyKey } from "../utilities/idempotency";
@@ -79,10 +80,7 @@ export function StoreOrderDetailsScreen() {
       }
     >
       {query.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.muted, { color: palette.muted }]}>Loading your Store order…</Text>
-        </View>
+        <ScreenSkeleton variant="detail" cards={2} />
       ) : query.error || !order ? (
         <EmptyState
           icon={<ShoppingBag color={palette.brand} size={27} />}
