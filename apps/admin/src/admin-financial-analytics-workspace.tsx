@@ -954,23 +954,18 @@ export function AdminFinancialAnalyticsWorkspace() {
             />
             <SelectInput
               label="How SKIMA paid the station"
-              value={paymentMethod}
-              options={[
-                { label: "Bank transfer", value: "bank_transfer" },
-                { label: "Physical cash", value: "cash" },
-              ]}
-              onChange={(event) => {
-                setPaymentMethod(event.currentTarget.value as "cash" | "bank_transfer");
-              }}
+              value="cash"
+              options={[{ label: "Physical cash", value: "cash" }]}
+              onChange={() => setPaymentMethod("cash")}
             />
             <TextInput
-              label={paymentMethod === "bank_transfer" ? "Bank transfer reference (required)" : "Cash voucher / receipt reference (required)"}
+              label="Cash voucher / signed station receipt reference (required)"
               value={paymentReference}
               onChange={(event) => {
                 setPaymentReference(event.currentTarget.value);
               }}
               disabled={!selectedOrder}
-              placeholder={paymentMethod === "bank_transfer" ? "Enter the bank transaction reference" : "Enter the cash voucher or signed handover reference"}
+              placeholder="Enter the cash voucher or signed station handover reference"
             />
             <TextInput
               label="Actual supplier payment date and time"
@@ -1021,7 +1016,7 @@ export function AdminFinancialAnalyticsWorkspace() {
             />
             <div className="sk-panel">
               <strong>Payment control</strong>
-              <p className="skima-muted">Use this to record a supplier payment SKIMA has already made. The order must first have a posted SKIMA customer collection. Enter the actual earlier payment time when back-recording. This creates the internal accounting allocation from SKIMA clearing to the supplier-cost control ledger; it does not initiate a bank transfer or independently verify the bank. Both methods require a bank reference or cash voucher / signed handover reference.</p>
+              <p className="skima-muted">Record a physical cash payment SKIMA has already made to the LPG supplier. First withdraw the LPG Supplier Fund into LPG Cash On Hand in the Supplier Funds section above. This action debits Cash On Hand and records the supplier disbursement. It does not credit a station wallet or treat the supplier principal as SKIMA revenue.</p>
               <Button
                 disabled={!selectedOrder || recordSupplierPayment.isPending || Number(paymentAmount) <= 0}
                 isLoading={recordSupplierPayment.isPending}
@@ -1222,7 +1217,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           emptyTitle="No supplier payments recorded" emptyMessage="No supplier disbursement entries have been recorded yet. This means the database has no payment evidence; it does not prove the station was not physically paid." />
         <div className="skima-grid skima-grid--compact">
           <MetricTile label="Procurement cost recorded" value={money(fleet.procurementCost, currency)} />
-          <MetricTile label="Supplier cash / bank transfer recorded" value={money(fleet.supplierPaid, currency)} />
+          <MetricTile label="Supplier cash paid" value={money(fleet.supplierPaid, currency)} />
           <MetricTile label="Supplier balance outstanding" value={money(fleet.supplierOutstanding, currency)} tone={fleet.supplierOutstanding > 0 ? "warning" : "success"} />
           <MetricTile label="Cumulative supplier disbursements in expense ledger" value={money(supplierExpenseBalance, currency)} />
         </div>
