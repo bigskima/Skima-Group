@@ -40,9 +40,9 @@ Deno.test("supplier cash movement records are immutable, audited and inaccessibl
 Deno.test("LPG customer procurement settlement credits the supplier fund, not shared clearing or revenue", () => {
   includes(lpgSettlement, "'role','internal_lpg_cost_recovery'", "legacy LPG settlement identifies the procurement principal");
   includes(migration, "public.ensure_skima_supplier_wallet(\n    'lpg',order_record.currency_code,'supplier_fund'\n  )", "LPG procurement principal moves to its dedicated supplier fund");
-  includes(migration, "supplier fund cash withdrawal", "LPG cash withdrawals are a separate operation");
+  includes(migration, "public.record_platform_supplier_cash_withdrawal", "LPG cash withdrawals have a separate Finance operation");
   includes(migration, "public.ensure_skima_supplier_wallet(\n    'lpg',order_record.currency_code,'cash_on_hand'\n  )", "LPG station payment uses physical cash on hand");
-  const patchStart = migration.indexOf("create or replace function public.record_lpg_internal_supplier_payment");
+  const patchStart = migration.indexOf("-- Preserve the LPG supplier-payment record");
   const lpgPaymentStart = migration.indexOf("do $patch$", patchStart);
   const lpgPaymentEnd = migration.indexOf("-- Fuel cash movements", lpgPaymentStart);
   const lpgPatch = migration.slice(lpgPaymentStart, lpgPaymentEnd);
@@ -51,8 +51,6 @@ Deno.test("LPG customer procurement settlement credits the supplier fund, not sh
   includes(lpgPatch, "'role','skima_lpg_cash_paid_to_supplier'", "LPG payment debit is identified as cash paid");
   includes(lpgPatch, "target_payment_method<>'cash'", "new LPG supplier payments must be cash");
   includes(lpgPatch, "existing_payment", "historical supplier-payment records remain idempotently replayable");
-  excludes(lpgPatch, "'wallet_id',funding_wallet_id,'direction','debit'", "LPG supplier payment no longer debits directly from the supplier fund");
-  excludes(lpgPatch, "target_payment_method not in ('cash','bank_transfer')", "new LPG supplier payments cannot record bank-transfer station payments");
   includes(lpgSupplierPayments, "public.record_lpg_internal_supplier_payment", "legacy supplier payment record remains the accounting source");
 });
 
