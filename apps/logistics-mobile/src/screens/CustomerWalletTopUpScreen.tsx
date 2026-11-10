@@ -12,6 +12,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii } from "../theme/tokens";
 import { Screen } from "../ui/Screen";
 import { StatePanel } from "../ui/StatePanel";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 const money = (value: number, currency: string) => {
@@ -80,7 +81,7 @@ export function CustomerWalletTopUpScreen() {
   }
   return <><Screen title="Fund SKIMA Wallet" denseHeader>
     <Pressable onPress={() => router.back()}><Text style={{ color: palette.brand, fontWeight: "800" }}>‹ Back to wallet</Text></Pressable>
-    {wallets.isPending ? <ActivityIndicator color={palette.brand} /> : wallets.error ? <StatePanel title="Wallet unavailable" description="Refresh and try again." retry={() => void wallets.refetch()} /> : <>
+    {wallets.isPending ? <ScreenSkeleton variant="detail" cards={2}/> : wallets.error ? <StatePanel title="Wallet unavailable" description="Refresh and try again." retry={() => void wallets.refetch()} /> : <>
       <View style={[styles.hero, { backgroundColor: palette.brand }]}><Text style={styles.kicker}>SHARED SKIMA CUSTOMER WALLET</Text><Text adjustsFontSizeToFit minimumFontScale={0.55} numberOfLines={1} style={styles.balance}>{money(balance, currency)}</Text><Text style={styles.hint}>One wallet for LPG, Logistics and SKIMA Store purchases.</Text></View>
       <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}><Text style={{ color: palette.ink, fontWeight: "800" }}>Amount to add ({currency})</Text>
         <TextInput value={amount} onChangeText={v => { setAmount(v.replace(/[^0-9.]/g, "")); setPreviewData(null); setError(""); setPreviewKey(createClientIdempotencyKey("logistics.wallet.topup.preview", walletId ?? "customer")); setDepositKey(createClientIdempotencyKey("logistics.wallet.topup", walletId ?? "customer")); }} keyboardType="decimal-pad" placeholder="Enter amount" placeholderTextColor={palette.muted} style={[styles.input, { color: palette.ink, borderColor: palette.border }]} />
