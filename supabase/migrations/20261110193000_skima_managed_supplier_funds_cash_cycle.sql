@@ -495,7 +495,10 @@ begin
   join public.order_records order_record on order_record.id=operation.order_id
   join public.business_modules module on module.id=order_record.module_id and module.key='fuel'
   join public.service_requests request on request.id=operation.service_request_id
-  join public.escrow_holds hold on hold.id=request.escrow_hold_id
+  join public.escrow_holds hold
+    on hold.id=request.escrow_hold_id
+   and hold.subject_type='service_request'
+   and hold.subject_id=request.id
   join public.fuel_order_commercial_snapshots quote
     on quote.order_id=operation.order_id
    and quote.service_request_id=operation.service_request_id
@@ -899,9 +902,11 @@ begin
       and media.status='active'
       and media.source='skima.admin.financial.analytics'
       and media.owner_user_id=auth.uid()
-      and media.asset_type_key in ('media.lpg.supplier_payment_evidence','media.fuel.supplier_payment_evidence')
+      and media.asset_type_key='media.fuel.supplier_payment_evidence'
+      and media.metadata->>'fuelOrderId'=target_order_id::text
+      and media.metadata->>'moduleKey'='fuel'
   ) then
-    raise exception using errcode='22023',message='Fuel supplier payment evidence must be an active file uploaded by this Finance administrator';
+    raise exception using errcode='22023',message='Fuel supplier payment evidence must be an active file uploaded by this Finance administrator and linked to the selected Fuel order';
   end if;
 
   cash_wallet_id:=public.ensure_skima_supplier_wallet('fuel',order_record.currency_code,'cash_on_hand');
