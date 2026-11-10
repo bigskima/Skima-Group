@@ -1042,12 +1042,187 @@ begin
 end;
 $patch$;
 
+
+-- Legacy LPG cost-recovery allocations were historically pooled in the shared
+-- settlement-clearing account. Reclassify only the amount both attributable to
+-- those allocations and still present in that account, and only after an
+-- explicit Finance action with an auditable reference.
+create or replace function public.record_platform_legacy_lpg_fund_reclassification(
+  target_currency_code text,
+  target_amount numeric,
+  target_reference text,
+  target_note text default null,
+  target_idempotency_key text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $function$
+declare
+  currency_value text:=upper(coalesce(target_currency_code,'NGN'));
+  reference_value text:=nullif(btrim(coalesce(target_reference,'')),'');
+  legacy_wallet_id uuid;
+  supplier_wallet_id uuid;
+  movement_id uuid;
+  transaction_id uuid;
+  existing_movement public.platform_supplier_cash_movements%rowtype;
+  legacy_balance numeric(28,8);
+  supplier_principal_remaining numeric(28,8);
+  reclassifiable_amount numeric(28,8);
+begin
+  if not (
+    public.is_platform_super_admin()
+    or public.has_permission('platform.financial.manage',null)
+  ) then
+    raise exception using errcode='42501',message='platform financial management permission is required to reclassify legacy LPG supplier funds';
+  end if;
+  if target_amount is null or target_amount<=0
+     or reference_value is null
+     or coalesce(btrim(target_idempotency_key),'')='' then
+    raise exception using errcode='22023',message='A positive reclassification amount, reconciliation reference and idempotency key are required';
+  end if;
+  if not exists(select 1 from public.currency_definitions where code=currency_value and status='enabled') then
+    raise exception using errcode='22023',message='legacy LPG supplier-fund currency is not enabled';
+  end if;
+
+  select * into existing_movement
+  from public.platform_supplier_cash_movements
+  where module_key='lpg' and idempotency_key=target_idempotency_key;
+  if found then
+    if existing_movement.movement_type<>'fund_reclassification'
+       or existing_movement.amount<>round(target_amount,2)
+       or existing_movement.currency_code<>currency_value
+       or existing_movement.payment_reference is distinct from reference_value
+       or existing_movement.note is distinct from nullif(btrim(coalesce(target_note,'')),'') then
+      raise exception using errcode='22023',message='legacy LPG fund reclassification idempotency key was reused with different details';
+    end if;
+    return jsonb_build_object(
+      'movementId',existing_movement.id,
+      'financialTransactionId',existing_movement.financial_transaction_id,
+      'amount',existing_movement.amount,'currencyCode',existing_movement.currency_code,
+      'paymentReference',existing_movement.payment_reference,
+      'status','posted','idempotentReplay',true
+    );
+  end if;
+
+  select wallet.id,coalesce(balance.balance,0)
+  into legacy_wallet_id,legacy_balance
+  from public.wallet_accounts wallet
+  left join public.wallet_balances balance
+    on balance.wallet_id=wallet.id and balance.currency_code=currency_value
+  where wallet.wallet_type='platform_clearing'
+    and wallet.owner_entity_type='platform'
+    and wallet.owner_entity_id is null
+    and wallet.currency_code=currency_value
+    and wallet.status='active'
+    and wallet.metadata->>'wallet_purpose'='settlement_clearing'
+  for update of wallet;
+
+  if legacy_wallet_id is null then
+    raise exception using errcode='55000',message='No legacy LPG settlement-clearing account exists for this currency';
+  end if;
+
+  select coalesce(sum(
+    case
+      when ledger.direction='credit' and ledger.metadata->>'role'='internal_lpg_cost_recovery'
+        then ledger.amount
+      when ledger.direction='debit' and ledger.metadata->>'role' in (
+        'skima_fleet_funds_disbursed_to_supplier','legacy_lpg_supplier_fund_reclassified'
+      ) then -ledger.amount
+      else 0
+    end
+  ),0)
+  into supplier_principal_remaining
+  from public.wallet_ledger_entries ledger
+  where ledger.wallet_id=legacy_wallet_id;
+
+  reclassifiable_amount:=least(
+    greatest(supplier_principal_remaining,0),
+    greatest(legacy_balance,0)
+  );
+  if round(target_amount,2)>round(reclassifiable_amount,2) then
+    raise exception using errcode='55000',
+      message=format(
+        'Reclassification exceeds the reconciled amount available (%s %s). Verify legacy supplier allocations and shared clearing first.',
+        currency_value,round(reclassifiable_amount,2)
+      );
+  end if;
+
+  supplier_wallet_id:=public.ensure_skima_supplier_wallet(
+    'lpg',currency_value,'supplier_fund'
+  );
+  movement_id:=gen_random_uuid();
+  transaction_id:=public.post_financial_transaction(
+    'transfer',currency_value,'platform.lpg.supplier_fund.reclassification',
+    'platform_supplier_cash_movement',movement_id,
+    jsonb_build_array(
+      jsonb_build_object(
+        'wallet_id',legacy_wallet_id,'direction','debit','amount',round(target_amount,2),
+        'entry_type','principal',
+        'metadata',jsonb_build_object(
+          'role','legacy_lpg_supplier_fund_reclassified',
+          'module_key','lpg',
+          'supplier_fund_wallet_id',supplier_wallet_id
+        )
+      ),
+      jsonb_build_object(
+        'wallet_id',supplier_wallet_id,'direction','credit','amount',round(target_amount,2),
+        'entry_type','principal',
+        'metadata',jsonb_build_object(
+          'role','legacy_lpg_supplier_fund_opening_balance',
+          'module_key','lpg',
+          'legacy_clearing_wallet_id',legacy_wallet_id
+        )
+      )
+    ),
+    target_idempotency_key,null,reference_value,'{}'::jsonb,
+    jsonb_build_object(
+      'module_key','lpg',
+      'movement_type','fund_reclassification',
+      'source_wallet_id',legacy_wallet_id,
+      'destination_wallet_id',supplier_wallet_id,
+      'legacy_supplier_principal_remaining_before',supplier_principal_remaining,
+      'legacy_clearing_balance_before',legacy_balance,
+      'reclassifiable_amount_before',reclassifiable_amount,
+      'note',nullif(btrim(coalesce(target_note,'')),'')
+    )
+  );
+
+  insert into public.platform_supplier_cash_movements(
+    id,module_key,movement_type,currency_code,amount,source_wallet_id,destination_wallet_id,
+    financial_transaction_id,payment_reference,note,created_by,idempotency_key,metadata
+  ) values (
+    movement_id,'lpg','fund_reclassification',currency_value,round(target_amount,2),
+    legacy_wallet_id,supplier_wallet_id,transaction_id,reference_value,
+    nullif(btrim(coalesce(target_note,'')),''),auth.uid(),target_idempotency_key,
+    jsonb_build_object(
+      'legacySupplierPrincipalRemainingBefore',supplier_principal_remaining,
+      'legacyClearingBalanceBefore',legacy_balance,
+      'reclassifiableAmountBefore',reclassifiable_amount
+    )
+  );
+
+  return jsonb_build_object(
+    'movementId',movement_id,'financialTransactionId',transaction_id,
+    'amount',round(target_amount,2),'currencyCode',currency_value,
+    'paymentReference',reference_value,
+    'supplierFundBalanceAfter',supplier_principal_remaining,
+    'legacyClearingBalanceAfter',legacy_balance-round(target_amount,2),
+    'status','posted'
+  );
+end;
+$function$;
+
 revoke all on function public.read_platform_supplier_funds_workspace(text) from public,anon;
 grant execute on function public.read_platform_supplier_funds_workspace(text) to authenticated,service_role;
 revoke all on function public.record_platform_supplier_cash_withdrawal(text,text,numeric,text,text,uuid,text,timestamptz) from public,anon;
 grant execute on function public.record_platform_supplier_cash_withdrawal(text,text,numeric,text,text,uuid,text,timestamptz) to authenticated,service_role;
 revoke all on function public.record_fuel_supplier_cash_payment(uuid,numeric,text,text,uuid,text,timestamptz) from public,anon;
 grant execute on function public.record_fuel_supplier_cash_payment(uuid,numeric,text,text,uuid,text,timestamptz) to authenticated,service_role;
+
+revoke all on function public.record_platform_legacy_lpg_fund_reclassification(text,numeric,text,text,text) from public,anon;
+grant execute on function public.record_platform_legacy_lpg_fund_reclassification(text,numeric,text,text,text) to authenticated,service_role;
 
 notify pgrst,'reload schema';
 commit;
