@@ -57,7 +57,6 @@ export function CompanyFinanceScreen() {
   useEffect(()=>{ if(!personalWallets.some((w)=>asString(w,"id")===personalWalletId)) setPersonalWalletId(asString(personalWallets[0],"id")??""); },[personalWalletKey,personalWalletId]);
   useEffect(()=>{ setBeneficiaryId(""); setPreview(null); setAmount(""); },[walletId]);
   const payoutBeneficiaries = (beneficiaries.data??[]).filter((item)=>asString(item,"wallet_id")===walletId && asString(item,"status")==="verified");
-  const personalWallet = personalWallets.find((w)=>asString(w,"id")===personalWalletId) ?? null;
 
   const settings = useQuery({
     queryKey:["logistics-company-payment-settings",organizationId],
