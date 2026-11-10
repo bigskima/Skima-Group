@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { CheckCircle2, Fuel, MapPin, Package, PhoneCall, RotateCcw, Truck } from "lucide-react-native";
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
+import { ScreenSkeleton, SkeletonRows } from "./ScreenSkeleton";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
 import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString, nestedRecord } from "../api/records";
@@ -163,7 +164,7 @@ export function FuelDriverJobsScreen() {
       action={<AppButton label="My LPG jobs" size="sm" variant="ghost" onPress={() => router.push("/(driver)/jobs" as never)} />}
     >
       {orders.isPending ? (
-        <View style={styles.loading}><ActivityIndicator color={palette.brand} /><Text style={[styles.muted, { color: palette.muted }]}>Loading your assigned Fuel jobs…</Text></View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : orders.error ? (
         <EmptyState title="Fuel jobs couldn't be loaded" description="Refresh your driver workspace and try again." action={<AppButton label="Refresh" onPress={() => void refresh()} />} />
       ) : records.length === 0 ? (
@@ -245,7 +246,7 @@ export function FuelDriverJobsScreen() {
               {["delivered","inspection_passed","completed","exception"].includes(currentStage) ? (
                 <Text style={[styles.muted, { color: palette.muted }]}>There is no further driver action for this order at the current stage.</Text>
               ) : null}
-              {allocations.isPending ? <View style={styles.loadingSmall}><ActivityIndicator color={palette.brand} /></View> : null}
+              {allocations.isPending ? <SkeletonRows rows={1} compact /> : null}
               {allocations.error ? <Text style={[styles.muted, { color: palette.muted }]}>Container custody details could not be refreshed.</Text> : null}
             </Card>
           ) : null}
