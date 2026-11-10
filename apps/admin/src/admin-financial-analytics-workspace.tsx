@@ -107,6 +107,14 @@ const appAnalyticsColumns: readonly TableColumn<RecordValue>[] = [
   { key: "ledgerDebits", header: "Ledger debits", render: (row) => row.ledgerDebits === null ? "Restricted" : money(numberValue(row, "ledgerDebits"), recordString(row, "currencyCode") ?? "NGN") },
 ];
 
+
+const SupplierFundsSchema = z.object({
+  currencyCode: z.string().default("NGN"),
+  accounts: z.array(RecordSchema).default([]),
+  recentMovements: z.array(RecordSchema).default([]),
+  fuelPayables: z.array(RecordSchema).default([]),
+}).passthrough();
+
 type Analytics = z.infer<typeof AnalyticsSchema>;
 type FleetOrder = RecordValue;
 
@@ -380,7 +388,18 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [currency, setCurrency] = useState("NGN");
   const [selectedOrder, setSelectedOrder] = useState<FleetOrder | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer">("bank_transfer");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer">("cash");
+  const [supplierWithdrawalModule, setSupplierWithdrawalModule] = useState<"lpg" | "fuel">("lpg");
+  const [supplierWithdrawalAmount, setSupplierWithdrawalAmount] = useState("");
+  const [supplierWithdrawalReference, setSupplierWithdrawalReference] = useState("");
+  const [supplierWithdrawalDate, setSupplierWithdrawalDate] = useState(() => localDateTimeInput(new Date()));
+  const supplierWithdrawalAttemptsRef = useRef(new Map<string, string>());
+  const [fuelPayableOrderId, setFuelPayableOrderId] = useState("");
+  const [fuelCashPaymentAmount, setFuelCashPaymentAmount] = useState("");
+  const [fuelCashPaymentReference, setFuelCashPaymentReference] = useState("");
+  const [fuelCashPaymentDate, setFuelCashPaymentDate] = useState(() => localDateTimeInput(new Date()));
+  const [fuelCashPaymentNote, setFuelCashPaymentNote] = useState("");
+  const fuelCashPaymentAttemptsRef = useRef(new Map<string, string>());
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => localDateTimeInput(new Date()));
@@ -436,10 +455,25 @@ export function AdminFinancialAnalyticsWorkspace() {
     },
   });
 
+
+  const supplierFunds = useQuery({
+    queryKey: ["platform-supplier-funds", currency],
+    enabled: status === "authenticated" && canRead,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_platform_supplier_funds_workspace", {
+        target_currency_code: currency,
+      });
+      if (error) throw error;
+      return SupplierFundsSchema.parse(data);
+    },
+  });
+
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["platform-financial-analytics"] }),
       queryClient.invalidateQueries({ queryKey: ["platform-product-financial-analytics"] }),
+      queryClient.invalidateQueries({ queryKey: ["platform-supplier-funds"] }),
     ]);
   };
 
