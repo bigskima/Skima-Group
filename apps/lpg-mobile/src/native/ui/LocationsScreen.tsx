@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Check, ChevronRight, Crosshair, LocateFixed, MapPin, Search } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
+import { SkeletonRows } from "./ScreenSkeleton";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema } from "../api/records";
@@ -276,7 +277,7 @@ export function LocationsScreen() {
           style={[styles.searchInput, { color: palette.ink }]}
           value={search}
         />
-        {autocomplete.isPending ? <ActivityIndicator color={colors.brand} size="small" /> : null}
+        {autocomplete.isPending ? <SkeletonRows rows={2} compact /> : null}
       </View>
       {predictions.length ? (
         <View style={[styles.predictions, { backgroundColor: palette.elevated, borderColor: palette.border }]}>
