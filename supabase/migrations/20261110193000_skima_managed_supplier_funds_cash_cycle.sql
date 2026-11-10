@@ -429,7 +429,8 @@ begin
       ),0)::numeric(28,8) as paid_amount
   ) supplier_amount
   where operation.fulfillment_mode='skima_managed'
-    and operation.stage_key in ('ready_for_driver','driver_assigned','station_handover','out_for_delivery','delivered','completed')
+    and operation.stage_key='completed'
+    and operation.settled_at is not null
     and order_record.currency_code=currency_value
     and hold.status in ('held','partially_released','released')
     and supplier_amount.amount>supplier_amount.paid_amount;
@@ -465,6 +466,7 @@ declare
   available_balance numeric(28,8);
   transaction_id uuid;
   movement_id uuid;
+  existing_movement public.platform_supplier_cash_movements%rowtype;
   occurred_at_value timestamptz:=coalesce(target_withdrawn_at,timezone('utc',now()));
   reference_value text:=nullif(btrim(coalesce(target_withdrawal_reference,'')),'');
 begin
@@ -485,11 +487,31 @@ begin
     raise exception using errcode='22023',message='cash withdrawal currency is not enabled';
   end if;
 
-  select id into movement_id
+  select * into existing_movement
   from public.platform_supplier_cash_movements
   where module_key=target_module_key and idempotency_key=target_idempotency_key;
-  if movement_id is not null then
-    return jsonb_build_object('movementId',movement_id,'status','posted','idempotentReplay',true);
+  if found then
+    if existing_movement.movement_type<>'cash_withdrawal'
+       or existing_movement.amount<>round(target_amount,2)
+       or existing_movement.currency_code<>currency_value
+       or existing_movement.payment_reference is distinct from reference_value
+       or existing_movement.note is distinct from nullif(btrim(coalesce(target_note,'')),'')
+       or existing_movement.occurred_at is distinct from occurred_at_value
+       or existing_movement.evidence_media_asset_id is distinct from target_evidence_media_asset_id then
+      raise exception using errcode='22023',message='supplier cash withdrawal idempotency key was reused with different details';
+    end if;
+    return jsonb_build_object('movementId',existing_movement.id,'status','posted','idempotentReplay',true);
+  end if;
+
+  if target_evidence_media_asset_id is not null and not exists(
+    select 1 from public.media_assets media
+    where media.id=target_evidence_media_asset_id
+      and media.status='active'
+      and media.owner_user_id=auth.uid()
+      and media.source='skima.admin.financial.analytics'
+      and media.asset_type_key in ('media.lpg.supplier_payment_evidence','media.fuel.supplier_payment_evidence')
+  ) then
+    raise exception using errcode='22023',message='cash withdrawal evidence must be an active supplier-funds file uploaded by this Finance administrator';
   end if;
 
   fund_wallet_id:=public.ensure_skima_supplier_wallet(target_module_key,currency_value,'supplier_fund');
@@ -547,7 +569,8 @@ begin
   return jsonb_build_object(
     'movementId',movement_id,'financialTransactionId',transaction_id,
     'moduleKey',target_module_key,'amount',round(target_amount,2),
-    'currencyCode',currency_value,'cashOnHandBalanceAfter',available_balance-round(target_amount,2),
+    'currencyCode',currency_value,'supplierFundBalanceAfter',available_balance-round(target_amount,2),
+    'cashOnHandIncrease',round(target_amount,2),
     'paymentReference',reference_value,'status','posted'
   );
 end;
@@ -605,7 +628,10 @@ begin
   if found then
     if existing_movement.fuel_order_id is distinct from target_order_id
        or existing_movement.amount<>round(target_amount,2)
-       or existing_movement.payment_reference is distinct from reference_value then
+       or existing_movement.payment_reference is distinct from reference_value
+       or existing_movement.evidence_media_asset_id is distinct from target_evidence_media_asset_id
+       or existing_movement.note is distinct from nullif(btrim(coalesce(target_note,'')),'')
+       or existing_movement.occurred_at is distinct from occurred_at_value then
       raise exception using errcode='22023',message='Fuel cash payment idempotency key was reused with different details';
     end if;
     return jsonb_build_object(
@@ -635,8 +661,9 @@ begin
   where order_id=target_order_id
   for update;
   if not found or operation.fulfillment_mode<>'skima_managed'
-     or operation.stage_key not in ('ready_for_driver','driver_assigned','station_handover','out_for_delivery','delivered','completed') then
-    raise exception using errcode='55000',message='Only a paid SKIMA Managed Fuel order ready for station handover or later can be paid from the supplier cash float';
+     or operation.stage_key<>'completed'
+     or operation.settled_at is null then
+    raise exception using errcode='55000',message='Only a completed and financially settled SKIMA Managed Fuel order can be paid from the supplier cash float';
   end if;
 
   select * into request_record from public.service_requests where id=operation.service_request_id for share;
