@@ -18,7 +18,7 @@ function excludes(source: string, value: string, message: string): void {
 Deno.test("Fuel customer can choose buy, rent or exchange without a purchase-history requirement", () => {
   includes(orderScreen, 'type ContainerMode = "purchase" | "rental" | "exchange"', "Customer app supports the exchange choice");
   includes(orderScreen, 'title="Use my container"', "Customer-facing exchange label");
-  includes(orderScreen, "No previous SKIMA purchase record", "No SKIMA purchase history is required");
+  includes(orderScreen, "You do not need a previous SKIMA purchase record", "No SKIMA purchase history is required");
   includes(orderScreen, 'containerMode !== "exchange"', "Exchange is not charged as a container purchase or rental");
   includes(orderScreen, "filled SKIMA container of the same size", "Customer understands the physical exchange");
   includes(ordersScreen, 'savedMode === "exchange" ? "Container exchange"', "Customer order history identifies exchanges");
