@@ -63,6 +63,7 @@ export function PolicyDocumentScreen({
   );
   const accept = useAcceptPolicy(policyKey, applicationId);
   const [confirmedRead, setConfirmedRead] = useState(false);
+  const [reading, setReading] = useState(false);
   const [sectionIndex, setSectionIndex] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(() => new Set());
   const [contentsOpen, setContentsOpen] = useState(false);
@@ -84,7 +85,8 @@ export function PolicyDocumentScreen({
 
   useEffect(() => {
     setSectionIndex(0);
-    setVisited(sections.length ? new Set([0]) : new Set());
+    setVisited(new Set());
+    setReading(false);
     setConfirmedRead(false);
     setContentsOpen(false);
     setAcceptanceError(null);
@@ -119,6 +121,18 @@ export function PolicyDocumentScreen({
       updated.add(bounded);
       return updated;
     });
+  };
+
+  const startReading = () => {
+    goToSection(safeIndex);
+    setReading(true);
+  };
+
+  const backToOverview = () => {
+    setReading(false);
+    setContentsOpen(false);
+    setAutoReading(false);
+    void Speech.stop();
   };
 
   const toggleReadAloud = () => {
@@ -181,14 +195,17 @@ export function PolicyDocumentScreen({
     <Screen
       denseHeader
       key={safeIndex}
-      eyebrow="SKIMA policy centre"
-      title={document?.title ?? "Privacy & policy"}
-      subtitle={mandatory
-        ? "Review the current customer terms before entering SKIMA Refill. Read aloud can guide you through every chapter automatically."
+      denseHeader
+      eyebrow={reading ? "SKIMA policy reader" : "SKIMA policy centre"}
+      title={reading ? "Read the chapters" : document?.title ?? "Privacy & policy"}
+      subtitle={reading
+        ? `Chapter ${safeIndex + 1} of ${sections.length} • ${Math.round(progress * 100)}% reviewed`
+        : mandatory
+        ? "A quick review before you continue. Read the document summary, then open each chapter."
         : document?.published
-        ? `Version ${document.versionLabel ?? "current"} • Read chapter by chapter or use Read aloud.`
+        ? `Version ${document.versionLabel ?? "current"} • Open the chapters to read the full document.`
         : "Read the summary here. The external source remains available when a published in-app copy is unavailable."}
-      action={mandatory ? undefined : (
+      action={reading ? undefined : mandatory ? undefined : (
         <Pressable accessibilityRole="button" onPress={() => router.back()}>
           <Text style={[styles.back, { color: palette.brand }]}>Back</Text>
         </Pressable>
@@ -235,14 +252,19 @@ export function PolicyDocumentScreen({
 
       {document?.published ? (
         <>
-          <Card padding="sm" gap={10}>
-            {document.summary ? (
+
+      {document?.published ? (
+        <>
+          {!reading ? (
+            <>
+              <Card padding="sm" gap={10}>
+{document.summary ? (
               <View style={styles.summaryBlock}>
                 <Text style={[styles.kicker, { color: palette.brand }]}>AT A GLANCE</Text>
                 <Text style={[styles.body, { color: palette.muted }]}>{cleanInlineMarkdown(document.summary)}</Text>
               </View>
             ) : null}
-            <View style={styles.metaRow}>
+<View style={styles.metaRow}>
               <ShieldCheck color={palette.brand} size={17} />
               <View style={styles.metaCopy}>
                 <Text style={[styles.metaTitle, { color: palette.ink }]}>Published source</Text>
@@ -251,7 +273,7 @@ export function PolicyDocumentScreen({
                 </Text>
               </View>
             </View>
-            <View style={styles.progressHeader}>
+<View style={styles.progressHeader}>
               <View style={styles.progressCopy}>
                 <Text style={[styles.kicker, { color: palette.brand }]}>PROGRESSIVE READING</Text>
                 <Text style={[styles.metaTitle, { color: palette.ink }]}>
@@ -270,8 +292,53 @@ export function PolicyDocumentScreen({
                 ]}
               />
             </View>
-
-            <View style={styles.readerToolbar}>
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Chapters to review</Text>
+                <View style={[styles.contents, { borderColor: palette.border }]}>
+                  {sections.slice(0, 4).map((section, index) => (
+                    <View key={index} style={[styles.contentsRow, { borderBottomColor: palette.border }]}>
+                      <View style={[styles.chapterBadge, { backgroundColor: visited.has(index) ? palette.successSoft : palette.soft }]}>
+                        <Text style={[styles.chapterBadgeText, { color: visited.has(index) ? palette.success : palette.mutedStrong }]}>{visited.has(index) ? "✓" : index + 1}</Text>
+                      </View>
+                      <Text numberOfLines={2} style={[styles.contentsLabel, { color: palette.ink }]}>{section.title}</Text>
+                    </View>
+                  ))}
+                  {sections.length > 4 ? <Text style={[styles.meta, { color: palette.muted, padding: spacing.sm }]}>Plus {sections.length - 4} more chapters inside the reader.</Text> : null}
+                </View>
+                <AppButton label={visited.size ? "Resume reading" : "Start reading chapters"} fullWidth onPress={startReading} />
+              </Card>
+{document.sourceUrl ? (
+            <AppButton
+              label="Open Google Drive source"
+              variant="ghost"
+              trailingIcon={<ExternalLink color={palette.brand} size={16} />}
+              onPress={() => void openSource()}
+            />
+          ) : null}
+            </>
+          ) : (
+            <>
+              <Card padding="sm" gap={10}>
+                <AppButton label="Back to overview" variant="ghost" onPress={backToOverview} />
+<View style={styles.progressHeader}>
+              <View style={styles.progressCopy}>
+                <Text style={[styles.kicker, { color: palette.brand }]}>PROGRESSIVE READING</Text>
+                <Text style={[styles.metaTitle, { color: palette.ink }]}>
+                  Chapter {safeIndex + 1} of {sections.length}
+                </Text>
+              </View>
+              <Text style={[styles.progressValue, { color: palette.brand }]}>
+                {Math.round(progress * 100)}%
+              </Text>
+            </View>
+            <View style={[styles.progressTrack, { backgroundColor: palette.border }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { backgroundColor: palette.brand, width: `${progress * 100}%` },
+                ]}
+              />
+            </View>
+<View style={styles.readerToolbar}>
               <AppButton
                 label={contentsOpen ? "Hide contents" : "Contents"}
                 size="sm"
@@ -381,9 +448,8 @@ export function PolicyDocumentScreen({
                 />
               )}
             </View>
-          </Card>
-
-          {document.sourceUrl ? (
+              </Card>
+{document.sourceUrl ? (
             <AppButton
               label="Open Google Drive source"
               variant="ghost"
@@ -391,8 +457,7 @@ export function PolicyDocumentScreen({
               onPress={() => void openSource()}
             />
           ) : null}
-
-          {allowAcceptance ? (
+{allowAcceptance ? (
             <Card padding="sm" gap={10}>
               {acceptance.data ? (
                 <View style={styles.acceptedRow}>
@@ -457,7 +522,10 @@ export function PolicyDocumentScreen({
               ) : null}
             </Card>
           ) : null}
+            </>
+          )}
         </>
+      ) : null}
       ) : null}
     </Screen>
   );

@@ -121,10 +121,11 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
   const sections = useMemo(() => buildSections(document.content), [document.content]);
   const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
-  const [visited, setVisited] = useState<Set<number>>(() => new Set([0]));
+  const [visited, setVisited] = useState<Set<number>>(() => new Set());
   const [contentsOpen, setContentsOpen] = useState(false);
   const [autoRead, setAutoRead] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [reading, setReading] = useState(false);
   const sectionIndex = Math.min(index, Math.max(0, sections.length - 1));
   const section = sections[sectionIndex];
   const allRead = sections.length > 0 && visited.size >= sections.length;
@@ -132,7 +133,7 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
   const minutes = Math.max(1, Math.ceil(document.content.split(/\s+/).filter(Boolean).length / 190));
 
   useEffect(() => {
-    setIndex(0); setVisited(new Set([0])); setConfirmed(false); setContentsOpen(false); setAutoRead(false); void Speech.stop();
+    setIndex(0); setVisited(new Set()); setConfirmed(false); setContentsOpen(false); setAutoRead(false); setReading(false); void Speech.stop();
   }, [document.versionId]);
   useEffect(() => () => { void Speech.stop(); }, []);
 
@@ -142,6 +143,19 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
     void Speech.stop();
     setIndex(bounded);
     setVisited((current) => { const updated = new Set(current); updated.add(bounded); return updated; });
+  };
+
+  const startReading = () => {
+    goTo(index);
+    setContentsOpen(false);
+    setReading(true);
+  };
+
+  const backToOverview = () => {
+    setReading(false);
+    setContentsOpen(false);
+    setAutoRead(false);
+    void Speech.stop();
   };
 
   const toggleReadAloud = () => {
@@ -188,6 +202,9 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.canvas }]}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
+
+        {!reading ? (
+          <>
         <View style={styles.header}>
           <View style={styles.headerBrandRow}>
             <View style={[styles.brandMark, { backgroundColor: palette.brandSoft }]}><Text style={[styles.brandMarkText, { color: palette.brand }]}>S</Text></View>
@@ -208,7 +225,45 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
           </View>
           {document.summary ? <Text style={[styles.copy, { color: palette.muted }]}>{document.summary}</Text> : null}
         </View>
-
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.progressTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.eyebrow, { color: palette.brand }]}>YOUR READING PROGRESS</Text>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>
+                    {visited.size ? visited.size + " of " + sections.length + " chapters reviewed" : sections.length + " chapters to review"}
+                  </Text>
+                </View>
+                <Text style={[styles.progressValue, { color: palette.brand }]}>{Math.round(progress * 100)}%</Text>
+              </View>
+              <View style={[styles.progressTrack, { backgroundColor: palette.border }]}>
+                <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, progress * 100))}%` as `${number}%`, backgroundColor: palette.brand }]} />
+              </View>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Chapters to review</Text>
+              <View style={[styles.contents, { borderColor: palette.border }]}>
+                {sections.slice(0, 4).map((item, itemIndex) => (
+                  <View key={itemIndex} style={[styles.contentsItem, { borderBottomColor: palette.border }]}>
+                    <View style={[styles.chapterNumber, { backgroundColor: visited.has(itemIndex) ? palette.brandSoft : palette.surfaceSubtle }]}>
+                      <Text style={[styles.chapterNumberText, { color: visited.has(itemIndex) ? palette.brand : palette.muted }]}>{visited.has(itemIndex) ? "✓" : itemIndex + 1}</Text>
+                    </View>
+                    <Text numberOfLines={2} style={[styles.contentsLabel, { color: palette.ink }]}>{item.title}</Text>
+                  </View>
+                ))}
+                {sections.length > 4 ? <Text style={[styles.meta, { color: palette.muted }]}>Plus {sections.length - 4} more chapters inside the reader.</Text> : null}
+              </View>
+              <Pressable onPress={startReading} style={[styles.primaryButton, { backgroundColor: palette.brand }]}>
+                <Text style={styles.primaryText}>{visited.size ? "Resume reading" : "Start reading chapters"}</Text>
+              </Pressable>
+              <Pressable onPress={onSignOut} style={styles.signOut}><Text style={[styles.signOutText, { color: palette.muted }]}>Sign out instead</Text></Pressable>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.readerTopbar}>
+              <Pressable onPress={backToOverview} style={styles.readerBack}>
+                <Text style={[styles.toolText, { color: palette.brand }]}>← Back to overview</Text>
+              </Pressable>
+              <Text style={[styles.eyebrow, { color: palette.muted }]}>CHAPTER READER</Text>
+            </View>
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={styles.progressTop}>
             <View style={{ flex: 1 }}>
@@ -252,7 +307,6 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
               : <View style={[styles.completePill, { backgroundColor: allRead ? palette.successSoft : palette.surfaceSubtle }]}><Text style={[styles.meta, { color: allRead ? palette.success : palette.muted }]}>{allRead ? "All chapters opened" : "Review remaining chapters"}</Text></View>}
           </View>
         </View>
-
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <Text style={[styles.sectionTitle, { color: palette.ink }]}>Your agreement</Text>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: confirmed }} onPress={() => { if (allRead) setConfirmed((value) => !value); }} style={styles.checkRow}>
@@ -265,6 +319,8 @@ function PolicyReader({ document, busy, error, onAccept, onSignOut }: {
           <Pressable disabled={busy} onPress={onSignOut} style={styles.signOut}><Text style={[styles.signOutText, { color: palette.muted }]}>Sign out instead</Text></Pressable>
         </View>
         <Text style={[styles.footer, { color: palette.muted }]}>Your agreement is saved against this published version. If SKIMA makes a material update that requires renewed acceptance, we will ask you to review it again.</Text>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -301,6 +357,8 @@ const styles = StyleSheet.create({
   heroTitle: { ...typography.title, fontSize: 20, lineHeight: 25, letterSpacing: -0.35 },
   copy: { ...typography.body, fontSize: 12, lineHeight: 18 },
   card: { borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 10 },
+  readerTopbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 2 },
+  readerBack: { minHeight: 34, justifyContent: "center", paddingHorizontal: 2 },
   summary: { gap: 7, padding: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
   metaStrip: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   publishedTag: { borderRadius: radii.pill, paddingHorizontal: 9, paddingVertical: 4 },

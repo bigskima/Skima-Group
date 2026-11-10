@@ -108,6 +108,23 @@ Deno.test("four customer policy readers use compact, consistent presentation pri
   }
 });
 
+Deno.test("all four customer policy screens separate the overview from the chapter reader", () => {
+  for (const source of [refillReader, logisticsGate, storeGate, billsGate]) {
+    assertStringIncludes(source, "Start reading chapters");
+    assertStringIncludes(source, "Resume reading");
+    assertStringIncludes(source, "Back to overview");
+    assertStringIncludes(source, "Chapters to review");
+    assertStringIncludes(source, "setReading");
+  }
+});
+
+Deno.test("reading progress begins only after a chapter is opened", () => {
+  for (const source of [logisticsGate, storeGate, billsGate]) {
+    assertStringIncludes(source, "useState<Set<number>>(() => new Set())");
+  }
+  assertStringIncludes(refillReader, "setVisited(new Set())");
+});
+
 Deno.test("database migrations define and publish the three separate customer policies", () => {
   for (const key of ["policy.customer.logistics.terms", "policy.customer.store.terms", "policy.customer.bills.terms"]) {
     assertStringIncludes(docsMigration + versionsMigration, key);
