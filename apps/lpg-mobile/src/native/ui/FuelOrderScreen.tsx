@@ -26,7 +26,7 @@ import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
 
 type ProductKey = "fuel.pms" | "fuel.ago" | "fuel.dpk";
-type ContainerMode = "purchase" | "rental";
+type ContainerMode = "purchase" | "rental" | "exchange";
 type FulfillmentMode = "station_managed" | "independent_driver" | "skima_managed";
 
 const STATION_PREVIEW_LIMIT = 4;
@@ -180,8 +180,8 @@ export function FuelOrderScreen() {
   const chosenLocationId = selectedLocation ? firstString(selectedLocation, ["id"]) : null;
   const requestedLitres = litresInput.trim() ? Number(litresInput) : null;
   const nominalCapacity = selectedContainerType ? firstNumber(selectedContainerType, ["nominal_capacity_litres"]) : null;
-  const containerCount = requestedLitres !== null && nominalCapacity && requestedLitres > 0
-    ? Math.ceil(requestedLitres / nominalCapacity)
+  const containerCount = requestedLitres !== null && nominalCapacity && requestedLitres > 0 && requestedLitres <= nominalCapacity
+    ? 1
     : 0;
   const minLitres = selectedOffer ? firstNumber(selectedOffer, ["minimum_litres"]) : null;
   const maxLitres = selectedOffer ? firstNumber(selectedOffer, ["maximum_litres"]) : null;
@@ -210,7 +210,7 @@ export function FuelOrderScreen() {
     firstString(record, ["currency_code"]) === currencyCode
   ) ?? null;
   const availableStockLitres = firstNumber(selectedStockAvailability, ["available_litres"]) ?? 0;
-  const containerCost = selectedOffer
+  const containerCost = selectedOffer && containerMode !== "exchange"
     ? firstNumber(selectedOffer, [containerMode === "purchase" ? "container_purchase_amount" : "container_rental_amount"]) ?? 0
     : 0;
   const depositPerContainer = containerMode === "rental" && selectedOffer
@@ -277,6 +277,7 @@ export function FuelOrderScreen() {
     const decimals = litresInput.split(".")[1]?.length ?? 0;
     if (decimals > selectedProductPrecision) return `Enter no more than ${selectedProductPrecision} decimal places.`;
     if (!selectedContainerType || !nominalCapacity) return "Choose a compatible delivery container.";
+    if (requestedLitres > nominalCapacity) return `Your selected ${nominalCapacity} L container can hold no more than ${nominalCapacity} L. Choose a larger container or reduce the fuel quantity.`;
     if (!allowedFulfillmentModes.includes(fulfillmentMode)) {
       return fulfillmentMode === "skima_managed"
         ? "SKIMA Managed is not available until SKIMA has enabled the mode and configured the retail price in your wallet currency."
@@ -285,7 +286,7 @@ export function FuelOrderScreen() {
     if (!chosenLocationId) return "Add or select a saved delivery location before placing the order.";
     if (!walletId) return `An active ${currencyCode} customer wallet is required to pay for this order.`;
     return null;
-  }, [selectedProductRecord, selectedOffer, branchId, requestedLitres, minLitres, maxLitres, litresInput, selectedProductPrecision, selectedContainerType, nominalCapacity, allowedFulfillmentModes, fulfillmentMode, chosenLocationId, walletId, currencyCode, selectedStockAvailability, availableStockLitres]);
+  }, [selectedProductRecord, selectedOffer, branchId, requestedLitres, minLitres, maxLitres, litresInput, selectedProductPrecision, selectedContainerType, nominalCapacity, allowedFulfillmentModes, fulfillmentMode, chosenLocationId, walletId, currencyCode, selectedStockAvailability, availableStockLitres, containerMode]);
 
 
   const quantityValid = Boolean(
@@ -296,7 +297,7 @@ export function FuelOrderScreen() {
     (maxLitres === null || requestedLitres <= maxLitres) &&
     (litresInput.split(".")[1]?.length ?? 0) <= selectedProductPrecision
   );
-  const containerValid = Boolean(selectedContainerType && nominalCapacity);
+  const containerValid = Boolean(selectedContainerType && nominalCapacity && requestedLitres !== null && requestedLitres > 0 && requestedLitres <= nominalCapacity);
   const stepReady = orderStep === 1
     ? Boolean(selectedProductRecord)
     : orderStep === 2
@@ -326,7 +327,9 @@ export function FuelOrderScreen() {
         idempotencyKey: idempotencyKey("fuel-order", `${selectedProductKey}:${branchId}:${requestedLitres}:${containerMode}:${Date.now()}`),
         deliveryLocationId: chosenLocationId,
         deliveryInstructions: instructions.trim() || null,
-        metadata: {},
+        metadata: containerMode === "exchange"
+          ? { customer_container_exchange: true, customer_container_capacity_litres: nominalCapacity }
+          : {},
       });
       const record = asRecord(result);
       const orderId = firstString(record, ["order_id", "orderId"]);
@@ -451,7 +454,7 @@ export function FuelOrderScreen() {
               </View>
             </View>
             <QuoteLine label="Fuel" value={money(firstNumber(createdQuote.componentSnapshot, ["fuel_amount"]), createdQuote.currencyCode)} />
-            <QuoteLine label={containerMode === "purchase" ? "Container purchase" : "Container rental"} value={money(firstNumber(createdQuote.componentSnapshot, ["container_amount"]), createdQuote.currencyCode)} />
+            <QuoteLine label={containerMode === "purchase" ? "Container purchase" : containerMode === "rental" ? "Container rental" : "Container exchange"} value={money(firstNumber(createdQuote.componentSnapshot, ["container_amount"]), createdQuote.currencyCode)} />
             <QuoteLine label="Delivery" value={money(firstNumber(createdQuote.componentSnapshot, ["driver_delivery_fee_amount"]), createdQuote.currencyCode)} />
             <QuoteLine label="SKIMA fuel markup" value={money(firstNumber(createdQuote.componentSnapshot, ["admin_product_fee_amount"]), createdQuote.currencyCode)} />
             <QuoteLine
@@ -483,8 +486,10 @@ export function FuelOrderScreen() {
           </View>
           <Text style={[styles.policyNote, { color: palette.muted }]}>
             {containerMode === "rental"
-              ? "The deposit remains refundable under the rental return and inspection policy. Your container remains SKIMA-owned."
-              : "The purchased container becomes yours after verified delivery."}
+              ? "Your rental container remains SKIMA-owned. After transferring the fuel, return it to the driver; the station inspects it before reuse."
+              : containerMode === "exchange"
+                ? "No container purchase, rental fee or deposit is added. Have your empty container ready: the driver will collect it and give you a filled SKIMA container of the same size. You do not need a previous SKIMA purchase record."
+                : "Your purchased container becomes yours after verified delivery."}
           </Text>
           {localError ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{localError}</Text> : null}
           <AppButton
@@ -606,11 +611,14 @@ export function FuelOrderScreen() {
                   eyebrow="CONTAINER"
                   icon={<Package color={palette.brand} size={20} />}
                   title="Choose your container"
-                  description="Rent a SKIMA-owned container or buy one to keep after verified delivery."
+                  description="Buy or rent a SKIMA container, or exchange your empty container for a filled one."
                 />
                 <View style={styles.modeRow}>
-                  <ModeOption title="Rent" subtitle="Return after transfer" active={containerMode === "rental"} onPress={() => { setContainerMode("rental"); setCreatedQuote(null); }} />
-                  <ModeOption title="Buy" subtitle="Keep the container" active={containerMode === "purchase"} onPress={() => { setContainerMode("purchase"); setCreatedQuote(null); }} />
+                  <ModeOption title="Rent" subtitle="Return after transfer" active={containerMode === "rental"} onPress={() => { setContainerMode("rental"); setCreatedQuote(null); setLocalError(null); }} />
+                  <ModeOption title="Buy" subtitle="Keep the container" active={containerMode === "purchase"} onPress={() => { setContainerMode("purchase"); setCreatedQuote(null); setLocalError(null); }} />
+                </View>
+                <View style={styles.modeRow}>
+                  <ModeOption title="Use my container" subtitle="Swap for a filled one" active={containerMode === "exchange"} onPress={() => { setContainerMode("exchange"); setCreatedQuote(null); setLocalError(null); }} />
                 </View>
                 <View style={styles.optionList}>
                   {compatibleContainerTypes.map((type) => {
@@ -644,12 +652,17 @@ export function FuelOrderScreen() {
                     );
                   })}
                 </View>
+                {requestedLitres !== null && requestedLitres > 0 && nominalCapacity !== null && requestedLitres > nominalCapacity ? (
+                  <Text style={[styles.inlineNotice, { color: palette.warning }]}>
+                    This container holds up to {nominalCapacity} L. Choose a larger size or reduce your order.
+                  </Text>
+                ) : null}
                 {containerCount > 0 ? (
                   <View style={[styles.containerSummary, { backgroundColor: palette.surfaceSubtle }]}>
                     <Gauge color={palette.brand} size={19} />
                     <View style={styles.flex}>
-                      <Text style={[styles.cardTitle, { color: palette.ink }]}>{containerCount} container(s) required</Text>
-                      <Text style={[styles.muted, { color: palette.muted }]}>For your {requestedLitres} L order · {nominalCapacity} L per container</Text>
+                      <Text style={[styles.cardTitle, { color: palette.ink }]}>One {nominalCapacity} L container</Text>
+                      <Text style={[styles.muted, { color: palette.muted }]}>Your order is {requestedLitres} L · within this container's capacity</Text>
                     </View>
                   </View>
                 ) : null}
@@ -657,8 +670,10 @@ export function FuelOrderScreen() {
                   <ShieldCheck color={palette.success} size={18} />
                   <Text style={[styles.muted, { color: palette.muted }]}>
                     {containerMode === "rental"
-                      ? "Your rental container is due back to the driver after you transfer the fuel. It returns to service only after station inspection."
-                      : "Container ownership transfers to you after verified delivery."}
+                      ? "Return the empty SKIMA container to your driver after transferring the fuel. The station checks it before reuse."
+                      : containerMode === "exchange"
+                        ? "Bring your empty container to the hand-off. The driver will collect it and leave a filled SKIMA container of the same size. You do not need to have bought it through SKIMA."
+                        : "The container becomes yours after your delivery is verified."}
                   </Text>
                 </View>
                 <AppField label="Delivery instructions" value={instructions} onChangeText={setInstructions} placeholder="Gate colour, landmark or handover details" multiline optional />
