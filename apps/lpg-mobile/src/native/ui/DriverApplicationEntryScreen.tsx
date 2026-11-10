@@ -1,5 +1,6 @@
 import { CheckCircle2, LocateFixed, MapPin, Star } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SkeletonRows } from "./ScreenSkeleton";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { domainQueries, useApplicationPayload } from "../api/domains";
@@ -464,10 +465,7 @@ function DriverGeographyStep(props: {
         </View>
 
         {loadingAreas ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={palette.brand} />
-            <Text style={[styles.helper, { color: palette.muted }]}>Loading available areas…</Text>
-          </View>
+          <SkeletonRows rows={3} compact />
         ) : areas.length === 0 ? (
           candidateCoverage ? (
             <View style={[styles.locationBox, { borderColor: palette.border, backgroundColor: palette.surface }]}>
