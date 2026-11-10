@@ -50,7 +50,7 @@ Deno.test("LPG customer procurement settlement credits the supplier fund, not sh
   includes(lpgPatch, "wallet.id=cash_wallet_id", "available cash balance is checked");
   includes(lpgPatch, "'role','skima_lpg_cash_paid_to_supplier'", "LPG payment debit is identified as cash paid");
   includes(lpgPatch, "target_payment_method<>'cash'", "new LPG supplier payments must be cash");
-  includes(lpgPatch, "existing_payment", "historical supplier-payment records remain idempotently replayable");
+  includes(lpgSupplierPayments, "existing_payment", "historical supplier-payment records remain idempotently replayable");
   includes(lpgSupplierPayments, "public.record_lpg_internal_supplier_payment", "legacy supplier payment record remains the accounting source");
 });
 
