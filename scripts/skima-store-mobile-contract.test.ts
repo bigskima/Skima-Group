@@ -252,6 +252,8 @@ Deno.test("Store shopping follows separate browse, basket, delivery and review s
   requireText(shop, "Review order", "Fulfilment-to-review progression");
   requireText(shop, "Pay securely", "Final explicit wallet payment step");
   requireText(shop, "AsyncStorage.setItem(cartKey", "Customer basket persists between visits");
+  requireText(shop, 'targetKey="store.shop.basket"', "Basket is reachable from the catalogue header");
+  rejectText(shop, "Your basket · {itemCount}", "Catalogue does not render a duplicate basket panel below product browsing");
   rejectText(shop, "Your Store orders", "Order tracking belongs on the Orders screen, not the browsing home");
 });
 
