@@ -817,7 +817,7 @@ export function FuelOrderScreen() {
             <View style={styles.reviewContent}>
               <Text style={[styles.reviewLine, { color: palette.ink }]}>{selectedProductTitle} · {requestedLitres} L</Text>
               <Text style={[styles.reviewLine, { color: palette.muted }]}>{branchName}{branchAddress ? " · " + branchAddress : ""}</Text>
-              <Text style={[styles.reviewLine, { color: palette.muted }]}>{firstString(selectedContainerType, ["display_name"]) ?? "Container"} · {containerMode === "purchase" ? "Purchase" : "Rental"} · {containerCount} container(s)</Text>
+              <Text style={[styles.reviewLine, { color: palette.muted }]}>{firstString(selectedContainerType, ["display_name"]) ?? "Container"} · {containerMode === "purchase" ? "Buy" : containerMode === "rental" ? "Rent" : "Use my container"} · {containerCount === 1 ? "1 container" : containerCount + " containers"}</Text>
               <Text style={[styles.reviewLine, { color: palette.muted }]}>{fulfillmentMode === "station_managed" ? "Station Managed" : fulfillmentMode === "skima_managed" ? "SKIMA Managed / SKIMA Fleet" : "Independent Managed"}</Text>
               <Text style={[styles.reviewLine, { color: palette.muted }]}>{addressText(selectedLocation) || "Selected delivery location"}</Text>
               <Text style={[styles.reviewHint, { color: palette.muted }]}>No payment is taken at this stage. SKIMA prepares the full price first, and you review it before confirming payment.</Text>
