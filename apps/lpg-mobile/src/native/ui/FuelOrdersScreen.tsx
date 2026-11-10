@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { ArrowRight, Fuel } from "lucide-react-native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useGatewayQuery } from "../api/gateway";
+import { ScreenSkeleton } from "./ScreenSkeleton";
 import { RecordArraySchema, firstNumber, firstString } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -42,10 +43,7 @@ export function FuelOrdersScreen() {
       action={<AppButton label="Order fuel" size="sm" onPress={() => router.push("/(customer)/fuel" as never)} />}
     >
       {orders.isPending ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.muted, { color: palette.muted }]}>Loading your fuel orders…</Text>
-        </View>
+        <ScreenSkeleton variant="list" cards={3} />
       ) : orders.error ? (
         <EmptyState
           title="Fuel orders couldn't be loaded"
