@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, Text, View } from "react-native";
+import { Pressable, RefreshControl, Text, View } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
+import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { useSession } from "../session/SessionProvider";
 import {
   useStoreRecords,
@@ -294,7 +295,7 @@ export function StoreManagementScreen() {
 
       <Card>
         <SectionTitle title="Your Store catalogue" caption={products.length + " SKIMA Store listing(s). Draft products are not shown to customers."} action={<ActionButton small label="New product" onPress={() => openProduct()} />} />
-        {store.items.isPending || store.prices.isPending || store.availability.isPending ? <ActivityIndicator color={palette.brand} /> :
+        {store.items.isPending || store.prices.isPending || store.availability.isPending ? <ScreenSkeleton variant="list" cards={3} /> :
           products.length ? products.map((item) => {
             const id = asString(item, "id") ?? "";
             const itemPrice = (store.prices.data ?? []).find((entry) => asString(entry, "item_id") === id && !asString(entry, "variant_id") && asString(entry, "status") === "active");
