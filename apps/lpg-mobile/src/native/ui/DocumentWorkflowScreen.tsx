@@ -233,7 +233,7 @@ export function DocumentWorkflowScreen({
     const file = result.assets[0];
     const max = firstNumber(requirement, ["max_byte_size", "maxByteSize"]);
     if (max !== null && file.size && file.size > max) {
-      setMessage(`This file exceeds the configured ${formatBytes(max)} limit.`);
+      setMessage(`This file is larger than the ${formatBytes(max)} limit.`);
       return;
     }
     setUploading(key);
