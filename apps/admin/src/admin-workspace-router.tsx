@@ -1,4 +1,5 @@
 import { AdminAccessWorkspace } from "./admin-access-workspace";
+import { AdminAvailabilityControlsWorkspace } from "./admin-availability-controls-workspace";
 import { AdminAiWorkspace } from "./admin-ai-workspace";
 import { AdminApplicationsWorkspace } from "./admin-applications-workspace";
 import { AdminCompanyWorkspace } from "./admin-company-workspace";
@@ -40,6 +41,7 @@ export function AdminWorkspaceRouter(props: {
   }
   if (props.route === "/company") return <AdminCompanyWorkspace />;
   if (props.route === "/access") return <AdminAccessWorkspace />;
+  if (props.route === "/availability-controls") return <AdminAvailabilityControlsWorkspace />;
   if (props.route === "/content") return <AdminContentWorkspace />;
   if (props.route === "/referrals") return <AdminReferralsWorkspace />;
   if (props.route === "/branding") return <AdminStartupBrandingWorkspace />;

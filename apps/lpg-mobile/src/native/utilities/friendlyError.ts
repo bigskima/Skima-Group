@@ -72,7 +72,7 @@ export function friendlyError(
     message.includes("insufficient credits") ||
     (message.includes("credit") && message.includes("top up"))
   )
-    return "Secure verification is temporarily unavailable. Continue the application and use the accepted fallback evidence in the evidence step, or try again later.";
+    return "We couldn’t complete this check online right now. You can upload the requested document below or try again later.";
   if (
     message.includes("session") ||
     message.includes("jwt") ||

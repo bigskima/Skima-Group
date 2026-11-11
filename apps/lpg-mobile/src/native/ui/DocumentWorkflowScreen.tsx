@@ -233,7 +233,7 @@ export function DocumentWorkflowScreen({
     const file = result.assets[0];
     const max = firstNumber(requirement, ["max_byte_size", "maxByteSize"]);
     if (max !== null && file.size && file.size > max) {
-      setMessage(`This file exceeds the configured ${formatBytes(max)} limit.`);
+      setMessage(`This file is larger than the ${formatBytes(max)} limit.`);
       return;
     }
     setUploading(key);
@@ -292,8 +292,8 @@ export function DocumentWorkflowScreen({
       }
       setMessage(
         isCorrectionFlow
-          ? "Updates submitted. Automatic checks will reconcile before any remaining manual review."
-          : "Application submitted. SKIMA will automatically clear verified checks and send only exceptions for manual review.",
+          ? "Your updates have been submitted. SKIMA will review the documents and contact you if anything else is needed."
+          : "Your application has been submitted. SKIMA will review your information and send you an update.",
       );
       const postSubmissionRoute = workspace === "vehicle"
         ? "/(driver)/vehicles"
@@ -312,8 +312,8 @@ export function DocumentWorkflowScreen({
 
   return (
     <Screen
-      eyebrow={isCorrectionFlow ? "Application update" : "Automatic verification"}
-      title={isCorrectionFlow ? "Requested Updates" : "Verification & Evidence"}
+      eyebrow={isCorrectionFlow ? "Application update" : "Document checks"}
+      title={isCorrectionFlow ? "Requested Updates" : "Identity Checks & Documents"}
       action={
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
@@ -352,7 +352,7 @@ export function DocumentWorkflowScreen({
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.heroTitle}>
-                {isCorrectionFlow ? "Verification update required" : "Verification & evidence"}
+                {isCorrectionFlow ? "Application update required" : "Identity checks & documents"}
               </Text>
               <Text style={styles.heroBody}>
                 {isCorrectionFlow
@@ -361,9 +361,9 @@ export function DocumentWorkflowScreen({
                     : "Your requested replacements are ready. Review them and resubmit when complete."
                   : verificationChecks.length
                     ? assistedVerificationChecks.length > 0
-                      ? `${automaticVerificationChecks.length} automatic check${automaticVerificationChecks.length === 1 ? "" : "s"} · ${assistedVerificationChecks.length} assisted business review${assistedVerificationChecks.length === 1 ? "" : "s"} · plus required regulatory evidence.`
-                      : `${automaticVerificationChecks.length} automatic check${automaticVerificationChecks.length === 1 ? "" : "s"} plus only the fallback or regulatory evidence that still applies.`
-                    : `${visibleConfigured.length} evidence requirement${visibleConfigured.length === 1 ? "" : "s"} for this application.`}
+                      ? `${automaticVerificationChecks.length} online check${automaticVerificationChecks.length === 1 ? "" : "s"} · ${assistedVerificationChecks.length} business document review${assistedVerificationChecks.length === 1 ? "" : "s"} · plus required certificates.`
+                      : `${automaticVerificationChecks.length} online check${automaticVerificationChecks.length === 1 ? "" : "s"} plus the documents that still apply.`
+                    : `${visibleConfigured.length} document requirement${visibleConfigured.length === 1 ? "" : "s"} for this application.`}
               </Text>
             </View>
           </View>
@@ -376,12 +376,12 @@ export function DocumentWorkflowScreen({
               title={check.displayName}
               description={
                 check.status === "passed"
-                  ? "This requirement is already satisfied automatically."
+                  ? "This check is complete."
                   : check.routeMode === "assisted_kyb" && !check.automaticAvailable
-                    ? "Business KYB is assisted for launch. Upload the CAC or business-registration evidence shown below; SKIMA will review it. The automatic route remains configured for future activation."
+                    ? "SKIMA will review your business registration details. Upload the requested document below."
                     : check.manualFallbackAllowed
-                      ? "Use automatic verification first. A fallback upload is shown only when the automatic route is unavailable or unsuccessful."
-                      : "This check must be completed through the configured secure verification provider."
+                      ? "Complete the online check first. If it cannot be completed, you can upload the requested document instead."
+                      : "Complete this check using the secure online page, then return to SKIMA."
               }
               check={check}
             />
@@ -476,7 +476,7 @@ export function DocumentWorkflowScreen({
 
           {visibleConfigured.length === 0 && verificationChecks.length === 0 ? (
             <Text style={styles.body}>
-              No verification or evidence requirements apply to this application.
+              There are no additional documents to provide for this application.
             </Text>
           ) : null}
 
@@ -488,7 +488,7 @@ export function DocumentWorkflowScreen({
                     {canSubmitApplication
                       ? isCorrectionFlow
                         ? "Ready to resubmit"
-                        : "Ready for admin review"
+                        : "Ready for SKIMA review"
                       : outstandingRequested.length > 0
                         ? "Complete requested updates"
                         : "Complete required documents"}
@@ -501,8 +501,8 @@ export function DocumentWorkflowScreen({
                       : outstandingRequested.length > 0
                         ? `${outstandingRequested.length} reviewer-requested item${outstandingRequested.length === 1 ? "" : "s"} still need to be replaced.`
                         : pendingAutomaticChecks.length > 0
-                          ? `${pendingAutomaticChecks.length} automatic verification check${pendingAutomaticChecks.length === 1 ? "" : "s"} still need to finish.`
-                          : `${missingConfigured.length} fallback or regulatory item${missingConfigured.length === 1 ? "" : "s"} still needed before submission.`}
+                          ? `${pendingAutomaticChecks.length} online check${pendingAutomaticChecks.length === 1 ? "" : "s"} still need to finish.`
+                          : `${missingConfigured.length} required document${missingConfigured.length === 1 ? "" : "s"} still needed before submission.`}
                   </Text>
                 </View>
                 {canSubmitApplication ? <FileCheck2 color={colors.success} /> : null}

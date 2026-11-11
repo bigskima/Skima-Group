@@ -4,6 +4,7 @@ import { SkeletonRows } from "./ScreenSkeleton";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { domainQueries, useApplicationPayload } from "../api/domains";
+import { PlatformApplicationAccessGate } from "@skima/mobile-experience/PlatformApplicationAccessGate";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -56,7 +57,13 @@ const EDITABLE_APPLICATION_STATUSES = new Set([
 ]);
 
 export function DriverApplicationEntryScreen() {
+  return <DriverApplicationEntryContent />;
+}
+
+function DriverApplicationEntryContent() {
   const { palette } = useAppTheme();
+  const accessSession = useSession();
+  const accessMaps = useMapsGatewayAdapter();
   const applications = domainQueries.applications();
   const types = domainQueries.applicationTypes();
 
@@ -85,6 +92,8 @@ export function DriverApplicationEntryScreen() {
   const currentId = current ? recordId(current) : null;
   const applicationStatus = firstString(current, ["status"]) ?? "draft";
   const canEditGeography = !currentId || EDITABLE_APPLICATION_STATUSES.has(applicationStatus);
+  const requiresNewSubmissionGate =
+    !currentId || ["draft", "incomplete"].includes(applicationStatus);
   const payloadQuery = useApplicationPayload(currentId);
   const latestVersion = payloadQuery.data?.[0] ?? null;
   const latestPayload = nestedRecord(latestVersion, "payload") ?? latestVersion;
@@ -139,7 +148,18 @@ export function DriverApplicationEntryScreen() {
           ) : null}
         </View>
         <View style={styles.applicationBody}>
-          <ApplicationOverviewScreen workspace="driver" />
+          {requiresNewSubmissionGate ? (
+            <PlatformApplicationAccessGate
+              applicationKey="driver"
+              supabase={accessSession.supabase}
+              palette={palette}
+              resolveLocation={async () => accessMaps.resolveOperationalLocation(await readOperationalLocation())}
+            >
+              <ApplicationOverviewScreen workspace="driver" />
+            </PlatformApplicationAccessGate>
+          ) : (
+            <ApplicationOverviewScreen workspace="driver" />
+          )}
         </View>
       </View>
     );
@@ -164,7 +184,7 @@ export function DriverApplicationEntryScreen() {
     );
   }
 
-  return (
+  const geographyStep = (
     <DriverGeographyStep
       applicationId={currentId}
       applicationTypeKey={firstString(driverType, ["key"]) ?? "application.lpg.driver.phase-one"}
@@ -183,6 +203,19 @@ export function DriverApplicationEntryScreen() {
       }}
       onCancel={geographyComplete ? () => setEditing(false) : undefined}
     />
+  );
+
+  if (!requiresNewSubmissionGate) return geographyStep;
+
+  return (
+    <PlatformApplicationAccessGate
+      applicationKey="driver"
+      supabase={accessSession.supabase}
+      palette={palette}
+      resolveLocation={async () => accessMaps.resolveOperationalLocation(await readOperationalLocation())}
+    >
+      {geographyStep}
+    </PlatformApplicationAccessGate>
   );
 }
 

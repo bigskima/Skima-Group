@@ -30,6 +30,7 @@ export const foundationNavigation: readonly NavigationItem[] = [
   { key: "social-links", label: "Social Media", href: "/experience/social-links", icon: "social", requiredPermissions: ["platform.social.manage"] },
   { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies", requiredPermissions: ["platform.policy.read"] },
   { key: "branding", label: "App Branding", href: "/branding", icon: "branding", requiredPermissions: ["platform.configuration.read"] },
+  { key: "availability-controls", label: "Application Access & Maintenance", href: "/availability-controls", icon: "operations", requiredPermissions: ["platform.configuration.manage"] },
   { key: "catalog", label: "Services", href: "/catalog", icon: "catalog", requiredPermissions: ["platform.configuration.read"] },
   { key: "refill", label: "Refill", href: "/refill", icon: "refill" },
   { key: "bills", label: "Bills", href: "/bills", icon: "bills" },

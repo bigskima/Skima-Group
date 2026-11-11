@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { PlatformApplicationAccessGate } from "@skima/mobile-experience/PlatformApplicationAccessGate";
 import {
   ArrowLeft,
   ArrowRight,
@@ -46,6 +47,12 @@ import { PhotoCaptureCard } from "../application/PhotoCaptureCard";
 import { RequirementCard } from "../application/RequirementCard";
 import { requirementAppliesToPayload } from "../application/requirementApplicability";
 import {
+  documentSubmissionIsReady,
+  driverDocumentStepIndex,
+  latestDocumentSubmissionForRequirement,
+  stationDocumentStepIndex,
+} from "../application/documentSubmissions";
+import {
   readOperationalLocation,
   type OperationalLocation,
 } from "../device/location";
@@ -67,11 +74,6 @@ const STATION_ROLES = [
   { key: "employee", label: "Authorized Employee" },
   { key: "representative", label: "Legal Representative" },
 ];
-
-const DRIVER_DOCUMENT_KEYS = [
-  "driver.licence",
-  "driver.identity",
-] as const;
 
 const STATION_DOCUMENT_KEYS = [
   "station.business-registration",
@@ -135,6 +137,14 @@ function timestampOf(record: Record<string, unknown>) {
 }
 
 export function ApplicationOverviewScreen({
+  workspace,
+}: {
+  workspace: "driver" | "station";
+}) {
+  return <ApplicationOverviewContent workspace={workspace} />;
+}
+
+function ApplicationOverviewContent({
   workspace,
 }: {
   workspace: "driver" | "station";
@@ -215,6 +225,8 @@ export function ApplicationOverviewScreen({
   const status = current ? (displayStatus(current) ?? "draft") : "draft";
   const operationalStatus = firstString(current, ["operational_status", "operationalStatus"]);
   const currentId = current ? recordId(current) : null;
+  const requiresNewSubmissionGate =
+    !currentId || ["draft", "incomplete"].includes(status);
   const payloadVersions = useApplicationPayload(currentId);
   const verification = useApplicationVerification(currentId);
   const reconcileVerification = useReconcileApplicationVerification();
@@ -559,17 +571,14 @@ export function ApplicationOverviewScreen({
   };
 
   const getSubForReq = (reqKey: string) => {
-    return appSubmissions.find((submission) => {
-      const submissionKey = firstString(submission, ["requirement_key", "requirementKey"]);
-      const submissionRequirementId = firstString(submission, ["requirement_id", "requirementId"]);
-      const targetRequirement = appRequirements.find(
-        (requirement) => firstString(requirement, ["key"]) === reqKey,
-      );
-      return (
-        submissionKey === reqKey ||
-        Boolean(targetRequirement && submissionRequirementId === recordId(targetRequirement))
-      );
-    });
+    const targetRequirement = appRequirements.find(
+      (requirement) => firstString(requirement, ["key"]) === reqKey,
+    );
+    return latestDocumentSubmissionForRequirement(
+      appSubmissions,
+      reqKey,
+      targetRequirement,
+    );
   };
 
   const driverTotalSteps = 4;
@@ -581,10 +590,92 @@ export function ApplicationOverviewScreen({
   const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verificationChecks);
   const verificationCheck = (key: string) =>
     verificationChecks.find((item) => item.verificationKey === key) ?? null;
-  const showFallbackDocument = (documentKey: string) =>
-    shouldShowVerificationFallback(
+  const showFallbackDocument = (documentKey: string) => {
+    if (verifiedDocumentKeys.has(documentKey)) return false;
+    // Keep a previously uploaded fallback visible even while the online check
+    // is available, so applicants can see or replace the file they already sent.
+    if (getSubForReq(documentKey)) return true;
+    return shouldShowVerificationFallback(
       verificationForDocumentKey(verificationChecks, documentKey),
     );
+  };
+
+  const renderDriverDocumentRequirement = (reqKey: string) => {
+    const requirement = appRequirements.find(
+      (item) => firstString(item, ["key"]) === reqKey,
+    );
+    const submission = getSubForReq(reqKey);
+
+    return (
+      <RequirementCard
+        key={reqKey}
+        requirementKey={reqKey}
+        title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
+        description={
+          firstString(requirement, ["description"]) ?? "Upload a clear, valid document."
+        }
+        isRequired={requirement?.is_required !== false}
+        allowedContentTypes={
+          Array.isArray(requirement?.allowed_content_types)
+            ? (requirement.allowed_content_types as string[])
+            : undefined
+        }
+        uploadedDocument={
+          submission
+            ? {
+                id: recordId(submission) ?? "",
+                status: firstString(submission, ["status"]) ?? "submitted",
+                replacementRequested: Boolean(submission.replacement_requested),
+                replacementReason: firstString(submission, [
+                  "replacement_reason",
+                  "decision_reason",
+                ]),
+              }
+            : null
+        }
+        onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
+      />
+    );
+  };
+
+  const renderStationDocumentRequirement = (reqKey: string) => {
+    const requirement = appRequirements.find(
+      (item) => firstString(item, ["key"]) === reqKey,
+    );
+    if (!requirement || !requirementAppliesToPayload(requirement, currentPayload)) return null;
+    const submission = getSubForReq(reqKey);
+
+    return (
+      <RequirementCard
+        key={reqKey}
+        requirementKey={reqKey}
+        title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
+        description={
+          firstString(requirement, ["description"]) ?? "Upload a clear, valid document."
+        }
+        isRequired={requirement.is_required !== false}
+        allowedContentTypes={
+          Array.isArray(requirement.allowed_content_types)
+            ? (requirement.allowed_content_types as string[])
+            : undefined
+        }
+        uploadedDocument={
+          submission
+            ? {
+                id: recordId(submission) ?? "",
+                status: firstString(submission, ["status"]) ?? "submitted",
+                replacementRequested: Boolean(submission.replacement_requested),
+                replacementReason: firstString(submission, [
+                  "replacement_reason",
+                  "decision_reason",
+                ]),
+              }
+            : null
+        }
+        onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
+      />
+    );
+  };
 
   const applicableRequirements = appRequirements.filter((requirement) =>
     requirementAppliesToPayload(requirement, currentPayload),
@@ -595,8 +686,7 @@ export function ApplicationOverviewScreen({
     const key = firstString(requirement, ["key"]) ?? "";
     if (verifiedDocumentKeys.has(key)) return false;
     const submission = getSubForReq(key);
-    const submissionStatus = firstString(submission, ["status"]);
-    return !submission || submissionStatus === "rejected";
+    return !documentSubmissionIsReady(submission);
   });
 
   const requiredApplicableCount = applicableRequirements.filter(
@@ -619,10 +709,44 @@ export function ApplicationOverviewScreen({
       ].includes(status),
   );
 
-  if (applications.isPending || types.isPending || requirements.isPending) {
+  if (
+    applications.isPending ||
+    types.isPending ||
+    requirements.isPending ||
+    documents.isPending ||
+    documents.isFetching ||
+    (Boolean(currentId) && (verification.isPending || verification.isFetching))
+  ) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
         <ScreenSkeleton variant="form" cards={2} />
+      </Screen>
+    );
+  }
+
+  if (
+    (documents.isError && !documents.data) ||
+    (Boolean(currentId) && verification.isError && !verification.data)
+  ) {
+    return (
+      <Screen eyebrow={`${workspace} application`} title="Application">
+        <Card>
+          <Text style={[styles.sectionHeader, { color: palette.ink }]}>
+            We couldn’t confirm your documents and checks
+          </Text>
+          <Text style={[styles.helperText, { color: palette.muted }]}>
+            Your application and uploads remain saved. Refresh their status before submitting.
+          </Text>
+          <Pressable
+            onPress={() => {
+              void documents.refetch();
+              if (currentId) void verification.refetch();
+            }}
+            style={[styles.nextBtn, { backgroundColor: palette.brand }]}
+          >
+            <Text style={styles.nextBtnText}>Refresh status</Text>
+          </Pressable>
+        </Card>
       </Screen>
     );
   }
@@ -669,24 +793,18 @@ export function ApplicationOverviewScreen({
       isRequired: requirement.is_required !== false,
       isUploaded:
         verifiedDocumentKeys.has(key) ||
-        Boolean(submission && firstString(submission, ["status"]) !== "rejected"),
+        documentSubmissionIsReady(submission),
       status: verifiedDocumentKeys.has(key)
         ? "verified_automatically"
         : firstString(submission, ["status"]) ?? "pending",
       stepIndex:
         workspace === "driver"
-          ? key === "driver.profile-photo"
-            ? 2
-            : 3
-          : key.startsWith("station.photo.")
-            ? 4
-            : key === "station.representative-photo"
-              ? 1
-              : 3,
+          ? driverDocumentStepIndex(key)
+          : stationDocumentStepIndex(key),
     };
   });
 
-  return (
+  const applicationForm = (
     <Screen
       eyebrow={`${workspace} onboarding`}
       title={workspace === "driver" ? "Driver Application" : "Station Application"}
@@ -797,10 +915,13 @@ export function ApplicationOverviewScreen({
                 applicationId={currentId}
                 ensureApplicationId={ensureApplicationId}
                 verificationKey="verification.person.identity"
-                title="Identity & liveness"
-                description="Complete one secure identity check. When it passes, SKIMA will not ask for a duplicate government-ID upload."
+                title="Identity check"
+                description="Confirm your identity securely. If the online check cannot be completed, you can upload your identity document below."
                 check={verificationCheck("verification.person.identity")}
               />
+              {showFallbackDocument("driver.identity")
+                ? renderDriverDocumentRequirement("driver.identity")
+                : null}
               {(() => {
                 const submission = getSubForReq("driver.profile-photo");
                 const mediaUrl = firstString(submission, ["storage_path", "mediaUrl"]);
@@ -824,45 +945,12 @@ export function ApplicationOverviewScreen({
                 ensureApplicationId={ensureApplicationId}
                 verificationKey="verification.driver.licence"
                 title="Driver licence"
-                description="SKIMA will use the configured verification provider when available. A document upload appears only when fallback evidence is needed."
+                description="We’ll check your driver licence online. If the check cannot be completed, you can upload a clear copy below instead."
                 check={verificationCheck("verification.driver.licence")}
               />
-              {DRIVER_DOCUMENT_KEYS.filter((reqKey) => showFallbackDocument(reqKey)).map((reqKey) => {
-                const requirement = appRequirements.find(
-                  (item) => firstString(item, ["key"]) === reqKey,
-                );
-                const submission = getSubForReq(reqKey);
-                return (
-                  <RequirementCard
-                    key={reqKey}
-                    requirementKey={reqKey}
-                    title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
-                    description={
-                      firstString(requirement, ["description"]) ?? "Upload a clear, valid document."
-                    }
-                    isRequired={requirement?.is_required !== false}
-                    allowedContentTypes={
-                      Array.isArray(requirement?.allowed_content_types)
-                        ? (requirement.allowed_content_types as string[])
-                        : undefined
-                    }
-                    uploadedDocument={
-                      submission
-                        ? {
-                            id: recordId(submission) ?? "",
-                            status: firstString(submission, ["status"]) ?? "submitted",
-                            replacementRequested: Boolean(submission.replacement_requested),
-                            replacementReason: firstString(submission, [
-                              "replacement_reason",
-                              "decision_reason",
-                            ]),
-                          }
-                        : null
-                    }
-                    onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
-                  />
-                );
-              })}
+              {showFallbackDocument("driver.licence")
+                ? renderDriverDocumentRequirement("driver.licence")
+                : null}
             </View>
           ) : null}
 
@@ -897,17 +985,21 @@ export function ApplicationOverviewScreen({
                   ensureApplicationId={ensureApplicationId}
                   verificationKey="verification.person.identity"
                   title="Verify the representative"
-                  description="Use one secure identity and liveness check for the manager, employee or authorized representative registering this station. This does not verify company owners or beneficial owners."
+                  description="Complete a secure identity check for the person registering the station. This check does not replace the business documents or proof of authority required for the application."
                   check={verificationCheck("verification.person.identity")}
                 />
               ) : (
                 <Card>
                   <Text style={[styles.sectionHeader, { color: palette.ink }]}>Owner applicant</Text>
                   <Text style={[styles.helperText, { color: palette.muted }]}>
-                    Automatic KYC is used for station representatives at launch. If the station owner is applying directly, owner identity remains part of the evidence reviewed by SKIMA.
+                    As the station owner, upload a clear government-issued identity document. SKIMA will review it with your application.
                   </Text>
                 </Card>
               )}
+              {renderStationDocumentRequirement("station.owner-identity")}
+              {stationRole !== "owner" && showFallbackDocument("station.representative-identity")
+                ? renderStationDocumentRequirement("station.representative-identity")
+                : null}
               <Card>
               <Text style={[styles.sectionHeader, { color: palette.ink }]}>Representative Details</Text>
 
@@ -954,11 +1046,11 @@ export function ApplicationOverviewScreen({
                 </View>
                 {stationRole !== "owner" ? (
                   <Text style={[styles.helperText, { color: palette.muted }]}>
-                    SKIMA verifies the registering representative's identity automatically. If authority cannot be confirmed, only proof that you are authorized to register this station will be requested.
+                    SKIMA checks the identity of the person registering the station. You may also need to provide proof that you are authorized to act for the business.
                   </Text>
                 ) : (
                   <Text style={[styles.helperText, { color: palette.muted }]}>
-                    Owner applicants continue with manual owner-identity evidence. SKIMA does not automatically verify company owners or beneficial owners in the launch flow.
+                    As the owner, provide your government-issued ID in the document section above. Business owners are reviewed separately from the station's registration documents.
                   </Text>
                 )}
               </View>
@@ -992,11 +1084,14 @@ export function ApplicationOverviewScreen({
                 }
                 description={
                   verificationCheck("verification.business.registry")?.automaticAvailable
-                    ? "Automatic KYB is enabled. When it passes, CAC/business-registration uploads are no longer duplicated."
-                    : "For launch, upload CAC or business-registration evidence in the evidence step and SKIMA will review it. The automatic KYB route is retained for future activation."
+                    ? "We’ll check the business registration details online. SKIMA may ask you for supporting documents if more information is needed."
+                    : "Upload CAC or other business-registration evidence below. SKIMA will review the documents you provide."
                 }
                 check={verificationCheck("verification.business.registry")}
               />
+              {showFallbackDocument("station.business-registration")
+                ? renderStationDocumentRequirement("station.business-registration")
+                : null}
               <Card>
               <Text style={[styles.sectionHeader, { color: palette.ink }]}>Business & Station Details</Text>
 
@@ -1117,52 +1212,21 @@ export function ApplicationOverviewScreen({
                   ensureApplicationId={ensureApplicationId}
                   verificationKey="verification.station.authority"
                   title="Representative authority"
-                  description="Owners do not need an authorization letter. Managers or representatives use automatic authority verification when configured, otherwise only the authority evidence below is required."
+                  description="Owners can skip this step. Managers and representatives should provide evidence that they are authorized to register this station."
                   check={verificationCheck("verification.station.authority")}
                 />
               ) : null}
               {STATION_DOCUMENT_KEYS.filter((reqKey) =>
+                ![
+                  "station.business-registration",
+                  "station.owner-identity",
+                  "station.representative-identity",
+                ].includes(reqKey) &&
                 showFallbackDocument(reqKey) &&
-
                 applicableRequirements.some(
                   (requirement) => firstString(requirement, ["key"]) === reqKey,
                 ),
-              ).map((reqKey) => {
-                const requirement = appRequirements.find(
-                  (item) => firstString(item, ["key"]) === reqKey,
-                );
-                const submission = getSubForReq(reqKey);
-                return (
-                  <RequirementCard
-                    key={reqKey}
-                    requirementKey={reqKey}
-                    title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
-                    description={
-                      firstString(requirement, ["description"]) ?? "Upload the required official document."
-                    }
-                    isRequired={requirement?.is_required !== false}
-                    allowedContentTypes={
-                      Array.isArray(requirement?.allowed_content_types)
-                        ? (requirement.allowed_content_types as string[])
-                        : undefined
-                    }
-                    uploadedDocument={
-                      submission
-                        ? {
-                            id: recordId(submission) ?? "",
-                            status: firstString(submission, ["status"]) ?? "submitted",
-                            replacementRequested: Boolean(submission.replacement_requested),
-                            replacementReason: firstString(submission, [
-                              "replacement_reason",
-                              "decision_reason",
-                            ]),
-                          }
-                        : null
-                    }
-                    onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
-                  />
-                );
-              })}
+              ).map((reqKey) => renderStationDocumentRequirement(reqKey))}
             </View>
           ) : null}
 
@@ -1258,6 +1322,20 @@ export function ApplicationOverviewScreen({
       </View>
     </Screen>
   );
+
+  if (workspace === "station" && requiresNewSubmissionGate) {
+    return (
+      <PlatformApplicationAccessGate
+        applicationKey="station"
+        supabase={session.supabase}
+        palette={palette}
+        resolveLocation={async () => maps.resolveOperationalLocation(await readOperationalLocation())}
+      >
+        {applicationForm}
+      </PlatformApplicationAccessGate>
+    );
+  }
+  return applicationForm;
 }
 
 const styles = StyleSheet.create({
