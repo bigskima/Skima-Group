@@ -738,6 +738,132 @@ revoke all on function public.read_customer_service_maintenance(text[], double p
 grant execute on function public.read_customer_service_maintenance(text[], double precision, double precision, uuid[], text[], text)
   to anon, authenticated;
 
+create or replace function public.guard_application_submission_platform_access()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  application_type_key text;
+  application_workspace text;
+  application_payload jsonb;
+  location_payload jsonb;
+  station_payload jsonb;
+  address_payload jsonb;
+  target_application_key text;
+  target_latitude double precision;
+  target_longitude double precision;
+  target_country_code text;
+  target_names text[];
+  access_result jsonb;
+begin
+  if coalesce(auth.role(), '') = 'service_role' then
+    return new;
+  end if;
+
+  if new.status <> 'submitted'
+     or coalesce(old.status, '') in ('submitted', 'under_review', 'approved', 'rejected') then
+    return new;
+  end if;
+
+  select
+    application_type.key,
+    application_type.metadata ->> 'workspace'
+  into application_type_key, application_workspace
+  from public.application_type_definitions application_type
+  where application_type.id = new.application_type_id;
+
+  if coalesce(application_type_workspace, '') not in ('driver', 'station')
+     or application_type_key not in ('application.lpg.driver.phase-one', 'application.lpg.station.phase-one') then
+    return new;
+  end if;
+
+  target_application_key := application_type_workspace;
+
+  select coalesce(version.payload, '{}'::jsonb)
+  into application_payload
+  from public.application_versions version
+  where version.application_id = new.id
+    and version.version = new.active_version;
+
+  application_payload := coalesce(application_payload, '{}'::jsonb);
+  location_payload := coalesce(application_payload -> 'location', '{}'::jsonb);
+  station_payload := coalesce(application_payload -> 'station', '{}'::jsonb);
+  address_payload := coalesce(location_payload -> 'address', '{}'::jsonb);
+
+  target_latitude := coalesce(
+    nullif(location_payload ->> 'latitude', '')::double precision,
+    nullif(station_payload ->> 'latitude', '')::double precision
+  );
+  target_longitude := coalesce(
+    nullif(location_payload ->> 'longitude', '')::double precision,
+    nullif(station_payload ->> 'longitude', '')::double precision
+  );
+
+  if (target_latitude is null) <> (target_longitude is null) then
+    raise exception using errcode = '55000',
+      message = 'Confirm the operating location before submitting this application.';
+  end if;
+
+  target_country_code := upper(coalesce(
+    nullif(address_payload ->> 'countryCode', ''),
+    nullif(address_payload ->> 'country_code', ''),
+    nullif(location_payload ->> 'countryCode', ''),
+    nullif(station_payload ->> 'countryCode', '')
+  ));
+
+  if target_country_code is not null and length(target_country_code) <> 2 then
+    target_country_code := null;
+  end if;
+
+  target_names := array_remove(array[
+    nullif(address_payload ->> 'country', ''),
+    nullif(address_payload ->> 'region', ''),
+    nullif(address_payload ->> 'state', ''),
+    nullif(address_payload ->> 'city', ''),
+    nullif(address_payload ->> 'district', ''),
+    nullif(address_payload ->> 'town', ''),
+    nullif(address_payload ->> 'locality', ''),
+    nullif(location_payload ->> 'formattedAddress', ''),
+    nullif(station_payload ->> 'formattedAddress', '')
+  ], null);
+
+  access_result := public.read_customer_application_access(
+    target_application_key,
+    target_latitude,
+    target_longitude,
+    array[]::uuid[],
+    target_names,
+    target_country_code
+  );
+
+  if coalesce((access_result ->> 'requiresLocation')::boolean, false) then
+    raise exception using errcode = '55000',
+      message = 'Confirm your operating location so SKIMA can check application availability in your area.';
+  end if;
+
+  if coalesce((access_result ->> 'blocked')::boolean, false) then
+    raise exception using errcode = '55000',
+      message = coalesce(access_result ->> 'message', 'New applications are not available in this area right now.');
+  end if;
+
+  return new;
+end;
+$function$;
+
+revoke all on function public.guard_application_submission_platform_access() from public, anon, authenticated;
+
+drop trigger if exists application_submission_platform_access_guard
+  on public.application_records;
+create trigger application_submission_platform_access_guard
+before update of status on public.application_records
+for each row
+execute function public.guard_application_submission_platform_access();
+
+comment on function public.guard_application_submission_platform_access() is
+  'Blocks driver and station application submission where an active geographic or global application access override disallows it.';
+
 comment on table public.platform_application_access_rules is
   'Admin-governed driver/station application access rules. Geographic rules inherit through the shared geography parent hierarchy; a more specific allow or block overrides broader rules.';
 
