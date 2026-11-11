@@ -169,6 +169,7 @@
     "20261109153000_skima_whatsapp_four_app_ordering.sql",
     "20261110080000_fuel_customer_container_exchange.sql",
     "20261110193000_skima_managed_supplier_funds_cash_cycle.sql",
-    "20261110164500_logistics_company_earnings_transfer_to_owner_wallet.sql"
+    "20261110164500_logistics_company_earnings_transfer_to_owner_wallet.sql",
+    "20261111140000_platform_application_access_and_maintenance_controls.sql"
   ]
 }
