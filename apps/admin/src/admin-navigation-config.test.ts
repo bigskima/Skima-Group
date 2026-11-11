@@ -67,3 +67,11 @@ describe("admin navigation access rules", () => {
     expect(canAccessAdminNavigationKey("unknown", () => true)).toBe(false);
   });
 });
+
+
+describe("application availability administration navigation", () => {
+  it("limits application access and maintenance controls to configuration managers", () => {
+    expect(canAccessAdminNavigationKey("availability-controls", (permission) => permission === "platform.configuration.manage")).toBe(true);
+    expect(canAccessAdminNavigationKey("availability-controls", () => false)).toBe(false);
+  });
+});
