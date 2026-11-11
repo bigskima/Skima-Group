@@ -193,7 +193,6 @@ export function AutomatedVerificationCard({
       </View>
 
 
-
       {passed ? (
         <View style={[styles.successBox, { backgroundColor: palette.successSoft }]}>
           <CheckCircle2 color={palette.success} size={17} />
@@ -298,7 +297,11 @@ export function AutomatedVerificationCard({
       )}
 
       {check?.failureMessage ? (
-        <Text style={[styles.message, { color: palette.danger }]}>{check.failureMessage}</Text>
+        <Text style={[styles.message, { color: palette.danger }]}>
+          {canFallback
+            ? "We couldn’t complete this check online. You can upload the requested document below or try again later."
+            : "We couldn’t complete this check. Please try again later."}
+        </Text>
       ) : message ? (
         <Text style={[styles.message, { color: palette.mutedStrong }]}>{message}</Text>
       ) : null}
