@@ -178,6 +178,8 @@ export function PlatformMaintenanceNotices({
       setLocation({
         latitude: point.latitude,
         longitude: point.longitude,
+        geographyNames: point.geographyNames,
+        countryCode: point.countryCode,
       });
     } catch {
       setLocationError("Allow location access to check whether this service has a local notice.");
