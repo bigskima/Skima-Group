@@ -47,6 +47,7 @@ import { RequirementCard } from "../application/RequirementCard";
 import { requirementAppliesToPayload } from "../application/requirementApplicability";
 import {
   documentSubmissionIsReady,
+  driverDocumentStepIndex,
   latestDocumentSubmissionForRequirement,
 } from "../application/documentSubmissions";
 import {
@@ -582,10 +583,53 @@ export function ApplicationOverviewScreen({
   const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verificationChecks);
   const verificationCheck = (key: string) =>
     verificationChecks.find((item) => item.verificationKey === key) ?? null;
-  const showFallbackDocument = (documentKey: string) =>
-    shouldShowVerificationFallback(
+  const showFallbackDocument = (documentKey: string) => {
+    if (verifiedDocumentKeys.has(documentKey)) return false;
+    // Keep a previously uploaded fallback visible even while the online check
+    // is available, so applicants can see or replace the file they already sent.
+    if (getSubForReq(documentKey)) return true;
+    return shouldShowVerificationFallback(
       verificationForDocumentKey(verificationChecks, documentKey),
     );
+  };
+
+  const renderDriverDocumentRequirement = (reqKey: string) => {
+    const requirement = appRequirements.find(
+      (item) => firstString(item, ["key"]) === reqKey,
+    );
+    const submission = getSubForReq(reqKey);
+
+    return (
+      <RequirementCard
+        key={reqKey}
+        requirementKey={reqKey}
+        title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
+        description={
+          firstString(requirement, ["description"]) ?? "Upload a clear, valid document."
+        }
+        isRequired={requirement?.is_required !== false}
+        allowedContentTypes={
+          Array.isArray(requirement?.allowed_content_types)
+            ? (requirement.allowed_content_types as string[])
+            : undefined
+        }
+        uploadedDocument={
+          submission
+            ? {
+                id: recordId(submission) ?? "",
+                status: firstString(submission, ["status"]) ?? "submitted",
+                replacementRequested: Boolean(submission.replacement_requested),
+                replacementReason: firstString(submission, [
+                  "replacement_reason",
+                  "decision_reason",
+                ]),
+              }
+            : null
+        }
+        onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
+      />
+    );
+  };
 
   const applicableRequirements = appRequirements.filter((requirement) =>
     requirementAppliesToPayload(requirement, currentPayload),
@@ -701,9 +745,7 @@ export function ApplicationOverviewScreen({
         : firstString(submission, ["status"]) ?? "pending",
       stepIndex:
         workspace === "driver"
-          ? key === "driver.profile-photo"
-            ? 2
-            : 3
+          ? driverDocumentStepIndex(key)
           : key.startsWith("station.photo.")
             ? 4
             : key === "station.representative-photo"
@@ -823,10 +865,13 @@ export function ApplicationOverviewScreen({
                 applicationId={currentId}
                 ensureApplicationId={ensureApplicationId}
                 verificationKey="verification.person.identity"
-                title="Identity & liveness"
-                description="Complete one secure identity check. When it passes, SKIMA will not ask for a duplicate government-ID upload."
+                title="Identity check"
+                description="Confirm your identity securely. If the online check cannot be completed, you can upload your identity document below."
                 check={verificationCheck("verification.person.identity")}
               />
+              {showFallbackDocument("driver.identity")
+                ? renderDriverDocumentRequirement("driver.identity")
+                : null}
               {(() => {
                 const submission = getSubForReq("driver.profile-photo");
                 const mediaUrl = firstString(submission, ["storage_path", "mediaUrl"]);
@@ -853,42 +898,9 @@ export function ApplicationOverviewScreen({
                 description="We’ll check your driver licence online. If the check cannot be completed, you can upload a clear copy below instead."
                 check={verificationCheck("verification.driver.licence")}
               />
-              {DRIVER_DOCUMENT_KEYS.filter((reqKey) => showFallbackDocument(reqKey)).map((reqKey) => {
-                const requirement = appRequirements.find(
-                  (item) => firstString(item, ["key"]) === reqKey,
-                );
-                const submission = getSubForReq(reqKey);
-                return (
-                  <RequirementCard
-                    key={reqKey}
-                    requirementKey={reqKey}
-                    title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
-                    description={
-                      firstString(requirement, ["description"]) ?? "Upload a clear, valid document."
-                    }
-                    isRequired={requirement?.is_required !== false}
-                    allowedContentTypes={
-                      Array.isArray(requirement?.allowed_content_types)
-                        ? (requirement.allowed_content_types as string[])
-                        : undefined
-                    }
-                    uploadedDocument={
-                      submission
-                        ? {
-                            id: recordId(submission) ?? "",
-                            status: firstString(submission, ["status"]) ?? "submitted",
-                            replacementRequested: Boolean(submission.replacement_requested),
-                            replacementReason: firstString(submission, [
-                              "replacement_reason",
-                              "decision_reason",
-                            ]),
-                          }
-                        : null
-                    }
-                    onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
-                  />
-                );
-              })}
+              {showFallbackDocument("driver.licence")
+                ? renderDriverDocumentRequirement("driver.licence")
+                : null}
             </View>
           ) : null}
 
