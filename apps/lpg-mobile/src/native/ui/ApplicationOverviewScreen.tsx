@@ -141,24 +141,7 @@ export function ApplicationOverviewScreen({
 }: {
   workspace: "driver" | "station";
 }) {
-  const session = useSession();
-  const { palette } = useAppTheme();
-  const maps = useMapsGatewayAdapter();
-
-  if (workspace === "driver") {
-    return <ApplicationOverviewContent workspace={workspace} />;
-  }
-
-  return (
-    <PlatformApplicationAccessGate
-      applicationKey="station"
-      supabase={session.supabase}
-      palette={palette}
-      resolveLocation={async () => maps.resolveOperationalLocation(await readOperationalLocation())}
-    >
-      <ApplicationOverviewContent workspace={workspace} />
-    </PlatformApplicationAccessGate>
-  );
+  return <ApplicationOverviewContent workspace={workspace} />;
 }
 
 function ApplicationOverviewContent({
@@ -819,7 +802,7 @@ function ApplicationOverviewContent({
     };
   });
 
-  return (
+  const applicationForm = (
     <Screen
       eyebrow={`${workspace} onboarding`}
       title={workspace === "driver" ? "Driver Application" : "Station Application"}
@@ -1337,6 +1320,20 @@ function ApplicationOverviewContent({
       </View>
     </Screen>
   );
+
+  if (workspace === "station") {
+    return (
+      <PlatformApplicationAccessGate
+        applicationKey="station"
+        supabase={session.supabase}
+        palette={palette}
+        resolveLocation={async () => maps.resolveOperationalLocation(await readOperationalLocation())}
+      >
+        {applicationForm}
+      </PlatformApplicationAccessGate>
+    );
+  }
+  return applicationForm;
 }
 
 const styles = StyleSheet.create({
