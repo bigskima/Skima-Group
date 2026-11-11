@@ -4,6 +4,7 @@ import { SkeletonRows } from "./ScreenSkeleton";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { domainQueries, useApplicationPayload } from "../api/domains";
+import { PlatformApplicationAccessGate } from "@skima/mobile-experience/PlatformApplicationAccessGate";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -56,6 +57,23 @@ const EDITABLE_APPLICATION_STATUSES = new Set([
 ]);
 
 export function DriverApplicationEntryScreen() {
+  const session = useSession();
+  const { palette } = useAppTheme();
+  const maps = useMapsGatewayAdapter();
+
+  return (
+    <PlatformApplicationAccessGate
+      applicationKey="driver"
+      supabase={session.supabase}
+      palette={palette}
+      resolveLocation={async () => maps.resolveOperationalLocation(await readOperationalLocation())}
+    >
+      <DriverApplicationEntryContent />
+    </PlatformApplicationAccessGate>
+  );
+}
+
+function DriverApplicationEntryContent() {
   const { palette } = useAppTheme();
   const applications = domainQueries.applications();
   const types = domainQueries.applicationTypes();
