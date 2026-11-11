@@ -209,7 +209,7 @@ Deno.test("launch policy keeps personal KYC automatic and business KYB assisted"
   assertStringIncludes(card, "SKIMA will review the business details you provide.");
   assertStringIncludes(documents, 'check.routeMode === "assisted_kyb"');
   assertStringIncludes(applicationScreen, 'stationRole !== "owner"');
-  assertStringIncludes(applicationScreen, "Automatic KYC is used for station representatives at launch");
+  assertStringIncludes(applicationScreen, "Complete a secure identity check for the person registering the station.");
   assertStringIncludes(applicationScreen, "Upload CAC or other business-registration evidence below. SKIMA will review the documents you provide.");
 });
 
