@@ -46,6 +46,10 @@ import { PhotoCaptureCard } from "../application/PhotoCaptureCard";
 import { RequirementCard } from "../application/RequirementCard";
 import { requirementAppliesToPayload } from "../application/requirementApplicability";
 import {
+  documentSubmissionIsReady,
+  latestDocumentSubmissionForRequirement,
+} from "../application/documentSubmissions";
+import {
   readOperationalLocation,
   type OperationalLocation,
 } from "../device/location";
@@ -559,17 +563,14 @@ export function ApplicationOverviewScreen({
   };
 
   const getSubForReq = (reqKey: string) => {
-    return appSubmissions.find((submission) => {
-      const submissionKey = firstString(submission, ["requirement_key", "requirementKey"]);
-      const submissionRequirementId = firstString(submission, ["requirement_id", "requirementId"]);
-      const targetRequirement = appRequirements.find(
-        (requirement) => firstString(requirement, ["key"]) === reqKey,
-      );
-      return (
-        submissionKey === reqKey ||
-        Boolean(targetRequirement && submissionRequirementId === recordId(targetRequirement))
-      );
-    });
+    const targetRequirement = appRequirements.find(
+      (requirement) => firstString(requirement, ["key"]) === reqKey,
+    );
+    return latestDocumentSubmissionForRequirement(
+      appSubmissions,
+      reqKey,
+      targetRequirement,
+    );
   };
 
   const driverTotalSteps = 4;
@@ -595,8 +596,7 @@ export function ApplicationOverviewScreen({
     const key = firstString(requirement, ["key"]) ?? "";
     if (verifiedDocumentKeys.has(key)) return false;
     const submission = getSubForReq(key);
-    const submissionStatus = firstString(submission, ["status"]);
-    return !submission || submissionStatus === "rejected";
+    return !documentSubmissionIsReady(submission);
   });
 
   const requiredApplicableCount = applicableRequirements.filter(
@@ -619,10 +619,36 @@ export function ApplicationOverviewScreen({
       ].includes(status),
   );
 
-  if (applications.isPending || types.isPending || requirements.isPending) {
+  if (
+    applications.isPending ||
+    types.isPending ||
+    requirements.isPending ||
+    documents.isPending
+  ) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
         <ScreenSkeleton variant="form" cards={2} />
+      </Screen>
+    );
+  }
+
+  if (documents.isError) {
+    return (
+      <Screen eyebrow={`${workspace} application`} title="Application">
+        <Card>
+          <Text style={[styles.sectionHeader, { color: palette.ink }]}>
+            We couldn’t check your uploaded documents
+          </Text>
+          <Text style={[styles.helperText, { color: palette.muted }]}>
+            Your files remain saved. Refresh your document list to confirm their status before submitting.
+          </Text>
+          <Pressable
+            onPress={() => void documents.refetch()}
+            style={[styles.nextBtn, { backgroundColor: palette.brand }]}
+          >
+            <Text style={styles.nextBtnText}>Refresh documents</Text>
+          </Pressable>
+        </Card>
       </Screen>
     );
   }
@@ -669,7 +695,7 @@ export function ApplicationOverviewScreen({
       isRequired: requirement.is_required !== false,
       isUploaded:
         verifiedDocumentKeys.has(key) ||
-        Boolean(submission && firstString(submission, ["status"]) !== "rejected"),
+        documentSubmissionIsReady(submission),
       status: verifiedDocumentKeys.has(key)
         ? "verified_automatically"
         : firstString(submission, ["status"]) ?? "pending",
@@ -824,7 +850,7 @@ export function ApplicationOverviewScreen({
                 ensureApplicationId={ensureApplicationId}
                 verificationKey="verification.driver.licence"
                 title="Driver licence"
-                description="SKIMA will use the configured verification provider when available. A document upload appears only when fallback evidence is needed."
+                description="We’ll check your driver licence online. If the check cannot be completed, you can upload a clear copy below instead."
                 check={verificationCheck("verification.driver.licence")}
               />
               {DRIVER_DOCUMENT_KEYS.filter((reqKey) => showFallbackDocument(reqKey)).map((reqKey) => {
@@ -992,8 +1018,8 @@ export function ApplicationOverviewScreen({
                 }
                 description={
                   verificationCheck("verification.business.registry")?.automaticAvailable
-                    ? "Automatic KYB is enabled. When it passes, CAC/business-registration uploads are no longer duplicated."
-                    : "For launch, upload CAC or business-registration evidence in the evidence step and SKIMA will review it. The automatic KYB route is retained for future activation."
+                    ? "We’ll check the business registration details online. SKIMA may ask you for supporting documents if more information is needed."
+                    : "Upload CAC or other business-registration evidence below. SKIMA will review the documents you provide."
                 }
                 check={verificationCheck("verification.business.registry")}
               />
@@ -1117,7 +1143,7 @@ export function ApplicationOverviewScreen({
                   ensureApplicationId={ensureApplicationId}
                   verificationKey="verification.station.authority"
                   title="Representative authority"
-                  description="Owners do not need an authorization letter. Managers or representatives use automatic authority verification when configured, otherwise only the authority evidence below is required."
+                  description="Owners can skip this step. Managers and representatives should provide evidence that they are authorized to register this station."
                   check={verificationCheck("verification.station.authority")}
                 />
               ) : null}
