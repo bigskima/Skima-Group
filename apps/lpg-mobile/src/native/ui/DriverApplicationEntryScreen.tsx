@@ -57,24 +57,13 @@ const EDITABLE_APPLICATION_STATUSES = new Set([
 ]);
 
 export function DriverApplicationEntryScreen() {
-  const session = useSession();
-  const { palette } = useAppTheme();
-  const maps = useMapsGatewayAdapter();
-
-  return (
-    <PlatformApplicationAccessGate
-      applicationKey="driver"
-      supabase={session.supabase}
-      palette={palette}
-      resolveLocation={async () => maps.resolveOperationalLocation(await readOperationalLocation())}
-    >
-      <DriverApplicationEntryContent />
-    </PlatformApplicationAccessGate>
-  );
+  return <DriverApplicationEntryContent />;
 }
 
 function DriverApplicationEntryContent() {
   const { palette } = useAppTheme();
+  const accessSession = useSession();
+  const accessMaps = useMapsGatewayAdapter();
   const applications = domainQueries.applications();
   const types = domainQueries.applicationTypes();
 
@@ -157,7 +146,18 @@ function DriverApplicationEntryContent() {
           ) : null}
         </View>
         <View style={styles.applicationBody}>
-          <ApplicationOverviewScreen workspace="driver" />
+          {canEditGeography ? (
+            <PlatformApplicationAccessGate
+              applicationKey="driver"
+              supabase={accessSession.supabase}
+              palette={palette}
+              resolveLocation={async () => accessMaps.resolveOperationalLocation(await readOperationalLocation())}
+            >
+              <ApplicationOverviewScreen workspace="driver" />
+            </PlatformApplicationAccessGate>
+          ) : (
+            <ApplicationOverviewScreen workspace="driver" />
+          )}
         </View>
       </View>
     );
@@ -183,6 +183,12 @@ function DriverApplicationEntryContent() {
   }
 
   return (
+    <PlatformApplicationAccessGate
+      applicationKey="driver"
+      supabase={accessSession.supabase}
+      palette={palette}
+      resolveLocation={async () => accessMaps.resolveOperationalLocation(await readOperationalLocation())}
+    >
     <DriverGeographyStep
       applicationId={currentId}
       applicationTypeKey={firstString(driverType, ["key"]) ?? "application.lpg.driver.phase-one"}
@@ -201,6 +207,7 @@ function DriverApplicationEntryContent() {
       }}
       onCancel={geographyComplete ? () => setEditing(false) : undefined}
     />
+    </PlatformApplicationAccessGate>
   );
 }
 
