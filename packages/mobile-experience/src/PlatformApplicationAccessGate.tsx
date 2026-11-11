@@ -23,6 +23,12 @@ type ResolvedLocation = {
     region?: string | null;
     city?: string | null;
     district?: string | null;
+    lga?: string | null;
+    state?: string | null;
+    town?: string | null;
+    village?: string | null;
+    locality?: string | null;
+    neighbourhood?: string | null;
     street?: string | null;
   } | null;
 };
@@ -76,8 +82,14 @@ export function PlatformApplicationAccessGate({
       const names = [
         address?.country,
         address?.region,
+        address?.state,
+        address?.lga,
         address?.city,
         address?.district,
+        address?.town,
+        address?.village,
+        address?.locality,
+        address?.neighbourhood,
         location?.formattedAddress,
       ].filter((value): value is string => Boolean(value?.trim()));
 
