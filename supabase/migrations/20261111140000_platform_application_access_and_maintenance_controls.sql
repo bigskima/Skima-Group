@@ -752,7 +752,6 @@ set search_path = public, pg_temp
 as $function$
 declare
   application_type_key text;
-  application_workspace text;
   application_payload jsonb;
   location_payload jsonb;
   station_payload jsonb;
@@ -774,18 +773,18 @@ begin
   end if;
 
   select
-    application_type.key,
-    application_type.metadata ->> 'workspace'
-  into application_type_key, application_workspace
+    application_type.key
+  into application_type_key
   from public.application_type_definitions application_type
   where application_type.id = new.application_type_id;
 
-  if coalesce(application_workspace, '') not in ('driver', 'station')
-     or application_type_key not in ('application.lpg.driver.phase-one', 'application.lpg.station.phase-one') then
+  if application_type_key = 'application.lpg.driver.phase-one' then
+    target_application_key := 'driver';
+  elsif application_type_key = 'application.lpg.station.phase-one' then
+    target_application_key := 'station';
+  else
     return new;
   end if;
-
-  target_application_key := application_type_workspace;
 
   select coalesce(version.payload, '{}'::jsonb)
   into application_payload
