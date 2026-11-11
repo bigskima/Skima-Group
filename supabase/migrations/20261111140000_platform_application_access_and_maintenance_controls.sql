@@ -774,7 +774,7 @@ begin
   from public.application_type_definitions application_type
   where application_type.id = new.application_type_id;
 
-  if coalesce(application_type_workspace, '') not in ('driver', 'station')
+  if coalesce(application_workspace, '') not in ('driver', 'station')
      or application_type_key not in ('application.lpg.driver.phase-one', 'application.lpg.station.phase-one') then
     return new;
   end if;
