@@ -82,6 +82,29 @@ create index if not exists platform_service_maintenance_active_lookup_idx
 alter table public.platform_application_access_rules enable row level security;
 alter table public.platform_service_maintenance_notices enable row level security;
 
+-- Authenticated clients have no direct table privileges. These policies provide
+-- a second boundary for privileged operator access and keep row-level security
+-- configured even when access is routed through guarded SECURITY DEFINER RPCs.
+drop policy if exists platform_application_access_rules_admin_read
+  on public.platform_application_access_rules;
+create policy platform_application_access_rules_admin_read
+  on public.platform_application_access_rules
+  for select to authenticated
+  using (
+    public.has_permission('platform.configuration.read', null)
+    or public.has_permission('platform.configuration.manage', null)
+  );
+
+drop policy if exists platform_service_maintenance_notices_admin_read
+  on public.platform_service_maintenance_notices;
+create policy platform_service_maintenance_notices_admin_read
+  on public.platform_service_maintenance_notices
+  for select to authenticated
+  using (
+    public.has_permission('platform.configuration.read', null)
+    or public.has_permission('platform.configuration.manage', null)
+  );
+
 revoke all on public.platform_application_access_rules from anon, authenticated;
 revoke all on public.platform_service_maintenance_notices from anon, authenticated;
 grant all on public.platform_application_access_rules to service_role;
