@@ -591,10 +591,13 @@ begin
     rule.id
   limit 1;
 
-  if cardinality(matched_ids) = 0 then
-    -- Even a global rule may have a more specific geographic exception.
-    -- Require location before applying either outcome when such an exception
-    -- exists, so a global block cannot accidentally hide an allowed locality.
+  if cardinality(matched_ids) = 0
+     and target_latitude is null
+     and target_longitude is null
+     and cardinality(coalesce(target_geography_names, array[]::text[])) = 0 then
+    -- Ask for a location only when the caller has not provided one. A valid
+    -- point outside any configured geographic override must still receive
+    -- the global/default decision instead of being blocked by unrelated rules.
     select exists (
       select 1
       from public.platform_application_access_rules rule
@@ -714,7 +717,10 @@ begin
   from ranked
   where ranked.is_enabled = true;
 
-  if cardinality(matched_ids) = 0 then
+  if cardinality(matched_ids) = 0
+     and target_latitude is null
+     and target_longitude is null
+     and cardinality(coalesce(target_geography_names, array[]::text[])) = 0 then
     select exists (
       select 1
       from public.platform_service_maintenance_notices notice
