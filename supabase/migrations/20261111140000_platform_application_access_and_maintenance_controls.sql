@@ -591,21 +591,25 @@ begin
     rule.id
   limit 1;
 
-  if cardinality(matched_ids) = 0
-     and target_latitude is null
-     and target_longitude is null
-     and cardinality(coalesce(target_geography_names, array[]::text[])) = 0 then
-    -- Ask for a location only when the caller has not provided one. A valid
-    -- point outside any configured geographic override must still receive
-    -- the global/default decision instead of being blocked by unrelated rules.
+  if cardinality(matched_ids) = 0 then
+    -- A supplied point/address that cannot be matched is not proof that the
+    -- applicant is outside all overrides. Require a resolvable area only when
+    -- active geographic rules exist in the supplied country (or country is
+    -- unknown). Rules in other countries do not affect this applicant.
     select exists (
       select 1
       from public.platform_application_access_rules rule
+      left join public.geographies geography on geography.id = rule.geography_id
       where rule.application_key = target_application_key
         and rule.scope_type = 'geography'
         and rule.status = 'active'
         and (rule.starts_at is null or rule.starts_at <= timezone('utc', now()))
         and (rule.ends_at is null or rule.ends_at > timezone('utc', now()))
+        and (
+          target_country_code is null
+          or geography.country_code is null
+          or geography.country_code = upper(btrim(target_country_code))
+        )
     ) into needs_location;
   end if;
 
@@ -717,18 +721,21 @@ begin
   from ranked
   where ranked.is_enabled = true;
 
-  if cardinality(matched_ids) = 0
-     and target_latitude is null
-     and target_longitude is null
-     and cardinality(coalesce(target_geography_names, array[]::text[])) = 0 then
+  if cardinality(matched_ids) = 0 then
     select exists (
       select 1
       from public.platform_service_maintenance_notices notice
+      left join public.geographies geography on geography.id = notice.geography_id
       where notice.service_key = any(coalesce(target_service_keys, array[]::text[]))
         and notice.scope_type = 'geography'
         and notice.status = 'active'
         and (notice.starts_at is null or notice.starts_at <= timezone('utc', now()))
         and (notice.ends_at is null or notice.ends_at > timezone('utc', now()))
+        and (
+          target_country_code is null
+          or geography.country_code is null
+          or geography.country_code = upper(btrim(target_country_code))
+        )
     ) into needs_location;
   end if;
 
