@@ -82,3 +82,16 @@ export function documentSubmissionIsReady(
   const status = firstString(submission, ["status"])?.toLowerCase() ?? "";
   return READY_DOCUMENT_STATUSES.has(status);
 }
+
+
+/**
+ * Keep each driver document linked to the step where applicants can actually
+ * upload or complete it. Identity evidence belongs with the identity check,
+ * while the driving licence belongs in the licence step.
+ */
+export function driverDocumentStepIndex(requirementKey: string): 2 | 3 {
+  return requirementKey === "driver.profile-photo" ||
+    requirementKey === "driver.identity"
+    ? 2
+    : 3;
+}
