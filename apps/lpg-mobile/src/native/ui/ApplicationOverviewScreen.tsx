@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { PlatformApplicationAccessGate } from "@skima/mobile-experience/PlatformApplicationAccessGate";
 import {
   ArrowLeft,
   ArrowRight,
@@ -136,6 +137,31 @@ function timestampOf(record: Record<string, unknown>) {
 }
 
 export function ApplicationOverviewScreen({
+  workspace,
+}: {
+  workspace: "driver" | "station";
+}) {
+  const session = useSession();
+  const { palette } = useAppTheme();
+  const maps = useMapsGatewayAdapter();
+
+  if (workspace === "driver") {
+    return <ApplicationOverviewContent workspace={workspace} />;
+  }
+
+  return (
+    <PlatformApplicationAccessGate
+      applicationKey="station"
+      supabase={session.supabase}
+      palette={palette}
+      resolveLocation={async () => maps.resolveOperationalLocation(await readOperationalLocation())}
+    >
+      <ApplicationOverviewContent workspace={workspace} />
+    </PlatformApplicationAccessGate>
+  );
+}
+
+function ApplicationOverviewContent({
   workspace,
 }: {
   workspace: "driver" | "station";
