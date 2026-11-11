@@ -225,6 +225,8 @@ function ApplicationOverviewContent({
   const status = current ? (displayStatus(current) ?? "draft") : "draft";
   const operationalStatus = firstString(current, ["operational_status", "operationalStatus"]);
   const currentId = current ? recordId(current) : null;
+  const requiresNewSubmissionGate =
+    !currentId || ["draft", "incomplete"].includes(status);
   const payloadVersions = useApplicationPayload(currentId);
   const verification = useApplicationVerification(currentId);
   const reconcileVerification = useReconcileApplicationVerification();
@@ -1321,7 +1323,7 @@ function ApplicationOverviewContent({
     </Screen>
   );
 
-  if (workspace === "station") {
+  if (workspace === "station" && requiresNewSubmissionGate) {
     return (
       <PlatformApplicationAccessGate
         applicationKey="station"
