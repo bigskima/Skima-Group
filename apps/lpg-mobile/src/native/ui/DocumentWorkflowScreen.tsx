@@ -352,7 +352,7 @@ export function DocumentWorkflowScreen({
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.heroTitle}>
-                {isCorrectionFlow ? "Verification update required" : "Verification & evidence"}
+                {isCorrectionFlow ? "Application update required" : "Identity checks & documents"}
               </Text>
               <Text style={styles.heroBody}>
                 {isCorrectionFlow
@@ -363,7 +363,7 @@ export function DocumentWorkflowScreen({
                     ? assistedVerificationChecks.length > 0
                       ? `${automaticVerificationChecks.length} online check${automaticVerificationChecks.length === 1 ? "" : "s"} · ${assistedVerificationChecks.length} business document review${assistedVerificationChecks.length === 1 ? "" : "s"} · plus required certificates.`
                       : `${automaticVerificationChecks.length} online check${automaticVerificationChecks.length === 1 ? "" : "s"} plus the documents that still apply.`
-                    : `${visibleConfigured.length} evidence requirement${visibleConfigured.length === 1 ? "" : "s"} for this application.`}
+                    : `${visibleConfigured.length} document requirement${visibleConfigured.length === 1 ? "" : "s"} for this application.`}
               </Text>
             </View>
           </View>
@@ -376,7 +376,7 @@ export function DocumentWorkflowScreen({
               title={check.displayName}
               description={
                 check.status === "passed"
-                  ? "This requirement is already satisfied automatically."
+                  ? "This check is complete."
                   : check.routeMode === "assisted_kyb" && !check.automaticAvailable
                     ? "SKIMA will review your business registration details. Upload the requested document below."
                     : check.manualFallbackAllowed
@@ -501,7 +501,7 @@ export function DocumentWorkflowScreen({
                       : outstandingRequested.length > 0
                         ? `${outstandingRequested.length} reviewer-requested item${outstandingRequested.length === 1 ? "" : "s"} still need to be replaced.`
                         : pendingAutomaticChecks.length > 0
-                          ? `${pendingAutomaticChecks.length} automatic verification check${pendingAutomaticChecks.length === 1 ? "" : "s"} still need to finish.`
+                          ? `${pendingAutomaticChecks.length} online check${pendingAutomaticChecks.length === 1 ? "" : "s"} still need to finish.`
                           : `${missingConfigured.length} required document${missingConfigured.length === 1 ? "" : "s"} still needed before submission.`}
                   </Text>
                 </View>
