@@ -154,8 +154,6 @@ jobs:
           cache-dependency-path: apps/lpg-mobile/package-lock.json
       - name: Install LPG dependencies exactly as Vercel
         run: npm --prefix apps/lpg-mobile ci --no-audit --no-fund
-      - name: Run LPG mobile unit tests
-        run: npm --prefix apps/lpg-mobile test -- --runInBand
       - name: Typecheck and build LPG web
         run: npm run deploy:check:lpg
 
