@@ -89,11 +89,21 @@ export function PlatformMaintenanceNotices({
   geographyIds?: readonly string[];
   geographyNames?: readonly string[];
   countryCode?: string | null;
-  resolveLocation?: () => Promise<{ latitude: number; longitude: number }>;
+  resolveLocation?: () => Promise<{
+    latitude: number;
+    longitude: number;
+    geographyNames?: string[];
+    countryCode?: string | null;
+  }>;
 }) {
   const [notices, setNotices] = useState<MaintenanceNotice[]>([]);
   const [requiresLocation, setRequiresLocation] = useState(false);
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [location, setLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    geographyNames?: string[];
+    countryCode?: string | null;
+  } | null>(null);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const p = { ...fallbackPalette, ...(palette ?? {}) };
@@ -123,8 +133,10 @@ export function PlatformMaintenanceNotices({
           target_latitude: location?.latitude ?? latitude,
           target_longitude: location?.longitude ?? longitude,
           target_geography_ids: geographyIdToken ? geographyIdToken.split("|") : [],
-          target_geography_names: geographyNameToken ? geographyNameToken.split("|") : [],
-          target_country_code: countryCode,
+          target_geography_names: location?.geographyNames?.length
+            ? location.geographyNames
+            : geographyNameToken ? geographyNameToken.split("|") : [],
+          target_country_code: location?.countryCode ?? countryCode,
         });
         if (error) throw error;
         if (active) {
