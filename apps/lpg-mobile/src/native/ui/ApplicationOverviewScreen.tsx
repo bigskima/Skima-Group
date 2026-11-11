@@ -49,6 +49,7 @@ import {
   documentSubmissionIsReady,
   driverDocumentStepIndex,
   latestDocumentSubmissionForRequirement,
+  stationDocumentStepIndex,
 } from "../application/documentSubmissions";
 import {
   readOperationalLocation,
@@ -626,6 +627,45 @@ export function ApplicationOverviewScreen({
     );
   };
 
+  const renderStationDocumentRequirement = (reqKey: string) => {
+    const requirement = appRequirements.find(
+      (item) => firstString(item, ["key"]) === reqKey,
+    );
+    if (!requirement || !requirementAppliesToPayload(requirement, currentPayload)) return null;
+    const submission = getSubForReq(reqKey);
+
+    return (
+      <RequirementCard
+        key={reqKey}
+        requirementKey={reqKey}
+        title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
+        description={
+          firstString(requirement, ["description"]) ?? "Upload a clear, valid document."
+        }
+        isRequired={requirement.is_required !== false}
+        allowedContentTypes={
+          Array.isArray(requirement.allowed_content_types)
+            ? (requirement.allowed_content_types as string[])
+            : undefined
+        }
+        uploadedDocument={
+          submission
+            ? {
+                id: recordId(submission) ?? "",
+                status: firstString(submission, ["status"]) ?? "submitted",
+                replacementRequested: Boolean(submission.replacement_requested),
+                replacementReason: firstString(submission, [
+                  "replacement_reason",
+                  "decision_reason",
+                ]),
+              }
+            : null
+        }
+        onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
+      />
+    );
+  };
+
   const applicableRequirements = appRequirements.filter((requirement) =>
     requirementAppliesToPayload(requirement, currentPayload),
   );
@@ -749,11 +789,7 @@ export function ApplicationOverviewScreen({
       stepIndex:
         workspace === "driver"
           ? driverDocumentStepIndex(key)
-          : key.startsWith("station.photo.")
-            ? 4
-            : key === "station.representative-photo"
-              ? 1
-              : 3,
+          : stationDocumentStepIndex(key),
     };
   });
 
@@ -938,17 +974,21 @@ export function ApplicationOverviewScreen({
                   ensureApplicationId={ensureApplicationId}
                   verificationKey="verification.person.identity"
                   title="Verify the representative"
-                  description="Use one secure identity and liveness check for the manager, employee or authorized representative registering this station. This does not verify company owners or beneficial owners."
+                  description="Complete a secure identity check for the person registering the station. This check does not replace the business documents or proof of authority required for the application."
                   check={verificationCheck("verification.person.identity")}
                 />
               ) : (
                 <Card>
                   <Text style={[styles.sectionHeader, { color: palette.ink }]}>Owner applicant</Text>
                   <Text style={[styles.helperText, { color: palette.muted }]}>
-                    Automatic KYC is used for station representatives at launch. If the station owner is applying directly, owner identity remains part of the evidence reviewed by SKIMA.
+                    As the station owner, upload a clear government-issued identity document. SKIMA will review it with your application.
                   </Text>
                 </Card>
               )}
+              {renderStationDocumentRequirement("station.owner-identity")}
+              {stationRole !== "owner" && showFallbackDocument("station.representative-identity")
+                ? renderStationDocumentRequirement("station.representative-identity")
+                : null}
               <Card>
               <Text style={[styles.sectionHeader, { color: palette.ink }]}>Representative Details</Text>
 
@@ -995,11 +1035,11 @@ export function ApplicationOverviewScreen({
                 </View>
                 {stationRole !== "owner" ? (
                   <Text style={[styles.helperText, { color: palette.muted }]}>
-                    SKIMA verifies the registering representative's identity automatically. If authority cannot be confirmed, only proof that you are authorized to register this station will be requested.
+                    SKIMA checks the identity of the person registering the station. You may also need to provide proof that you are authorized to act for the business.
                   </Text>
                 ) : (
                   <Text style={[styles.helperText, { color: palette.muted }]}>
-                    Owner applicants continue with manual owner-identity evidence. SKIMA does not automatically verify company owners or beneficial owners in the launch flow.
+                    As the owner, provide your government-issued ID in the document section above. Business owners are reviewed separately from the station's registration documents.
                   </Text>
                 )}
               </View>
@@ -1038,6 +1078,9 @@ export function ApplicationOverviewScreen({
                 }
                 check={verificationCheck("verification.business.registry")}
               />
+              {showFallbackDocument("station.business-registration")
+                ? renderStationDocumentRequirement("station.business-registration")
+                : null}
               <Card>
               <Text style={[styles.sectionHeader, { color: palette.ink }]}>Business & Station Details</Text>
 
@@ -1163,47 +1206,16 @@ export function ApplicationOverviewScreen({
                 />
               ) : null}
               {STATION_DOCUMENT_KEYS.filter((reqKey) =>
+                ![
+                  "station.business-registration",
+                  "station.owner-identity",
+                  "station.representative-identity",
+                ].includes(reqKey) &&
                 showFallbackDocument(reqKey) &&
-
                 applicableRequirements.some(
                   (requirement) => firstString(requirement, ["key"]) === reqKey,
                 ),
-              ).map((reqKey) => {
-                const requirement = appRequirements.find(
-                  (item) => firstString(item, ["key"]) === reqKey,
-                );
-                const submission = getSubForReq(reqKey);
-                return (
-                  <RequirementCard
-                    key={reqKey}
-                    requirementKey={reqKey}
-                    title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
-                    description={
-                      firstString(requirement, ["description"]) ?? "Upload the required official document."
-                    }
-                    isRequired={requirement?.is_required !== false}
-                    allowedContentTypes={
-                      Array.isArray(requirement?.allowed_content_types)
-                        ? (requirement.allowed_content_types as string[])
-                        : undefined
-                    }
-                    uploadedDocument={
-                      submission
-                        ? {
-                            id: recordId(submission) ?? "",
-                            status: firstString(submission, ["status"]) ?? "submitted",
-                            replacementRequested: Boolean(submission.replacement_requested),
-                            replacementReason: firstString(submission, [
-                              "replacement_reason",
-                              "decision_reason",
-                            ]),
-                          }
-                        : null
-                    }
-                    onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
-                  />
-                );
-              })}
+              ).map((reqKey) => renderStationDocumentRequirement(reqKey))}
             </View>
           ) : null}
 
