@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import * as Location from "expo-location";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type MaintenanceImpact = "notice" | "degraded" | "unavailable";
@@ -90,6 +91,10 @@ export function PlatformMaintenanceNotices({
   countryCode?: string | null;
 }) {
   const [notices, setNotices] = useState<MaintenanceNotice[]>([]);
+  const [requiresLocation, setRequiresLocation] = useState(false);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationBusy, setLocationBusy] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const p = { ...fallbackPalette, ...(palette ?? {}) };
   const serviceKeyToken = useMemo(
     () => Array.from(new Set(serviceKeys.map((key) => key.trim().toLowerCase()).filter(Boolean))).join("|"),
@@ -114,14 +119,20 @@ export function PlatformMaintenanceNotices({
       try {
         const { data, error } = await supabase.rpc("read_customer_service_maintenance", {
           target_service_keys: serviceKeyToken.split("|"),
-          target_latitude: latitude,
-          target_longitude: longitude,
+          target_latitude: location?.latitude ?? latitude,
+          target_longitude: location?.longitude ?? longitude,
           target_geography_ids: geographyIdToken ? geographyIdToken.split("|") : [],
           target_geography_names: geographyNameToken ? geographyNameToken.split("|") : [],
           target_country_code: countryCode,
         });
         if (error) throw error;
-        if (active) setNotices(parseNotices(data));
+        if (active) {
+          setNotices(parseNotices(data));
+          setRequiresLocation(Boolean(
+            data && typeof data === "object" && !Array.isArray(data) &&
+            (data as Record<string, unknown>).requiresLocation === true
+          ));
+        }
       } catch {
         // Maintenance communication is informative, not an availability gate.
         // If it cannot be fetched, keep the app usable and retry on the next pass.
@@ -142,9 +153,31 @@ export function PlatformMaintenanceNotices({
     geographyIdToken,
     geographyNameToken,
     countryCode,
+    location,
   ]);
 
-  if (!notices.length) return null;
+  const checkLocalNotices = async () => {
+    setLocationBusy(true);
+    setLocationError(null);
+    try {
+      let permission = await Location.getForegroundPermissionsAsync();
+      if (!permission.granted) permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) throw new Error("Location permission was not granted.");
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+    } catch {
+      setLocationError("Allow location access to check whether this service has a local notice.");
+    } finally {
+      setLocationBusy(false);
+    }
+  };
+
+  if (!notices.length && !requiresLocation) return null;
 
   return (
     <View
@@ -186,6 +219,47 @@ export function PlatformMaintenanceNotices({
           </View>
         );
       })}
+      {requiresLocation ? (
+        <View style={{
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: p.border,
+          backgroundColor: p.surface,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          gap: 7,
+        }}>
+          <Text style={{ color: p.ink, fontSize: 10, fontWeight: "800" }}>
+            Check service notices for your area
+          </Text>
+          <Text style={{ color: p.muted, fontSize: 9, lineHeight: 14 }}>
+            Some maintenance notices apply only to selected locations. Location is checked only when you choose this option.
+          </Text>
+          {locationError ? <Text style={{ color: p.danger, fontSize: 9 }}>{locationError}</Text> : null}
+          <Pressable
+            accessibilityRole="button"
+            disabled={locationBusy}
+            onPress={() => void checkLocalNotices()}
+            style={{
+              minHeight: 36,
+              alignSelf: "flex-start",
+              paddingHorizontal: 12,
+              borderRadius: 9,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: p.brandSoft,
+              flexDirection: "row",
+              gap: 7,
+              opacity: locationBusy ? 0.65 : 1,
+            }}
+          >
+            {locationBusy ? <ActivityIndicator size="small" color={p.brand} /> : null}
+            <Text style={{ color: p.brand, fontSize: 10, fontWeight: "900" }}>
+              {locationBusy ? "Checking…" : location ? "Check my area again" : "Check my area"}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
