@@ -92,6 +92,8 @@ function DriverApplicationEntryContent() {
   const currentId = current ? recordId(current) : null;
   const applicationStatus = firstString(current, ["status"]) ?? "draft";
   const canEditGeography = !currentId || EDITABLE_APPLICATION_STATUSES.has(applicationStatus);
+  const requiresNewSubmissionGate =
+    !currentId || ["draft", "incomplete"].includes(applicationStatus);
   const payloadQuery = useApplicationPayload(currentId);
   const latestVersion = payloadQuery.data?.[0] ?? null;
   const latestPayload = nestedRecord(latestVersion, "payload") ?? latestVersion;
@@ -146,7 +148,7 @@ function DriverApplicationEntryContent() {
           ) : null}
         </View>
         <View style={styles.applicationBody}>
-          {canEditGeography ? (
+          {requiresNewSubmissionGate ? (
             <PlatformApplicationAccessGate
               applicationKey="driver"
               supabase={accessSession.supabase}
@@ -182,13 +184,7 @@ function DriverApplicationEntryContent() {
     );
   }
 
-  return (
-    <PlatformApplicationAccessGate
-      applicationKey="driver"
-      supabase={accessSession.supabase}
-      palette={palette}
-      resolveLocation={async () => accessMaps.resolveOperationalLocation(await readOperationalLocation())}
-    >
+  const geographyStep = (
     <DriverGeographyStep
       applicationId={currentId}
       applicationTypeKey={firstString(driverType, ["key"]) ?? "application.lpg.driver.phase-one"}
@@ -207,6 +203,18 @@ function DriverApplicationEntryContent() {
       }}
       onCancel={geographyComplete ? () => setEditing(false) : undefined}
     />
+  );
+
+  if (!requiresNewSubmissionGate) return geographyStep;
+
+  return (
+    <PlatformApplicationAccessGate
+      applicationKey="driver"
+      supabase={accessSession.supabase}
+      palette={palette}
+      resolveLocation={async () => accessMaps.resolveOperationalLocation(await readOperationalLocation())}
+    >
+      {geographyStep}
     </PlatformApplicationAccessGate>
   );
 }
