@@ -176,8 +176,8 @@ begin
       and extensions.st_covers(
         geography.boundary_geometry::geometry,
         case
-          when extensions.st_srid(geography.boundary_geometry) = 4326 then point_4326
-          else extensions.st_transform(point_4326, extensions.st_srid(geography.boundary_geometry))
+          when extensions.st_srid(geography.boundary_geometry::geometry) = 4326 then point_4326
+          else extensions.st_transform(point_4326, extensions.st_srid(geography.boundary_geometry::geometry))
         end
       )
       and (
