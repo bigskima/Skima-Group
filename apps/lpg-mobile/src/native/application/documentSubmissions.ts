@@ -12,19 +12,24 @@ const READY_DOCUMENT_STATUSES = new Set([
 ]);
 
 function submissionTimestamp(record: PlatformRecord): number {
-  const timestamps = [
-    record.updated_at,
-    record.updatedAt,
-    record.submitted_at,
-    record.submittedAt,
+  // A reviewer can update an older row after a newer file has been uploaded.
+  // Order by the upload's creation time first, not its last review update.
+  const values = [
     record.created_at,
     record.createdAt,
-  ]
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => Date.parse(value))
-    .filter((value) => Number.isFinite(value));
+    record.submitted_at,
+    record.submittedAt,
+    record.updated_at,
+    record.updatedAt,
+  ];
 
-  return timestamps.length ? Math.max(...timestamps) : 0;
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const timestamp = Date.parse(value);
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+
+  return 0;
 }
 
 /**
