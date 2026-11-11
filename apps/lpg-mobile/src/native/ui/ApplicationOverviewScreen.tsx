@@ -663,7 +663,8 @@ export function ApplicationOverviewScreen({
     types.isPending ||
     requirements.isPending ||
     documents.isPending ||
-    documents.isFetching
+    documents.isFetching ||
+    (Boolean(currentId) && (verification.isPending || verification.isFetching))
   ) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
@@ -672,21 +673,27 @@ export function ApplicationOverviewScreen({
     );
   }
 
-  if (documents.isError && !documents.data) {
+  if (
+    (documents.isError && !documents.data) ||
+    (Boolean(currentId) && verification.isError && !verification.data)
+  ) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
         <Card>
           <Text style={[styles.sectionHeader, { color: palette.ink }]}>
-            We couldn’t check your uploaded documents
+            We couldn’t confirm your documents and checks
           </Text>
           <Text style={[styles.helperText, { color: palette.muted }]}>
-            Your files remain saved. Refresh your document list to confirm their status before submitting.
+            Your application and uploads remain saved. Refresh their status before submitting.
           </Text>
           <Pressable
-            onPress={() => void documents.refetch()}
+            onPress={() => {
+              void documents.refetch();
+              if (currentId) void verification.refetch();
+            }}
             style={[styles.nextBtn, { backgroundColor: palette.brand }]}
           >
-            <Text style={styles.nextBtnText}>Refresh documents</Text>
+            <Text style={styles.nextBtnText}>Refresh status</Text>
           </Pressable>
         </Card>
       </Screen>
