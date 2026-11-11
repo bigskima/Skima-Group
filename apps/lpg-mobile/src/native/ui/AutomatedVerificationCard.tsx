@@ -88,7 +88,7 @@ export function AutomatedVerificationCard({
         await Linking.openURL(result.verificationUrl);
         setMessage("Complete the secure check, return to SKIMA, then tap Check result.");
       } else {
-        setMessage("Verification session started. Tap Check result after completing the provider flow.");
+        setMessage("Your secure check is ready. Complete it, return to SKIMA, then tap Check result.");
       }
     } catch (cause) {
       setLocalAutomaticUnavailable(true);
@@ -96,8 +96,8 @@ export function AutomatedVerificationCard({
         friendlyError(
           cause,
           canFallback
-            ? "Secure verification is temporarily unavailable. Continue the application and use the accepted fallback evidence in the evidence step, or try again later."
-            : "Secure verification could not be started. Please try again later.",
+            ? "We couldn’t complete this check online. You can upload the requested document below or try again later."
+            : "We couldn’t start this check. Please try again later.",
         ),
       );
     }
@@ -123,11 +123,11 @@ export function AutomatedVerificationCard({
       if (result.status === "passed") {
         setMessage("Verified automatically. You do not need to upload duplicate evidence for this check.");
       } else if (result.status === "manual_review") {
-        setMessage("The verification provider is reviewing this check. SKIMA will keep the result synchronized.");
+        setMessage("Your check is being reviewed. SKIMA will update your application when the result is ready.");
       } else if (result.status === "failed") {
-        setMessage("Automatic verification did not pass. Retry or use the allowed fallback evidence.");
+        setMessage("This check could not be completed. You can upload the requested document below or try again.");
       } else {
-        setMessage("Verification is still in progress. Finish the secure flow, then check again.");
+        setMessage("Your check is still in progress. Finish the secure steps and return here to check again.");
       }
     } catch (cause) {
       setMessage(
@@ -180,33 +180,19 @@ export function AutomatedVerificationCard({
         <View style={styles.headingCopy}>
           <Text style={[styles.eyebrow, { color: passed ? palette.success : palette.brand }]}>
             {passed
-              ? "VERIFIED AUTOMATICALLY"
+              ? "CHECK COMPLETE"
               : assistedManual
-                ? "ASSISTED BUSINESS REVIEW"
+                ? "BUSINESS DOCUMENT REVIEW"
                 : automaticAvailable
-                  ? "SECURE AUTOMATIC CHECK"
-                  : "VERIFICATION OPTIONS"}
+                  ? "SECURE CHECK"
+                  : "DOCUMENT UPLOAD"}
           </Text>
           <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
           <Text style={[styles.body, { color: palette.muted }]}>{description}</Text>
         </View>
       </View>
 
-      {check?.providerDisplayName && automaticAvailable ? (
-        <View style={[styles.providerPill, { backgroundColor: palette.surfaceSubtle }]}>
-          <ShieldCheck color={palette.mutedStrong} size={13} />
-          <Text style={[styles.providerText, { color: palette.mutedStrong }]}>
-            Secure check powered by {check.providerDisplayName}
-          </Text>
-        </View>
-      ) : assistedManual && check?.routeConfigured ? (
-        <View style={[styles.providerPill, { backgroundColor: palette.surfaceSubtle }]}>
-          <ShieldCheck color={palette.mutedStrong} size={13} />
-          <Text style={[styles.providerText, { color: palette.mutedStrong }]}>
-            Automatic KYB retained for future admin activation
-          </Text>
-        </View>
-      ) : null}
+
 
       {passed ? (
         <View style={[styles.successBox, { backgroundColor: palette.successSoft }]}>
@@ -219,9 +205,8 @@ export function AutomatedVerificationCard({
         <View style={[styles.fallbackBox, { backgroundColor: palette.warningSoft }]}>
           <FileWarning color={palette.warning} size={18} />
           <Text style={[styles.fallbackText, { color: palette.ink }]}>
-            Business verification is assisted for launch. Continue to the evidence step,
-            upload the CAC or business-registration document, and SKIMA will review it.
-            Automatic KYB remains configured and can be enabled later by an administrator.
+            SKIMA will review the business details you provide. Upload the requested
+            registration document below to continue.
           </Text>
         </View>
       ) : !automaticAvailable ? (
@@ -229,10 +214,10 @@ export function AutomatedVerificationCard({
           <View style={[styles.fallbackBox, { backgroundColor: palette.warningSoft }]}>
             <FileWarning color={palette.warning} size={18} />
             <Text style={[styles.fallbackText, { color: palette.ink }]}>
-              The secure check is temporarily unavailable.
+              The online check isn’t available right now.
               {canFallback
-                ? " You can continue with accepted fallback evidence or retry later."
-                : " Retry the secure check later before continuing."}
+                ? ` You can continue by uploading a clear copy of your ${title.toLowerCase()} below.`
+                : " Please try again later to complete this check."}
             </Text>
           </View>
           <Pressable
@@ -254,7 +239,7 @@ export function AutomatedVerificationCard({
             ) : (
               <>
                 <RefreshCw color={palette.brand} size={16} strokeWidth={2.4} />
-                <Text style={[styles.secondaryText, { color: palette.brand }]}>Retry secure verification</Text>
+                <Text style={[styles.secondaryText, { color: palette.brand }]}>Try again</Text>
               </>
             )}
           </Pressable>
