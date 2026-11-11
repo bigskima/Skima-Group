@@ -73,11 +73,6 @@ const STATION_ROLES = [
   { key: "representative", label: "Legal Representative" },
 ];
 
-const DRIVER_DOCUMENT_KEYS = [
-  "driver.licence",
-  "driver.identity",
-] as const;
-
 const STATION_DOCUMENT_KEYS = [
   "station.business-registration",
   "station.business-permit",
@@ -667,7 +662,8 @@ export function ApplicationOverviewScreen({
     applications.isPending ||
     types.isPending ||
     requirements.isPending ||
-    documents.isPending
+    documents.isPending ||
+    documents.isFetching
   ) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
@@ -676,7 +672,7 @@ export function ApplicationOverviewScreen({
     );
   }
 
-  if (documents.isError) {
+  if (documents.isError && !documents.data) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
         <Card>
