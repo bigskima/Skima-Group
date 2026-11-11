@@ -172,9 +172,9 @@ begin
     where target_latitude is not null
       and geography.status = 'active'
       and geography.boundary_geometry is not null
-      and extensions.st_srid(geography.boundary_geometry) > 0
+      and extensions.st_srid(geography.boundary_geometry::geometry) > 0
       and extensions.st_covers(
-        geography.boundary_geometry,
+        geography.boundary_geometry::geometry,
         case
           when extensions.st_srid(geography.boundary_geometry) = 4326 then point_4326
           else extensions.st_transform(point_4326, extensions.st_srid(geography.boundary_geometry))
@@ -761,6 +761,8 @@ declare
   target_longitude double precision;
   target_country_code text;
   target_names text[];
+  target_geography_ids uuid[];
+  service_payload jsonb;
   access_result jsonb;
 begin
   if coalesce(auth.role(), '') = 'service_role' then
@@ -768,7 +770,9 @@ begin
   end if;
 
   if new.status <> 'submitted'
-     or coalesce(old.status, '') in ('submitted', 'under_review', 'approved', 'rejected') then
+     or coalesce(old.status, '') not in ('draft', 'incomplete') then
+    -- A pause only stops first-time application submissions. Applicants who
+    -- already submitted and were asked for corrections can still resubmit.
     return new;
   end if;
 
@@ -796,6 +800,35 @@ begin
   location_payload := coalesce(application_payload -> 'location', '{}'::jsonb);
   station_payload := coalesce(application_payload -> 'station', '{}'::jsonb);
   address_payload := coalesce(location_payload -> 'address', '{}'::jsonb);
+  service_payload := coalesce(application_payload -> 'service', '{}'::jsonb);
+
+  select coalesce(array_agg(distinct request.geography_id), array[]::uuid[])
+  into target_geography_ids
+  from (
+    select (request.value ->> 'geographyId')::uuid as geography_id
+    from jsonb_array_elements(
+      case
+        when jsonb_typeof(service_payload -> 'coverageRequests') = 'array'
+          then service_payload -> 'coverageRequests'
+        else '[]'::jsonb
+      end
+    ) request(value)
+    where coalesce(request.value ->> 'geographyId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+    union all
+
+    select legacy_id.value::uuid as geography_id
+    from jsonb_array_elements_text(
+      case
+        when jsonb_typeof(service_payload -> 'serviceAreaIds') = 'array'
+          then service_payload -> 'serviceAreaIds'
+        when jsonb_typeof(service_payload -> 'service_area_ids') = 'array'
+          then service_payload -> 'service_area_ids'
+        else '[]'::jsonb
+      end
+    ) legacy_id(value)
+    where legacy_id.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ) request;
 
   target_latitude := coalesce(
     nullif(location_payload ->> 'latitude', '')::double precision,
@@ -814,6 +847,7 @@ begin
   target_country_code := upper(coalesce(
     nullif(address_payload ->> 'countryCode', ''),
     nullif(address_payload ->> 'country_code', ''),
+    nullif(address_payload ->> 'isoCountryCode', ''),
     nullif(location_payload ->> 'countryCode', ''),
     nullif(station_payload ->> 'countryCode', '')
   ));
@@ -826,6 +860,7 @@ begin
     nullif(address_payload ->> 'country', ''),
     nullif(address_payload ->> 'region', ''),
     nullif(address_payload ->> 'state', ''),
+    nullif(address_payload ->> 'lga', ''),
     nullif(address_payload ->> 'city', ''),
     nullif(address_payload ->> 'district', ''),
     nullif(address_payload ->> 'town', ''),
@@ -838,7 +873,7 @@ begin
     target_application_key,
     target_latitude,
     target_longitude,
-    array[]::uuid[],
+    target_geography_ids,
     target_names,
     target_country_code
   );
