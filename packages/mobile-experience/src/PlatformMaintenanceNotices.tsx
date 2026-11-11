@@ -235,8 +235,7 @@ export function PlatformMaintenanceNotices({
           {locationError ? <Text style={{ color: p.danger, fontSize: 9 }}>{locationError}</Text> : null}
           <Pressable
             accessibilityRole="button"
-            disabled={locationBusy}
-            disabled={!resolveLocation}
+            disabled={locationBusy || !resolveLocation}
             onPress={() => void checkLocalNotices()}
             style={{
               minHeight: 36,
