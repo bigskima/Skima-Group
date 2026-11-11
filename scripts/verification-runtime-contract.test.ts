@@ -181,7 +181,7 @@ Deno.test("verification credit exhaustion keeps personal KYC retryable and isola
   assertStringIncludes(card, "localApplicationId");
   assertStringIncludes(card, "localAutomaticUnavailable");
   assertStringIncludes(friendlyErrors, "not enough credits");
-  assertStringIncludes(friendlyErrors, "Secure verification is temporarily unavailable");
+  assertStringIncludes(friendlyErrors, "We couldn’t complete this check online right now");
 });
 
 Deno.test("launch policy keeps personal KYC automatic and business KYB assisted", async () => {
@@ -205,12 +205,12 @@ Deno.test("launch policy keeps personal KYC automatic and business KYB assisted"
 
   assertStringIncludes(verificationApi, "routeMode");
   assertStringIncludes(verificationApi, "routeConfigured");
-  assertStringIncludes(card, "ASSISTED BUSINESS REVIEW");
-  assertStringIncludes(card, "Automatic KYB retained for future admin activation");
+  assertStringIncludes(card, "BUSINESS DOCUMENT REVIEW");
+  assertStringIncludes(card, "SKIMA will review the business details you provide.");
   assertStringIncludes(documents, 'check.routeMode === "assisted_kyb"');
   assertStringIncludes(applicationScreen, 'stationRole !== "owner"');
   assertStringIncludes(applicationScreen, "Automatic KYC is used for station representatives at launch");
-  assertStringIncludes(applicationScreen, "The automatic KYB route is retained for future activation");
+  assertStringIncludes(applicationScreen, "Upload CAC or other business-registration evidence below. SKIMA will review the documents you provide.");
 });
 
 Deno.test("Didit personal KYC uses the free workflow and authority remains assisted", async () => {
