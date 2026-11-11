@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import * as Location from "expo-location";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type MaintenanceImpact = "notice" | "degraded" | "unavailable";
@@ -80,6 +79,7 @@ export function PlatformMaintenanceNotices({
   geographyIds = [],
   geographyNames = [],
   countryCode = null,
+  resolveLocation,
 }: {
   supabase: SupabaseClient;
   serviceKeys: readonly string[];
@@ -89,6 +89,7 @@ export function PlatformMaintenanceNotices({
   geographyIds?: readonly string[];
   geographyNames?: readonly string[];
   countryCode?: string | null;
+  resolveLocation?: () => Promise<{ latitude: number; longitude: number }>;
 }) {
   const [notices, setNotices] = useState<MaintenanceNotice[]>([]);
   const [requiresLocation, setRequiresLocation] = useState(false);
@@ -160,15 +161,11 @@ export function PlatformMaintenanceNotices({
     setLocationBusy(true);
     setLocationError(null);
     try {
-      let permission = await Location.getForegroundPermissionsAsync();
-      if (!permission.granted) permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) throw new Error("Location permission was not granted.");
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      if (!resolveLocation) throw new Error("Local location checks are not available in this app.");
+      const point = await resolveLocation();
       setLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
+        latitude: point.latitude,
+        longitude: point.longitude,
       });
     } catch {
       setLocationError("Allow location access to check whether this service has a local notice.");
@@ -239,6 +236,7 @@ export function PlatformMaintenanceNotices({
           <Pressable
             accessibilityRole="button"
             disabled={locationBusy}
+            disabled={!resolveLocation}
             onPress={() => void checkLocalNotices()}
             style={{
               minHeight: 36,
@@ -250,7 +248,7 @@ export function PlatformMaintenanceNotices({
               backgroundColor: p.brandSoft,
               flexDirection: "row",
               gap: 7,
-              opacity: locationBusy ? 0.65 : 1,
+              opacity: locationBusy || !resolveLocation ? 0.5 : 1,
             }}
           >
             {locationBusy ? <ActivityIndicator size="small" color={p.brand} /> : null}
