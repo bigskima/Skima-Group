@@ -16,6 +16,7 @@ describe("driver application document readiness", () => {
         requirement_id: requirement.id,
         status: "rejected",
         created_at: "2026-11-10T08:00:00.000Z",
+        updated_at: "2026-11-10T10:00:00.000Z",
       },
       {
         id: "newer-upload",
