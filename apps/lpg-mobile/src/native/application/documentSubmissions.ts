@@ -95,3 +95,19 @@ export function driverDocumentStepIndex(requirementKey: string): 2 | 3 {
     ? 2
     : 3;
 }
+
+
+/**
+ * Return the step that owns a station document. Keep review links aligned with
+ * the screen where that evidence is collected, including conditional identity.
+ */
+export function stationDocumentStepIndex(requirementKey: string): 1 | 2 | 3 | 4 {
+  if (requirementKey.startsWith("station.photo.")) return 4;
+  if (requirementKey === "station.business-registration") return 2;
+  if (
+    requirementKey === "station.owner-identity" ||
+    requirementKey === "station.representative-identity" ||
+    requirementKey === "station.representative-photo"
+  ) return 1;
+  return 3;
+}
