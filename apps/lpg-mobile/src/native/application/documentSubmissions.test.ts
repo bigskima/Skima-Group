@@ -2,6 +2,7 @@ import {
   documentSubmissionIsReady,
   driverDocumentStepIndex,
   latestDocumentSubmissionForRequirement,
+  stationDocumentStepIndex,
 } from "./documentSubmissions";
 
 describe("driver application document readiness", () => {
@@ -115,5 +116,30 @@ describe("driver document review navigation", () => {
 
   it("opens a driver licence in the licence step", () => {
     expect(driverDocumentStepIndex("driver.licence")).toBe(3);
+  });
+});
+
+
+describe("station document review navigation", () => {
+  it("opens owner and representative identity evidence in the representative step", () => {
+    expect(stationDocumentStepIndex("station.owner-identity")).toBe(1);
+    expect(stationDocumentStepIndex("station.representative-identity")).toBe(1);
+    expect(stationDocumentStepIndex("station.representative-photo")).toBe(1);
+  });
+
+  it("opens business registration evidence with the business details", () => {
+    expect(stationDocumentStepIndex("station.business-registration")).toBe(2);
+  });
+
+  it("keeps authority, permits and safety certificates in compliance", () => {
+    expect(stationDocumentStepIndex("station.authority-evidence")).toBe(3);
+    expect(stationDocumentStepIndex("station.business-permit")).toBe(3);
+    expect(stationDocumentStepIndex("station.fire-safety-certificate")).toBe(3);
+    expect(stationDocumentStepIndex("station.regulatory-certificate")).toBe(3);
+  });
+
+  it("opens all structured station photographs in the premises-photo step", () => {
+    expect(stationDocumentStepIndex("station.photo.front")).toBe(4);
+    expect(stationDocumentStepIndex("station.photo.tank")).toBe(4);
   });
 });
