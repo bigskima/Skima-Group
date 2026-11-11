@@ -1,5 +1,6 @@
 import {
   documentSubmissionIsReady,
+  driverDocumentStepIndex,
   latestDocumentSubmissionForRequirement,
 } from "./documentSubmissions";
 
@@ -102,5 +103,17 @@ describe("driver application document readiness", () => {
         replacement_requested: true,
       }),
     ).toBe(false);
+  });
+});
+
+
+describe("driver document review navigation", () => {
+  it("opens identity and driver photo in the identity step", () => {
+    expect(driverDocumentStepIndex("driver.identity")).toBe(2);
+    expect(driverDocumentStepIndex("driver.profile-photo")).toBe(2);
+  });
+
+  it("opens a driver licence in the licence step", () => {
+    expect(driverDocumentStepIndex("driver.licence")).toBe(3);
   });
 });
