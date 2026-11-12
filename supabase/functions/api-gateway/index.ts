@@ -5274,7 +5274,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       target_model_year: optionalInteger(body.value.modelYear),
       target_color: optionalString(body.value.color),
       target_fuel_type: optionalString(body.value.fuelType),
-      target_max_load_kg: optionalNumber(body.value.maxLoadKg),
+      target_max_load_kg: body.value.maxLoadKg === undefined || body.value.maxLoadKg === null ? null : requireNumber(body.value.maxLoadKg, "maxLoadKg"),
       target_service_keys: requireStringArray(body.value.serviceKeys, "serviceKeys"),
       target_ownership_relationship: requireString(body.value.ownershipRelationship, "ownershipRelationship"),
       target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
