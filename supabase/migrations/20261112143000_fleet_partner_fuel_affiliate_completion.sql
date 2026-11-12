@@ -940,7 +940,7 @@ to service_role;
 -- the same affiliate wallet so the customer sees one consolidated earning balance.
 alter function public.read_my_lpg_station_affiliate() rename to read_my_lpg_station_affiliate_lpg_only;
 create or replace function public.read_my_lpg_station_affiliate() returns jsonb
-language plpgsql stable security definer set search_path=public,pg_temp as $
+language plpgsql stable security definer set search_path=public,pg_temp as $fuelwrap$
 declare result jsonb; affiliate_id uuid; fuel_earned numeric(28,8):=0;
 begin
   result:=public.read_my_lpg_station_affiliate_lpg_only();
@@ -953,7 +953,7 @@ begin
   result:=jsonb_set(result,'{lpgTotalEarned}',to_jsonb(coalesce(nullif(result->>'totalEarned','')::numeric,0)-fuel_earned),true);
   return result;
 end;
-$;
+$fuelwrap$;
 revoke all on function public.read_my_lpg_station_affiliate() from public,anon;
 grant execute on function public.read_my_lpg_station_affiliate() to authenticated,service_role;
 
