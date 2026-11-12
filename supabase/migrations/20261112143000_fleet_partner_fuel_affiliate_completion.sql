@@ -55,6 +55,18 @@ using (
   or public.has_permission('platform.vehicles.manage',null)
 );
 
+-- Invitations contain private staff identity and role information. Only fleet owners/managers
+-- and authorised platform fleet administrators can inspect invitation records.
+drop policy if exists fleet_staff_invitations_managers_read on public.fleet_staff_invitations;
+create policy fleet_staff_invitations_managers_read
+on public.fleet_staff_invitations
+for select to authenticated
+using (
+  public.is_fleet_staff(fleet_partner_id,array['owner_admin','fleet_manager'])
+  or public.has_permission('platform.fleets.read',null)
+  or public.has_permission('platform.vehicles.manage',null)
+);
+
 -- Dedicated document requirement records make fleet application evidence reviewable by
 -- the existing protected document-review workflow even though fleet applications have
 -- their own lifecycle table (not application_records).
