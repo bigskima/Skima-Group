@@ -12,19 +12,21 @@ SKIMA distributes two customer mobile applications through Google Play:
 
 This is a mobile distribution consolidation. It is not a consolidation or retirement of SKIMA's four web products.
 
-## 2. Mobile workspaces
+## 2. Complete workspaces in both web and native experiences
 
-The Refill mobile shell contains two full customer workspaces:
+The Refill app, on both web and native, contains two full customer workspaces:
 
 - Refill: the complete LPG, fuel and energy fulfilment experience.
 - Bills: the complete Bills customer application, including bill discovery, validation, payment, activity, receipts, saved billers, wallet, notifications, account and support.
 
-The Logistics mobile shell contains two full customer workspaces:
+The Logistics app, on both web and native, contains two full customer workspaces:
 
 - Logistics: the complete customer, provider, company and driver logistics experience.
 - Store: the complete Store customer application, including the product catalogue, product detail, basket, checkout, orders, wallet, notifications, account, referrals, support and permitted Store management screens.
 
-Store and Bills are not reduced to small cards or partial pages. Their existing complete app workspaces and their dedicated navigation are hosted inside their assigned shell. Each module has a clear return action to its parent workspace. The host shell supplies the authenticated session and shared query client; module-specific policy gates, guides, navigation and notification registration remain scoped to the module.
+Store and Bills are not reduced to small cards or partial pages. Their existing complete app workspaces and their dedicated navigation are hosted inside their assigned shell. Each module has a clear return action to its parent workspace. The host app supplies the authenticated session and shared query client; module-specific policy gates, guides, navigation and notification registration remain scoped to the module.
+
+These are shared Expo Router routes, not native-only overlays or web shortcuts. The complete Bills workspace is mounted at `/(customer)/bills` in `apps/lpg-mobile`, so it is present at `refill.skima.online` as well as in the Refill Android app. The complete Store workspace is mounted at `/(customer)/store` in `apps/logistics-mobile`, so it is present at `logistics.skima.online` as well as in the Logistics Android app. Both retain their own navigation and return-to-parent controls across web and native.
 
 ## 3. Four complete independent web products remain
 
