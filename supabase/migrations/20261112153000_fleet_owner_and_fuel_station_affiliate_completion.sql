@@ -919,21 +919,34 @@ begin
    'activeVersion',(select to_jsonb(v) from public.financial_policy_versions v join public.financial_policy_definitions d on d.id=v.policy_definition_id
     where d.key='commission.fuel.station_affiliate' and v.lifecycle_status='active' order by v.version desc limit 1)
   ),
-  'affiliates',coalesce((select jsonb_agg(jsonb_build_object('id',a.id,'displayName',p.display_name,
-    'status',a.status,'referralCode',a.referral_code) order by a.created_at desc)
-    from public.lpg_station_affiliates a join public.profiles p on p.id=a.affiliate_user_id),'[]'::jsonb),
-  'referrals',coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'stationName',b.display_name,
-    'affiliateName',p.display_name,'referralCode',r.referral_code_snapshot,'status',r.status,'activatedAt',r.activated_at)
-    order by r.submitted_at desc) from public.fuel_station_affiliate_referrals r
+  'affiliates',coalesce((select jsonb_agg(jsonb_build_object(
+    'id',a.id,'displayName',p.display_name,'status',a.status,'referralCode',a.referral_code,
+    'referralCount',(select count(*) from public.fuel_station_affiliate_referrals r where r.affiliate_id=a.id),
+    'activeReferrals',(select count(*) from public.fuel_station_affiliate_referrals r where r.affiliate_id=a.id and r.status='activated'),
+    'earned',coalesce((select sum(e.amount) from public.fuel_station_affiliate_earnings e where e.affiliate_id=a.id and e.status='posted'),0)
+   ) order by a.created_at desc) from public.lpg_station_affiliates a
+    join public.profiles p on p.id=a.affiliate_user_id),'[]'::jsonb),
+  'referrals',coalesce((select jsonb_agg(jsonb_build_object(
+    'id',r.id,'stationName',b.display_name,'affiliateName',p.display_name,
+    'referralCode',r.referral_code_snapshot,'status',r.status,'activatedAt',r.activated_at,
+    'earnings',coalesce((select sum(e.amount) from public.fuel_station_affiliate_earnings e
+      where e.referral_id=r.id and e.status='posted'),0)
+   ) order by r.submitted_at desc) from public.fuel_station_affiliate_referrals r
     join public.lpg_station_affiliates a on a.id=r.affiliate_id
     join public.profiles p on p.id=a.affiliate_user_id
     join public.organization_branches b on b.id=r.branch_id),'[]'::jsonb),
-  'earnings',coalesce((select jsonb_agg(jsonb_build_object('id',e.id,'orderId',e.fuel_order_id,
+  'earnings',coalesce((select jsonb_agg(jsonb_build_object(
+    'id',e.id,'orderId',e.fuel_order_id,'publicReference',o.public_reference,
     'affiliateName',p.display_name,'stationName',b.display_name,'amount',e.amount,'currencyCode',e.currency_code,
-    'status',e.status,'policyVersion',v.version,'reversalTransactionId',e.reversal_transaction_id)
-    order by e.created_at desc) from public.fuel_station_affiliate_earnings e
-    join public.lpg_station_affiliates a on a.id=e.affiliate_id join public.profiles p on p.id=a.affiliate_user_id
-    join public.organization_branches b on b.id=e.branch_id join public.financial_policy_versions v on v.id=e.policy_version_id),'[]'::jsonb),
+    'revenueBaseAmount',e.revenue_base_amount,'commissionPercent',e.commission_percent,
+    'status',e.status,'policyVersion',v.version,'reversalTransactionId',e.reversal_transaction_id,
+    'createdAt',e.created_at)
+   order by e.created_at desc) from public.fuel_station_affiliate_earnings e
+    join public.lpg_station_affiliates a on a.id=e.affiliate_id
+    join public.profiles p on p.id=a.affiliate_user_id
+    join public.organization_branches b on b.id=e.branch_id
+    join public.financial_policy_versions v on v.id=e.policy_version_id
+    join public.order_records o on o.id=e.fuel_order_id),'[]'::jsonb),
   'commissionFailures',coalesce((select jsonb_agg(jsonb_build_object('id',f.id,'orderId',f.fuel_order_id,
     'lastError',f.last_error,'attemptCount',f.attempt_count) order by f.last_attempt_at desc)
     from public.fuel_station_affiliate_commission_failures f where f.status='pending'),'[]'::jsonb),
