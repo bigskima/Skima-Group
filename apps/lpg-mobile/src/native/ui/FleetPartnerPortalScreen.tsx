@@ -1,5 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
-import { Building2, CheckCircle2, FileCheck2, ShieldCheck, Truck, UsersRound } from "lucide-react-native";
+import { Building2, ShieldCheck, Truck, UsersRound } from "lucide-react-native";
 import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { z } from "zod";
@@ -79,7 +79,7 @@ export function FleetPartnerPortalScreen() {
   const partner = partners.find((row) =>
     firstString(row, ["verification_status"]) === "approved" &&
     firstString(row, ["operational_status"]) === "active"
-  ) ?? partners[0] ?? null;
+  ) ?? null;
   const partnerId = firstString(partner, ["id"]);
   const hasOpenApplication = applications.some((row) =>
     ["submitted", "correction_required", "resubmitted", "approved"].includes(firstString(row, ["status"]) ?? "")
@@ -207,6 +207,9 @@ export function FleetPartnerPortalScreen() {
   };
 
   if (fleet.isPending) return <ScreenSkeleton cards={4} />;
+  if (fleet.error) return <EmptyState icon={<Building2 color={palette.brand} size={26} />}
+    title="Fleet workspace unavailable" description={friendlyError(fleet.error, "Your fleet information could not be loaded.")}
+    action={<AppButton label="Try again" onPress={() => void fleet.refetch()} />} />;
 
   return (
     <Screen eyebrow="Fleet owner portal" title="Your fleet"
