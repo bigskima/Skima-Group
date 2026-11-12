@@ -33,7 +33,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
-import { useStorefrontData } from "../api/store";
 import {
   displayStatus,
   displaySubtitle,
@@ -65,87 +64,6 @@ export function CustomerDashboard() {
   const active = domainQueries.activeOrders();
   const locations = domainQueries.locations();
   const wallets = domainQueries.wallets();
-  const storefront = useStorefrontData();
-  const previewScrollRef = useRef<ScrollView>(null);
-  const previewScrollOffset = useRef(0);
-  const [previewContentWidth, setPreviewContentWidth] = useState(0);
-  const [previewViewportWidth, setPreviewViewportWidth] = useState(0);
-  useEffect(() => {
-    const maxOffset = previewContentWidth - previewViewportWidth;
-    if (maxOffset <= 8 || previewViewportWidth <= 0) return;
-    const timer = setInterval(() => {
-      const nextOffset = previewScrollOffset.current >= maxOffset ? 0 : Math.min(maxOffset, previewScrollOffset.current + 1);
-      previewScrollOffset.current = nextOffset;
-      previewScrollRef.current?.scrollTo({ x: nextOffset, animated: false });
-    }, 32);
-    return () => clearInterval(timer);
-  }, [previewContentWidth, previewViewportWidth]);
-  const marketplacePreview = useMemo(() => {
-    const settings = storefront.activeSettings;
-    const moduleId = typeof storefront.storeModule?.id === "string" ? storefront.storeModule.id : null;
-    if (!settings || !moduleId) return [];
-    const currencyCode = firstString(settings, ["currency_code", "currencyCode"]) ?? "NGN";
-    const now = Date.now();
-    return (storefront.items.data ?? [])
-      .filter((item) =>
-        item.module_id === moduleId &&
-        item.organization_id === settings.organization_id &&
-        item.status === "active" &&
-        metadataString(item, "sales_channel") === "skima_store"
-      )
-      .flatMap((item) => {
-        const itemId = recordId(item);
-        if (!itemId) return [];
-        const variants = (storefront.variants.data ?? []).filter((variant) =>
-          variant.item_id === itemId && variant.status === "active"
-        );
-        const prices = (storefront.prices.data ?? []).filter((price) =>
-          price.item_id === itemId &&
-          price.currency_code === currencyCode &&
-          price.status === "active" &&
-          isEffectiveRecord(price, now)
-        );
-        const availability = (storefront.availability.data ?? []).filter((rule) =>
-          rule.item_id === itemId && rule.status === "active" && isEffectiveRecord(rule, now)
-        );
-        const basePrice = prices.find((price) => !price.variant_id) ?? null;
-        const variantPrice = variants
-          .map((variant) => prices.find((price) => price.variant_id === variant.id) ?? basePrice)
-          .find(Boolean) ?? null;
-        const hasPrice = variants.length
-          ? variants.some((variant) => Boolean(prices.find((price) => price.variant_id === variant.id) ?? basePrice))
-          : Boolean(basePrice);
-        const baseStock = availability.find((rule) => !rule.variant_id) ?? null;
-        const hasStock = availability.length === 0
-          ? true
-          : variants.length
-            ? variants.some((variant) => {
-                const rule = availability.find((candidate) => candidate.variant_id === variant.id) ?? baseStock;
-                return Boolean(rule && isAvailableStockRecord(rule));
-              })
-            : Boolean(baseStock && isAvailableStockRecord(baseStock));
-        if (!hasPrice || !hasStock) return [];
-        const media = (storefront.media.data ?? [])
-          .filter((record) => record.item_id === itemId && record.status === "active")
-          .sort((left, right) => (firstNumber(left, ["display_order"]) ?? 0) - (firstNumber(right, ["display_order"]) ?? 0));
-        return [{
-          id: itemId,
-          name: displayTitle(item),
-          amount: firstNumber(basePrice ?? variantPrice, ["amount"]) ?? 0,
-          currency: currencyCode,
-          imageAssetId: firstString(media[0], ["media_asset_id", "mediaAssetId"]),
-        }];
-      })
-      .slice(0, 8);
-  }, [
-    storefront.activeSettings,
-    storefront.storeModule?.id,
-    storefront.items.data,
-    storefront.variants.data,
-    storefront.prices.data,
-    storefront.availability.data,
-    storefront.media.data,
-  ]);
   const location = locations.data?.[0];
   const locationLatitude = firstNumber(location, ["latitude"]);
   const locationLongitude = firstNumber(location, ["longitude"]);
