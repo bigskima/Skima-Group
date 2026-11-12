@@ -792,6 +792,24 @@ revoke all on public.fuel_station_affiliate_earnings,public.fuel_station_affilia
 grant all on public.fuel_station_affiliate_earnings,public.fuel_station_affiliate_commission_failures,
   public.fuel_station_affiliate_reversal_failures to service_role;
 
+-- These financial evidence and recovery queues are runtime-owned. Direct table
+-- access stays service-role-only; authenticated Admin reads use the guarded
+-- read_fuel_station_affiliate_admin_workspace() RPC.
+drop policy if exists fuel_station_affiliate_earnings_service_role_only on public.fuel_station_affiliate_earnings;
+create policy fuel_station_affiliate_earnings_service_role_only
+on public.fuel_station_affiliate_earnings
+for all to service_role using (true) with check (true);
+
+drop policy if exists fuel_station_affiliate_commission_failures_service_role_only on public.fuel_station_affiliate_commission_failures;
+create policy fuel_station_affiliate_commission_failures_service_role_only
+on public.fuel_station_affiliate_commission_failures
+for all to service_role using (true) with check (true);
+
+drop policy if exists fuel_station_affiliate_reversal_failures_service_role_only on public.fuel_station_affiliate_reversal_failures;
+create policy fuel_station_affiliate_reversal_failures_service_role_only
+on public.fuel_station_affiliate_reversal_failures
+for all to service_role using (true) with check (true);
+
 create or replace function public.award_fuel_station_affiliate_commission(target_fuel_order_id uuid) returns uuid
 language plpgsql security definer set search_path=public,pg_temp as $$
 declare
