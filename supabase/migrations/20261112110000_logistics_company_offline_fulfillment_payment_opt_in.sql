@@ -129,16 +129,8 @@ grant execute on function public.update_logistics_company_offline_payment_accept
 do $offline_booking_acceptance_guard$
 declare
   function_sql text;
-  guard_pattern text := $pattern$
-    if job_record\.requester_user_id <> actor then[[:space:]]+
-    raise exception 'only the customer who created the job may book a provider offer';[[:space:]]+
-    end if;
-  $pattern$;
-  new_guard text := $replacement$
-  if job_record.requester_user_id <> actor then
-    raise exception 'only the customer who created the job may book a provider offer';
-  end if;
-
+  old_marker text := $marker$perform public.select_logistics_offer(target_offer_id, target_idempotency_key || ':offer_selection');$marker$;
+  new_marker text := $replacement$
   if target_payment_mode = 'offline' and not exists (
     select 1
     from public.logistics_company_payment_settings payment_settings
@@ -148,20 +140,27 @@ declare
     raise exception using errcode = '22023',
       message = 'This logistics company does not accept offline fulfilment payment. Choose online wallet payment.';
   end if;
+
+  perform public.select_logistics_offer(target_offer_id, target_idempotency_key || ':offer_selection');
   $replacement$;
 begin
   function_sql := pg_get_functiondef(
     'public.create_logistics_booking_for_offer(uuid,text,text)'::regprocedure
   );
-  if function_sql !~ guard_pattern then
-    raise exception 'Logistics booking owner guard not found; refusing an unsafe offline-payment patch';
+
+  if position(old_marker in function_sql) = 0 then
+    raise exception 'Logistics offer-selection marker not found; refusing an unsafe offline-payment patch';
+  end if;
+  if position(old_marker in function_sql) <> length(function_sql) - length(replace(function_sql, old_marker, '')) + 1 then
+    -- The marker is expected exactly once. The check below is repeated as a
+    -- count to fail closed if the function ever contains duplicate call text.
+    null;
+  end if;
+  if (length(function_sql) - length(replace(function_sql, old_marker, ''))) / length(old_marker) <> 1 then
+    raise exception 'Multiple Logistics offer-selection markers found; refusing an ambiguous offline-payment patch';
   end if;
 
-  function_sql := regexp_replace(function_sql, guard_pattern, new_guard);
-  if function_sql ~ guard_pattern then
-    raise exception 'Multiple Logistics booking owner guards found; refusing an ambiguous offline-payment patch';
-  end if;
-
+  function_sql := replace(function_sql, old_marker, new_marker);
   execute function_sql;
 end;
 $offline_booking_acceptance_guard$;
