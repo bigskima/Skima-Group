@@ -496,6 +496,20 @@ create table if not exists public.fuel_station_affiliate_commission_failures (
  metadata jsonb not null default '{}'::jsonb
 );
 
+create table if not exists public.fuel_station_affiliate_reversal_failures (
+ id uuid primary key default gen_random_uuid(),
+ earning_id uuid not null unique references public.fuel_station_affiliate_earnings(id) on delete restrict,
+ required_amount numeric(28,8) not null check(required_amount>0),
+ available_amount numeric(28,8) not null default 0 check(available_amount>=0),
+ last_error text not null,
+ attempt_count integer not null default 1,
+ status text not null default 'pending' check(status in('pending','resolved','cancelled')),
+ last_attempt_at timestamptz not null default timezone('utc',now()),
+ resolved_at timestamptz,
+ resolved_by uuid references public.profiles(id) on delete set null,
+ metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(metadata)='object')
+);
+
 create or replace function public.ensure_fuel_station_affiliate_referral(target_branch_id uuid)
 returns uuid
 language plpgsql
@@ -771,6 +785,122 @@ begin
    +coalesce((select sum(e.amount) from public.fuel_station_affiliate_earnings e where e.affiliate_id=affiliate.id and e.status='posted'),0)
  );
 end $$;
+
+create or replace function public.reverse_fuel_station_affiliate_commission(
+ target_earning_id uuid,
+ target_reason text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare earning public.fuel_station_affiliate_earnings%rowtype;
+  affiliate public.lpg_station_affiliates%rowtype;
+  commission_wallet public.wallet_accounts%rowtype;
+  revenue_wallet public.wallet_accounts%rowtype;
+  order_row public.order_records%rowtype;
+  balance_amount numeric(28,8):=0;
+  posting_id uuid;
+  failure_message text;
+begin
+ if auth.role()<>'service_role' and (
+   not public.has_permission('platform.financial.manage',null)
+   or not public.has_permission('platform.wallets.manage',null)
+ ) then raise exception using errcode='42501',message='Financial and wallet permissions are required'; end if;
+ if target_earning_id is null or length(btrim(coalesce(target_reason,'')))<5 or length(btrim(target_reason))>500 then
+  raise exception using errcode='22023',message='A Fuel earning and a 5-500 character reversal reason are required'; end if;
+ select * into earning from public.fuel_station_affiliate_earnings where id=target_earning_id for update;
+ if not found then return jsonb_build_object('status','not_found','earningId',target_earning_id); end if;
+ if earning.status='reversed' and earning.reversal_transaction_id is not null then
+  return jsonb_build_object('status','reversed','earningId',earning.id,'transactionId',earning.reversal_transaction_id); end if;
+ if earning.status<>'posted' or earning.financial_transaction_id is null then
+  return jsonb_build_object('status','not_eligible','earningId',earning.id,'earningStatus',earning.status); end if;
+ select * into order_row from public.order_records where id=earning.fuel_order_id;
+ select * into affiliate from public.lpg_station_affiliates where id=earning.affiliate_id;
+ select * into commission_wallet from public.wallet_accounts
+  where id=earning.commission_wallet_id and wallet_type='commission'
+   and owner_entity_type='user' and owner_entity_id=affiliate.affiliate_user_id
+   and currency_code=earning.currency_code and status='active';
+ select wallet.* into revenue_wallet
+ from public.wallet_ledger_entries ledger join public.wallet_accounts wallet on wallet.id=ledger.wallet_id
+ where ledger.transaction_id=earning.settlement_transaction_id and ledger.direction='credit'
+  and wallet.wallet_type='platform_revenue' and wallet.owner_entity_type='platform'
+  and wallet.currency_code=earning.currency_code
+ order by ledger.created_at limit 1;
+ if commission_wallet.id is null or revenue_wallet.id is null then
+  failure_message:='The affiliate commission wallet or originating Fuel revenue wallet is unavailable.';
+  insert into public.fuel_station_affiliate_reversal_failures(
+   earning_id,required_amount,available_amount,last_error,metadata
+  ) values(earning.id,earning.amount,0,failure_message,jsonb_build_object('reason',btrim(target_reason)))
+  on conflict(earning_id) do update set required_amount=excluded.required_amount,available_amount=0,
+   last_error=excluded.last_error,attempt_count=public.fuel_station_affiliate_reversal_failures.attempt_count+1,
+   status='pending',last_attempt_at=timezone('utc',now()),
+   metadata=public.fuel_station_affiliate_reversal_failures.metadata||excluded.metadata;
+  return jsonb_build_object('status','pending_recovery','earningId',earning.id,'requiredAmount',earning.amount,'availableAmount',0);
+ end if;
+ perform pg_advisory_xact_lock(hashtextextended(commission_wallet.id::text,0));
+ select coalesce(balance.balance,0)::numeric(28,8) into balance_amount
+ from public.wallet_balances balance
+ where balance.wallet_id=commission_wallet.id and balance.currency_code=earning.currency_code;
+ balance_amount:=coalesce(balance_amount,0);
+ if balance_amount<earning.amount then
+  failure_message:='Affiliate wallet balance is below the Fuel commission reversal amount; a later retry or manual recovery is required.';
+  insert into public.fuel_station_affiliate_reversal_failures(
+   earning_id,required_amount,available_amount,last_error,metadata
+  ) values(earning.id,earning.amount,balance_amount,failure_message,
+   jsonb_build_object('reason',btrim(target_reason),'commissionWalletId',commission_wallet.id,'revenueWalletId',revenue_wallet.id))
+  on conflict(earning_id) do update set required_amount=excluded.required_amount,available_amount=excluded.available_amount,
+   last_error=excluded.last_error,attempt_count=public.fuel_station_affiliate_reversal_failures.attempt_count+1,
+   status='pending',last_attempt_at=timezone('utc',now()),
+   metadata=public.fuel_station_affiliate_reversal_failures.metadata||excluded.metadata;
+  return jsonb_build_object('status','pending_recovery','earningId',earning.id,'requiredAmount',earning.amount,'availableAmount',balance_amount);
+ end if;
+ posting_id:=public.post_financial_transaction(
+  'refund',earning.currency_code,'fuel.station_affiliate.reversal','fuel_station_affiliate_earning',earning.id,
+  jsonb_build_array(
+   jsonb_build_object('wallet_id',commission_wallet.id,'direction','debit','amount',earning.amount,'entry_type','commission',
+    'metadata',jsonb_build_object('role','affiliate_commission_reversal','affiliate_id',earning.affiliate_id,'referral_id',earning.referral_id,'fuel_order_id',earning.fuel_order_id)),
+   jsonb_build_object('wallet_id',revenue_wallet.id,'direction','credit','amount',earning.amount,'entry_type','commission',
+    'metadata',jsonb_build_object('role','skima_revenue_recovery','affiliate_id',earning.affiliate_id,'referral_id',earning.referral_id,'fuel_order_id',earning.fuel_order_id))
+  ),
+  'fuel-station-affiliate-reversal:'||earning.id::text,null,order_row.public_reference,
+  jsonb_build_object('policyKey','commission.fuel.station_affiliate','policyVersionId',earning.policy_version_id,'reversal',true),
+  jsonb_build_object('earningId',earning.id,'originalCommissionTransactionId',earning.financial_transaction_id,
+   'settlementTransactionId',earning.settlement_transaction_id,'fuelOrderId',earning.fuel_order_id,
+   'reason',btrim(target_reason),'amount',earning.amount)
+ );
+ update public.fuel_station_affiliate_earnings set status='reversed',reversal_transaction_id=posting_id,
+  reversed_at=timezone('utc',now()),reversal_reason=btrim(target_reason),updated_at=timezone('utc',now())
+ where id=earning.id;
+ update public.fuel_station_affiliate_reversal_failures set status='resolved',resolved_at=timezone('utc',now()),
+  resolved_by=auth.uid(),available_amount=earning.amount,last_error='Reversal posted successfully.'
+ where earning_id=earning.id and status='pending';
+ return jsonb_build_object('status','reversed','earningId',earning.id,'transactionId',posting_id,'amount',earning.amount);
+end $;
+
+create or replace function public.retry_fuel_station_affiliate_reversal(
+ target_earning_id uuid,
+ target_reason text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare failure public.fuel_station_affiliate_reversal_failures%rowtype; result jsonb;
+begin
+ if auth.role()<>'service_role' and (
+  not public.has_permission('platform.financial.manage',null)
+  or not public.has_permission('platform.wallets.manage',null)
+ ) then raise exception using errcode='42501',message='Financial and wallet permissions are required'; end if;
+ if length(btrim(coalesce(target_reason,'')))<5 or length(btrim(target_reason))>500 then
+  raise exception using errcode='22023',message='Retry reason must be 5-500 characters'; end if;
+ select * into failure from public.fuel_station_affiliate_reversal_failures where earning_id=target_earning_id for update;
+ if not found then raise exception using errcode='P0002',message='Fuel affiliate reversal failure not found'; end if;
+ result:=public.reverse_fuel_station_affiliate_commission(target_earning_id,btrim(target_reason));
+ return result;
+end $;
 
 create or replace function public.read_fuel_station_affiliate_admin_workspace()
 returns jsonb language plpgsql stable security definer set search_path=public,pg_temp as $$
