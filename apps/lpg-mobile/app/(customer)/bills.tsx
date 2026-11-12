@@ -1,3 +1,3 @@
-import { UtilityBillsScreen } from "../../src/native/ui/UtilityBillsScreen";
+import { EmbeddedBillsWorkspace } from "../../src/native/ui/EmbeddedBillsWorkspace";
 
-export default UtilityBillsScreen;
+export default EmbeddedBillsWorkspace;
