@@ -237,6 +237,7 @@ const ROUTES = new Set([
   "/runtime/fleet-vehicles/assignments",
   "/runtime/fleet-service-lines/review",
   "/runtime/fleet-staff-invitations",
+  "/runtime/fleet-staff-invitations/issue-link",
   "/runtime/fleet-staff-invitations/accept",
   "/runtime/fleet-staff/status",
   "/runtime/vehicles/lifecycle",
@@ -5203,6 +5204,13 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       target_access_role: requireString(body.value.role, "role"),
       target_reason: requireString(body.value.reason, "reason"),
       target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-staff-invitations/issue-link" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("issue_fleet_staff_invitation_link", {
+      target_invitation_id: requireString(body.value.invitationId, "invitationId"),
     }), id);
   }
 
