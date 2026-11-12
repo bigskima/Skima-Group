@@ -20,7 +20,7 @@ if (!existsSync(brandImagePath)) {
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: "SKIMA LPG",
+  name: "SKIMA Refill",
   slug: "skima-lpg",
   scheme: "skima-lpg",
   version: "1.0.0",
@@ -31,9 +31,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   experiments: { typedRoutes: true },
   web: {
     bundler: "metro",
-    name: "SKIMA LPG",
-    shortName: "SKIMA LPG",
-    description: "Order LPG refills and manage your SKIMA fulfilment.",
+    name: "SKIMA Refill",
+    shortName: "SKIMA Refill",
+    description: "LPG, fuel, bills and supported energy services through SKIMA Refill.",
     themeColor: "#ED1C2E",
     backgroundColor: "#FFFFFF",
     favicon: brandImage,
