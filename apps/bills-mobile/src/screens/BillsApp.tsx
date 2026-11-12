@@ -3,7 +3,7 @@ import { Bell, BookOpen, History, ShoppingBag, UserRound, WalletCards, ArrowLeft
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { BillsBrandMark } from "../ui/BrandMark";
-import { subscribeBillsNavigation } from "../navigation/billsNavigation";
+import { navigateBillsRoute, subscribeBillsNavigation } from "../navigation/billsNavigation";
 import { BillsHomeScreen } from "./BillsHomeScreen";
 import { BillsActivityScreen } from "./BillsActivityScreen";
 import { BillsWalletScreen, BillsTopUpScreen, BillsWithdrawScreen } from "./BillsWalletScreens";
@@ -25,7 +25,7 @@ const tabs = [
   { key: "account", label: "Account", icon: UserRound },
 ] as const;
 
-export function BillsApp({ onExit }: { readonly onExit?: () => void } = {}) {
+export function BillsApp({ onExit, initialRoute }: { readonly onExit?: () => void; readonly initialRoute?: string } = {}) {
   const { palette } = useAppTheme();
   const guide = useBillsGuide();
   const { width } = useWindowDimensions();
@@ -42,6 +42,7 @@ export function BillsApp({ onExit }: { readonly onExit?: () => void } = {}) {
     open(event.page);
     setReceiptId(event.receiptId ?? null);
   }), [open]);
+  useEffect(() => { if (initialRoute) navigateBillsRoute(initialRoute); }, [initialRoute]);
 
   const onReceipt = (id: string) => {
     setReceiptId(id);
