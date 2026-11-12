@@ -36,7 +36,6 @@ export default function Layout() {
           "locations",
           "location-editor",
           "transactions",
-          "bills",
           "payment-methods",
           "support",
           "wallet/top-up",
