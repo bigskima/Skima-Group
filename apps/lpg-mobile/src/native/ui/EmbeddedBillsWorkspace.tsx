@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { BillsHostedAppProviders } from "../../../../bills-mobile/src/providers/HostedAppProviders";
 import { BillsApp } from "../../../../bills-mobile/src/screens/BillsApp";
 import type { SessionValue as BillsSessionValue } from "../../../../bills-mobile/src/session/SessionProvider";
@@ -11,6 +11,8 @@ import { useSession } from "../session/SessionProvider";
  */
 export function EmbeddedBillsWorkspace() {
   const host = useSession();
+  const params = useLocalSearchParams<{ moduleRoute?: string | string[] }>();
+  const initialRoute = Array.isArray(params.moduleRoute) ? params.moduleRoute[0] : params.moduleRoute;
   const sessionValue = useMemo<BillsSessionValue>(() => ({
     status: host.status,
     session: host.session,
@@ -47,7 +49,7 @@ export function EmbeddedBillsWorkspace() {
 
   return (
     <BillsHostedAppProviders sessionValue={sessionValue}>
-      <BillsApp onExit={exit} />
+      <BillsApp onExit={exit} initialRoute={initialRoute} />
     </BillsHostedAppProviders>
   );
 }
