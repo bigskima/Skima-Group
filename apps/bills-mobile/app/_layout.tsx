@@ -52,7 +52,7 @@ function Navigation() {
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
       <PlatformMaintenanceNotices
         supabase={session.supabase}
-        serviceKeys={["bills", "payments", "wallets"]}
+        serviceKeys={["bills", "payments", "wallets", "support"]}
         palette={palette}
         resolveLocation={resolveMaintenanceLocation}
       />
