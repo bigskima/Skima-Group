@@ -231,6 +231,15 @@ const ROUTES = new Set([
   "/runtime/fleet-applications/review",
   "/runtime/fleet-applications/resubmit",
   "/runtime/fleet-applications/documents",
+  "/runtime/fleet-applications/documents/register",
+  "/runtime/fleet-vehicles/register",
+  "/runtime/fleet-vehicles/documents",
+  "/runtime/fleet-vehicles/assignments",
+  "/runtime/fleet-service-lines/review",
+  "/runtime/fleet-staff-invitations",
+  "/runtime/fleet-staff-invitations/issue-link",
+  "/runtime/fleet-staff-invitations/accept",
+  "/runtime/fleet-staff/status",
   "/runtime/vehicles/lifecycle",
   "/runtime/my-vehicle",
   "/runtime/my-fleet",
@@ -5118,6 +5127,117 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       target_application_id: requireString(body.value.applicationId, "applicationId"),
       target_requirement_key: requireString(body.value.requirementKey, "requirementKey"),
       target_document_submission_id: requireString(body.value.documentSubmissionId, "documentSubmissionId"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-applications/documents/register" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("register_fleet_application_document", {
+      target_application_id: requireString(body.value.applicationId, "applicationId"),
+      target_requirement_key: requireString(body.value.requirementKey, "requirementKey"),
+      target_media_asset_id: requireString(body.value.mediaAssetId, "mediaAssetId"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-vehicles/register" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    const value = body.value;
+    const serviceKeys = Array.isArray(value.serviceKeys)
+      ? value.serviceKeys.filter((item): item is string => typeof item === "string")
+      : [];
+    return rpcResponse(supabase.rpc("register_fleet_partner_vehicle", {
+      target_vehicle_type_id: requireString(value.vehicleTypeId, "vehicleTypeId"),
+      target_registration_number: requireString(value.registrationNumber, "registrationNumber"),
+      target_manufacturer: requireString(value.manufacturer, "manufacturer"),
+      target_model: requireString(value.model, "model"),
+      target_model_year: typeof value.modelYear === "number" ? value.modelYear : null,
+      target_color: optionalString(value.color),
+      target_max_load_kg: typeof value.maxLoadKg === "number" ? value.maxLoadKg : null,
+      target_cargo_volume_m3: typeof value.cargoVolumeM3 === "number" ? value.cargoVolumeM3 : null,
+      target_fuel_type: optionalString(value.fuelType),
+      target_insurance_expires_at: optionalString(value.insuranceExpiresAt),
+      target_inspection_expires_at: optionalString(value.inspectionExpiresAt),
+      target_roadworthiness_expires_at: optionalString(value.roadworthinessExpiresAt),
+      target_service_keys: serviceKeys,
+      target_ownership_relationship: optionalString(value.ownershipRelationship) ?? "fleet_owned",
+      target_legal_owner_name: optionalString(value.legalOwnerName),
+      target_legal_owner_identifier: optionalString(value.legalOwnerIdentifier),
+      target_authorization_reference: optionalString(value.authorizationReference),
+      target_reason: requireString(value.reason, "reason"),
+      target_idempotency_key: requireString(value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-vehicles/documents" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("register_fleet_vehicle_document", {
+      target_vehicle_id: requireString(body.value.vehicleId, "vehicleId"),
+      target_requirement_key: requireString(body.value.requirementKey, "requirementKey"),
+      target_media_asset_id: requireString(body.value.mediaAssetId, "mediaAssetId"),
+      target_valid_from: optionalString(body.value.validFrom),
+      target_valid_until: optionalString(body.value.validUntil),
+      target_reason: requireString(body.value.reason, "reason"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-vehicles/assignments" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("assign_fleet_driver_vehicle", {
+      target_fleet_partner_id: requireString(body.value.fleetPartnerId, "fleetPartnerId"),
+      target_driver_profile_id: requireString(body.value.driverProfileId, "driverProfileId"),
+      target_vehicle_id: requireString(body.value.vehicleId, "vehicleId"),
+      target_service_key: requireString(body.value.serviceKey, "serviceKey"),
+      target_relationship: optionalString(body.value.relationship) ?? "fleet_owned",
+      target_reason: requireString(body.value.reason, "reason"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-staff-invitations" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("create_fleet_staff_invitation", {
+      target_fleet_partner_id: requireString(body.value.fleetPartnerId, "fleetPartnerId"),
+      target_invitee_email: requireString(body.value.email, "email"),
+      target_access_role: requireString(body.value.role, "role"),
+      target_reason: requireString(body.value.reason, "reason"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-staff-invitations/issue-link" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("issue_fleet_staff_invitation_link", {
+      target_invitation_id: requireString(body.value.invitationId, "invitationId"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-staff-invitations/accept" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("accept_fleet_staff_invitation", {
+      target_invite_token: requireString(body.value.inviteToken, "inviteToken"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-staff/status" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("revoke_fleet_staff_access", {
+      target_fleet_partner_id: requireString(body.value.fleetPartnerId, "fleetPartnerId"),
+      target_staff_id: requireString(body.value.staffId, "staffId"),
+      target_reason: requireString(body.value.reason, "reason"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-service-lines/review" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("review_fleet_vehicle_service_line", {
+      target_vehicle_id: requireString(body.value.vehicleId, "vehicleId"),
+      target_service_key: requireString(body.value.serviceKey, "serviceKey"),
+      target_decision: requireString(body.value.decision, "decision"),
+      target_reason: requireString(body.value.reason, "reason"),
       target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
     }), id);
   }

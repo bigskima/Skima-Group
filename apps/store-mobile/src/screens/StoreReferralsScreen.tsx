@@ -14,6 +14,30 @@ function value(row: Row | null | undefined, key: string) {
 function rows(value: unknown): Row[] {
   return Array.isArray(value) ? value.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
 }
+function rewardSummary(reward: Row) {
+  const raw=reward.rewardDefinition;
+  const definition=raw && typeof raw==="object" && !Array.isArray(raw) ? raw as Record<string,unknown> : {};
+  const amount=Number(definition.amount);
+  const currency=typeof definition.currency_code==="string" ? definition.currency_code.toUpperCase() : "NGN";
+  if(definition.type==="wallet_credit" && Number.isFinite(amount) && amount>0) {
+    try { return new Intl.NumberFormat("en-NG",{style:"currency",currency,maximumFractionDigits:2}).format(amount); }
+    catch { return currency+" "+amount.toFixed(2); }
+  }
+  return typeof definition.type==="string" ? definition.type.replace(/_/g," ") : "Campaign reward";
+}
+function rewardStatusLabel(status: string) {
+  if(status==="pending") return "Pending review";
+  if(status==="approved") return "Approved · awaiting credit";
+  if(status==="posted") return "Credited to wallet";
+  if(status==="rejected") return "Not approved";
+  if(status==="cancelled") return "Cancelled";
+  return status.replace(/_/g," ");
+}
+function rewardDate(reward: Row) {
+  const dateText=value(reward,"postedAt") || value(reward,"createdAt");
+  const timestamp=Date.parse(dateText);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toLocaleDateString() : "";
+}
 
 export function StoreReferralsScreen() {
   const session = useSession();
@@ -35,6 +59,7 @@ export function StoreReferralsScreen() {
   const code = value(data, "referralCode");
   const campaigns = rows(data.activeCampaigns);
   const referrals = rows(data.referrals);
+  const rewards = rows(data.rewards);
   const leaderboard = rows(data.leaderboard);
   const optIn = data.leaderboardOptIn === true;
 
@@ -93,6 +118,7 @@ export function StoreReferralsScreen() {
       <View style={styles.stats}>
         <Metric label="Your referrals" number={String(referrals.length)} />
         <Metric label="Active campaigns" number={String(campaigns.length)} />
+        <Metric label="Rewards credited" number={String(rewards.filter((reward)=>value(reward,"status")==="posted").length)} />
       </View>
 
       <View style={styles.sectionHead}><Gift color={palette.brand} size={18} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Campaigns</Text></View>
@@ -116,6 +142,18 @@ export function StoreReferralsScreen() {
             <Text style={[styles.meta, { color: palette.muted }]}>{value(referral, "appKey").toUpperCase()} · {value(referral, "campaignName") || "General referral"}</Text>
           </View>
           <Text style={[styles.status, { color: value(referral, "status") === "qualified" ? palette.success : palette.muted }]}>{value(referral, "status").replace(/_/g, " ")}</Text>
+        </View>
+      ))}
+
+      <View style={styles.sectionHead}><Gift color={palette.brand} size={18} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Reward history</Text></View>
+      {rewards.length===0 ? <Empty text="Your referral rewards will appear here after a campaign qualification and review."/> : rewards.map((reward)=>(
+        <View key={value(reward,"id")} style={[styles.rowCard,{backgroundColor:palette.surface,borderColor:palette.border}]}>
+          <View style={{flex:1}}>
+            <Text style={[styles.cardTitle,{color:palette.ink}]}>{value(reward,"rewardSide")==="referred" ? "Welcome reward" : "Invite reward"}</Text>
+            <Text style={[styles.meta,{color:palette.brand}]}>{rewardSummary(reward)}</Text>
+            {rewardDate(reward) ? <Text style={[styles.meta,{color:palette.muted}]}>{value(reward,"status")==="posted" ? "Credited" : "Created"} · {rewardDate(reward)}</Text> : null}
+          </View>
+          <Text style={[styles.status,{color:value(reward,"status")==="posted" ? palette.success : palette.muted}]}>{rewardStatusLabel(value(reward,"status"))}</Text>
         </View>
       ))}
 

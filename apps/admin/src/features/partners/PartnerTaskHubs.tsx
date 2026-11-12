@@ -1,6 +1,7 @@
 import {
   BadgeDollarSign,
   ClipboardCheck,
+  Building2,
   MapPinned,
   Route,
   ShieldCheck,
@@ -77,6 +78,15 @@ export function FleetManagementHub(props: { readonly onNavigate: (href: string) 
       description="Work on one fleet task at a time. Vehicle registration and Driver assignment stay separate from document compliance and Driver coverage."
       onNavigate={props.onNavigate}
       actions={[
+        {
+          key: "fleet-partners",
+          title: "Partner fleet owners",
+          description: "Review external fleet applications and evidence, approve LPG and Fuel vehicle service eligibility, and manage fleet partner staff.",
+          href: "/partners/fleet/partners",
+          icon: Building2,
+          meta: "External fleet owners",
+          permissionKey: "fleet",
+        },
         {
           key: "fleet-vehicles",
           title: "Vehicles & assignments",

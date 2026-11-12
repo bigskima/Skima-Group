@@ -98,13 +98,25 @@ function readReward(value:string,label:string) {
   let parsed:unknown;
   try { parsed=JSON.parse(value || "{}"); } catch { throw new Error(label+" must be valid JSON."); }
   if(!parsed || typeof parsed!=="object" || Array.isArray(parsed)) throw new Error(label+" must be a JSON object.");
-  return parsed as Record<string,unknown>;
+  const reward=parsed as Record<string,unknown>;
+  if(Object.keys(reward).length===0) return reward;
+  if(reward.type!=="wallet_credit") throw new Error(label+" must use type=wallet_credit so the approved reward can be posted to the beneficiary's SKIMA wallet.");
+  const amount=Number(reward.amount);
+  if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100) throw new Error(label+" amount must be positive and use no more than two decimal places.");
+  const currency=String(reward.currency_code??"").trim().toUpperCase();
+  if(!/^[A-Z0-9]{3,12}$/.test(currency)) throw new Error(label+" must specify an enabled currency_code, for example NGN.");
+  return {...reward,type:"wallet_credit",amount,currency_code:currency};
 }
 
 export function AdminReferralsWorkspace() {
   const { supabase, context, status } = useSessionState();
   const client=useQueryClient();
   const canManage=context?.platformAdmin?.admin_kind==="super_admin" || Boolean(context?.permissions.includes("platform.content.manage"));
+  const canFulfilRewards=context?.platformAdmin?.admin_kind==="super_admin" || (
+    context?.permissions.includes("platform.financial.manage")
+    && context?.permissions.includes("platform.wallets.manage")
+    && context?.permissions.includes("platform.revenue.manage")
+  );
   const [form,setForm]=useState<FormValue>(EMPTY_FORM);
   const [editingId,setEditingId]=useState<string|null>(null);
   const [notice,setNotice]=useState<string|null>(null);
@@ -129,8 +141,8 @@ export function AdminReferralsWorkspace() {
     retry:false,
     queryFn:async()=>{
       const {data,error}=await supabase.from("referral_reward_entries")
-        .select("id,referral_id,beneficiary_user_id,reward_side,reward_definition,status,created_at,metadata")
-        .in("status",["pending","approved"])
+        .select("id,referral_id,beneficiary_user_id,reward_side,reward_definition,status,created_at,approved_at,posted_at,financial_transaction_id,metadata")
+        .in("status",["pending","approved","posted","rejected","cancelled"])
         .order("created_at",{ascending:false}).limit(100);
       if(error)throw error;
       return Array.isArray(data)?data as Record<string,unknown>[]:[];
@@ -152,6 +164,23 @@ export function AdminReferralsWorkspace() {
       await client.invalidateQueries({queryKey:["admin-referral-reward-review"]});
     },
     onError:(cause)=>{setErrorMessage(cause instanceof Error?cause.message:"Reward review failed.");setNotice(null);},
+  });
+
+  const fulfilReward=useMutation({
+    mutationFn:async(input:{id:string;reason:string})=>{
+      const {data,error}=await supabase.rpc("fulfil_skima_referral_reward",{
+        target_reward_entry_id:input.id,
+        target_reason:input.reason,
+      });
+      if(error)throw error;
+      return data as {status?:string;financialTransactionId?:string;amount?:number;currencyCode?:string};
+    },
+    onSuccess:async(result)=>{
+      setNotice(`Reward posted to the beneficiary wallet${result?.amount? ` · ${new Intl.NumberFormat(undefined,{style:"currency",currency:result.currencyCode??"NGN",maximumFractionDigits:2}).format(result.amount)}`:""}.`);
+      setErrorMessage(null);
+      await client.invalidateQueries({queryKey:["admin-referral-reward-review"]});
+    },
+    onError:(cause)=>{setErrorMessage(cause instanceof Error?cause.message:"Referral reward fulfilment failed.");setNotice(null);},
   });
 
   const save=useMutation({
@@ -245,7 +274,7 @@ export function AdminReferralsWorkspace() {
               <TextAreaInput label="New customer reward definition (JSON)" rows={4} value={form.referred_reward} onChange={(event)=>setForm({...form,referred_reward:event.currentTarget.value})}/>
             </div>
             <TextAreaInput label="Campaign terms" rows={3} value={form.terms} onChange={(event)=>setForm({...form,terms:event.currentTarget.value})}/>
-            <p className="admin-referrals__hint"><Gift size={15}/> Reward definitions are configuration only. The campaign does not credit wallets automatically; qualifying rewards require an approved fulfilment and financial-posting workflow.</p>
+            <p className="admin-referrals__hint"><Gift size={15}/> Wallet reward format: <code>{"{"}"type":"wallet_credit","amount":500,"currency_code":"NGN"{"}"}</code>. A qualifying referral enters review first; only an approved reward can be credited to the beneficiary's existing SKIMA wallet through the financial ledger. The reward is funded from the SKIMA revenue wallet and fulfilment requires sufficient available balance.</p>
             <div className="admin-referrals__buttons">
               <Button type="submit" icon={Save} isLoading={save.isPending}>{editingId?"Save changes":"Create campaign"}</Button>
               {editingId?<Button variant="outline" onClick={()=>{setEditingId(null);setForm(EMPTY_FORM);}}>Cancel edit</Button>:null}
@@ -275,7 +304,10 @@ export function AdminReferralsWorkspace() {
                 {reward.status==="pending"?<div className="admin-referrals__buttons">
                   <Button size="sm" disabled={reviewReward.isPending} onClick={()=>reviewReward.mutate({id:String(reward.id),decision:"approved"})}>Approve for fulfilment</Button>
                   <Button size="sm" variant="outline" disabled={reviewReward.isPending} onClick={()=>reviewReward.mutate({id:String(reward.id),decision:"rejected"})}>Reject</Button>
-                </div>:<small>Approved; awaiting separate fulfilment and financial posting.</small>}
+                </div>:reward.status==="approved"?<div className="admin-referrals__buttons">
+                  {canFulfilRewards?<Button size="sm" disabled={fulfilReward.isPending} onClick={()=>fulfilReward.mutate({id:String(reward.id),reason:"Approved shared SKIMA referral reward posted to the beneficiary wallet."})}>Credit customer wallet</Button>:<small>Approved; requires financial, wallet and revenue management access to fulfil.</small>}
+                  <small>Approval alone does not move money.</small>
+                </div>:reward.status==="posted"?<small>Credited to the beneficiary wallet · transaction {String(reward.financial_transaction_id??"recorded")}</small>:<small>{String(reward.status)} · no wallet credit was posted.</small>}
               </article>;
             })}
           </div>

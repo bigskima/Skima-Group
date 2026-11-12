@@ -32,6 +32,7 @@ import {
 } from "@skima/ui";
 
 import { AdminFulfillmentPriorityControl } from "../../admin-fulfillment-priority-control";
+import { AdminFuelAffiliateWorkspace } from "../../admin-fuel-affiliate-workspace";
 import { useSessionState } from "../../session";
 import "./fulfillment-v2.css";
 
@@ -46,7 +47,8 @@ type FulfillmentSection =
   | "team"
   | "activity"
   | "advanced"
-  | "station-affiliates";
+  | "station-affiliates"
+  | "fuel-affiliates";
 
 type FulfillmentMode = "marketplace_only" | "internal_only" | "hybrid";
 
@@ -119,7 +121,8 @@ const sections: readonly {
   { key: "lpg-price", label: "LPG buying price", short: "Area reference", icon: Fuel },
   { key: "team", label: "Managed team", short: "Drivers & fleet", icon: UsersRound },
   { key: "activity", label: "Activity", short: "Purchases & pay", icon: Activity },
-  { key: "station-affiliates", label: "Station affiliates", short: "Referrals & commission", icon: UsersRound },
+  { key: "station-affiliates", label: "LPG station affiliates", short: "LPG referrals & commission", icon: UsersRound },
+  { key: "fuel-affiliates", label: "Fuel station affiliates", short: "Fuel referrals & commission", icon: Fuel },
   { key: "advanced", label: "Advanced", short: "All settings", icon: Settings2 },
 ];
 
@@ -156,7 +159,7 @@ export function FulfillmentWorkspaceV2(props: {
 
   const configuration = useQuery({
     queryKey: ["lpg-launch-assurance-configuration"],
-    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates",
+    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates" && section !== "fuel-affiliates",
     retry: false,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("read_lpg_launch_assurance_configuration");
@@ -167,7 +170,7 @@ export function FulfillmentWorkspaceV2(props: {
 
   const readiness = useQuery({
     queryKey: ["lpg-launch-assurance-readiness"],
-    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates",
+    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates" && section !== "fuel-affiliates",
     retry: false,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("read_lpg_internal_launch_readiness");
@@ -185,6 +188,23 @@ export function FulfillmentWorkspaceV2(props: {
       queryClient.invalidateQueries({ queryKey: ["lpg-managed-driver-payouts"] }),
     ]);
   };
+
+  if (section === "fuel-affiliates") {
+    return (
+      <div className="fulfillment-v2 stack-lg">
+        <FulfillmentHeader onRefresh={null} />
+        <FulfillmentSectionNav active={section} onNavigate={props.onNavigate} />
+        <AdminFuelAffiliateWorkspace
+          canRead={canReadAffiliateAdmin}
+          canManageAffiliate={canManageAffiliate}
+          canDraftPolicy={canDraftFinancialPolicy}
+          canApprovePolicy={canApproveFinancialPolicy}
+          canActivatePolicy={canActivateFinancialPolicy}
+          canRetryCommission={Boolean(isSuperAdmin || context?.permissions.includes("platform.revenue.manage") || context?.permissions.includes("platform.wallets.manage"))}
+        />
+      </div>
+    );
+  }
 
   if (section === "station-affiliates") {
     return (
