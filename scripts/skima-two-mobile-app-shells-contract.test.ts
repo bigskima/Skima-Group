@@ -31,6 +31,14 @@ Deno.test("Refill and Logistics host the complete Bills and Store applications r
   }
   requireText(billsApp, "initialRoute", "Bills in-module deep linking");
   requireText(storeApp, "initialRoute", "Store in-module deep linking");
+  const [refillConfig, logisticsConfig] = await Promise.all([
+    read("apps/lpg-mobile/app.config.ts"),
+    read("apps/logistics-mobile/app.config.ts"),
+  ]);
+  requireText(refillConfig, 'output: "single"', "Refill web shell exports hosted Bills routes");
+  requireText(logisticsConfig, 'output: "single"', "Logistics web shell exports hosted Store routes");
+  requireText(refillRoute, "EmbeddedBillsWorkspace", "Shared web/native Bills route");
+  requireText(logisticsRoute, "EmbeddedStoreWorkspace", "Shared web/native Store route");
 });
 
 Deno.test("Hosted service modules reuse the parent app session and query client", async () => {
@@ -142,6 +150,8 @@ Deno.test("All four complete web applications and their production web projects 
 Deno.test("The website exposes two mobile downloads without removing Bills or Store web services", async () => {
   const website = await read("apps/website/index.html");
   requireText(website, "Bills and Store remain complete, independently accessible web apps.", "Mobile download explanation");
+  requireText(website, "full Bills experience is also available inside Refill on web and mobile", "Refill web and mobile Bills integration");
+  requireText(website, "complete SKIMA Store shopping experience inside Logistics on web and mobile", "Logistics web and mobile Store integration");
   requireText(website, 'const ordered=["refill","logistics"]', "Mobile app download list");
   requireText(website, 'href="https://bills.skima.online/"', "Bills service card");
   requireText(website, 'href="https://store.skima.online/"', "Store service card");
