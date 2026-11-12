@@ -84,6 +84,7 @@ export function PartnersWorkspaceRouter(props: {
   if (props.route === "/partners/fleet") {
     return <FleetManagementHub onNavigate={props.onNavigate} />;
   }
+  if (props.route === "/partners/fleet/partners") return <AdminFleetWorkspace />;
   if (props.route === "/partners/fleet/vehicles") {
     return <AdminSkimaFleetWorkspace onNavigate={props.onNavigate} />;
   }
