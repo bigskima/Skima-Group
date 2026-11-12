@@ -172,6 +172,7 @@
     "20261110164500_logistics_company_earnings_transfer_to_owner_wallet.sql",
     "20261111140000_platform_application_access_and_maintenance_controls.sql",
     "20261112100000_platform_availability_controls_geography_read.sql",
-    "20261112143000_fleet_partner_fuel_affiliate_completion.sql"
+    "20261112143000_fleet_partner_fuel_affiliate_completion.sql",
+    "20261112164500_fuel_affiliate_trigger_acl_hardening.sql"
   ]
 }
