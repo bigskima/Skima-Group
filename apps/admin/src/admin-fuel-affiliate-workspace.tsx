@@ -119,7 +119,7 @@ export function AdminFuelAffiliateWorkspace(props: {
         program_enabled: enabled,
         commission_percent: rate,
         earning_period_months: months,
-        eligible_revenue_streams: ["platform_fee"],
+        eligible_revenue_streams: ["fuel_platform_fee"],
       };
       const { data, error } = await supabase.rpc("create_financial_policy_version", {
         target_policy_key: "commission.fuel.station_affiliate",
