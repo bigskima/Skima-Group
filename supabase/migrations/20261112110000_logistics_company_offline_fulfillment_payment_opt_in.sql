@@ -151,11 +151,6 @@ begin
   if position(old_marker in function_sql) = 0 then
     raise exception 'Logistics offer-selection marker not found; refusing an unsafe offline-payment patch';
   end if;
-  if position(old_marker in function_sql) <> length(function_sql) - length(replace(function_sql, old_marker, '')) + 1 then
-    -- The marker is expected exactly once. The check below is repeated as a
-    -- count to fail closed if the function ever contains duplicate call text.
-    null;
-  end if;
   if (length(function_sql) - length(replace(function_sql, old_marker, ''))) / length(old_marker) <> 1 then
     raise exception 'Multiple Logistics offer-selection markers found; refusing an ambiguous offline-payment patch';
   end if;
