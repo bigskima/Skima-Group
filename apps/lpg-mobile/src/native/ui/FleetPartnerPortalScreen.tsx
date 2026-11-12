@@ -74,6 +74,8 @@ export function FleetPartnerPortalScreen() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<(typeof roles)[number]["key"]>("fleet_manager");
   const [inviteReason, setInviteReason] = useState("Authorised to support fleet operations.");
+  const [revokeStaffId, setRevokeStaffId] = useState<string | null>(null);
+  const [revokeStaffReason, setRevokeStaffReason] = useState("");
 
   const applications = records(fleet.data?.applications);
   const partners = records(fleet.data?.partners);
@@ -238,6 +240,30 @@ export function FleetPartnerPortalScreen() {
       setNotice(`A fresh seven-day invitation link was issued for ${email}.`);
     } catch (cause) {
       setError(friendlyError(cause, "A fresh fleet invitation link could not be issued."));
+    } finally { setBusy(null); }
+  };
+
+  const revokeStaffAccess = async (staff: PlatformRecord) => {
+    if (!partnerId) return;
+    const staffId = firstString(staff, ["id"]);
+    const reason = revokeStaffReason.trim();
+    if (!staffId || reason.length < 5) {
+      setError("Enter a reason of at least five characters before revoking staff access.");
+      return;
+    }
+    setBusy(`revoke-staff:${staffId}`); setError(""); setNotice("");
+    try {
+      await session.api.post("/runtime/fleet-staff/status", {
+        fleetPartnerId: partnerId,
+        staffId,
+        reason,
+        idempotencyKey: idempotencyKey("fleet-staff-revocation", `${partnerId}:${staffId}:${reason}`),
+      }, z.string().uuid());
+      setRevokeStaffId(null); setRevokeStaffReason("");
+      await fleet.refetch();
+      setNotice("Staff access revoked. The change has been recorded in the fleet audit trail.");
+    } catch (cause) {
+      setError(friendlyError(cause, "Fleet staff access could not be revoked."));
     } finally { setBusy(null); }
   };
 
@@ -501,12 +527,26 @@ export function FleetPartnerPortalScreen() {
             <View style={styles.chips}>{roles.map((role)=><Choice key={role.key} active={inviteRole===role.key} label={role.label} onPress={()=>setInviteRole(role.key)} />)}</View>
             <Field label="Invitation reason" value={inviteReason} onChangeText={setInviteReason} placeholder="Reason for access" />
             <AppButton fullWidth label="Create invitation" loading={busy==="invite"} disabled={busy!==null} onPress={() => void inviteStaff()} />
-            {staff.map((person,index)=><View key={String(person.id ?? index)} style={styles.documentRow}>
-              <View style={styles.copy}>
-                <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(person,["access_role"])?.replaceAll("_"," ") ?? "Fleet staff"}</Text>
-                <Text style={[styles.meta,{color:palette.muted}]}>{firstString(person,["user_id"]) ?? "Authorised SKIMA account"} · {firstString(person,["status"]) ?? "active"}</Text>
-              </View>
-            </View>)}
+            {staff.map((person,index)=>{
+              const staffId = firstString(person, ["id"]);
+              const role = firstString(person, ["access_role"]);
+              const active = firstString(person, ["status"]) === "active";
+              const canRevoke = active && role !== "owner_admin" && Boolean(staffId);
+              return <View key={String(person.id ?? index)} style={styles.documentRow}>
+                <View style={styles.copy}>
+                  <Text style={[styles.cardTitle,{color:palette.ink}]}>{role?.replaceAll("_"," ") ?? "Fleet staff"}</Text>
+                  <Text style={[styles.meta,{color:palette.muted}]}>{firstString(person,["user_id"]) ?? "Authorised SKIMA account"} · {firstString(person,["status"]) ?? "active"}</Text>
+                  {revokeStaffId === staffId ? <>
+                    <Field label="Reason for revocation" value={revokeStaffReason} onChangeText={setRevokeStaffReason} placeholder="Explain why access is being removed" />
+                    <View style={styles.chips}>
+                      <AppButton size="sm" variant="secondary" label="Cancel" disabled={busy!==null} onPress={()=>{setRevokeStaffId(null);setRevokeStaffReason("");}} />
+                      <AppButton size="sm" label="Confirm revoke" loading={busy===`revoke-staff:${staffId}`} disabled={busy!==null || revokeStaffReason.trim().length<5} onPress={()=>void revokeStaffAccess(person)} />
+                    </View>
+                  </> : null}
+                </View>
+                {canRevoke && revokeStaffId !== staffId ? <AppButton size="sm" variant="secondary" label="Revoke access" disabled={busy!==null} onPress={()=>{setRevokeStaffId(staffId);setRevokeStaffReason("");setError("");}} /> : null}
+              </View>;
+            })}
             {staffInvitations.filter((invite)=>["pending","expired"].includes(firstString(invite,["status"]) ?? "")).map((invite)=>(
               <View key={String(invite.id)} style={styles.documentRow}>
                 <View style={styles.copy}>
