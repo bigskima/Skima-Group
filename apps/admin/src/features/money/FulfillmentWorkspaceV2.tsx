@@ -200,7 +200,7 @@ export function FulfillmentWorkspaceV2(props: {
           canDraftPolicy={canDraftFinancialPolicy}
           canApprovePolicy={canApproveFinancialPolicy}
           canActivatePolicy={canActivateFinancialPolicy}
-          canRetryCommission={Boolean(isSuperAdmin || (context?.permissions.includes("platform.financial.manage") && context?.permissions.includes("platform.wallets.manage")))}
+          canRetryCommission={Boolean(isSuperAdmin || context?.permissions.includes("platform.revenue.manage") || context?.permissions.includes("platform.wallets.manage"))}
         />
       </div>
     );
