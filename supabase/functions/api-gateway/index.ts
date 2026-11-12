@@ -231,6 +231,11 @@ const ROUTES = new Set([
   "/runtime/fleet-applications/review",
   "/runtime/fleet-applications/resubmit",
   "/runtime/fleet-applications/documents",
+  "/runtime/fleet-applications/document-submissions",
+  "/runtime/fleet-applications/documents/review",
+  "/runtime/my-fleet/vehicles",
+  "/runtime/my-fleet/staff/invitations",
+  "/runtime/my-fleet/staff/invitations/accept",
   "/runtime/fleet-applications/documents/register",
   "/runtime/fleet-vehicles/register",
   "/runtime/fleet-vehicles/documents",
@@ -5227,6 +5232,73 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       target_decision: requireString(body.value.decision, "decision"),
       target_reason: requireString(body.value.reason, "reason"),
       target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-applications/document-submissions" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("register_fleet_application_document_submission", {
+      target_application_id: requireUuid(body.value.applicationId, "applicationId"),
+      target_requirement_key: requireString(body.value.requirementKey, "requirementKey"),
+      target_storage_bucket: requireString(body.value.storageBucket, "storageBucket"),
+      target_storage_path: requireString(body.value.storagePath, "storagePath"),
+      target_content_type: requireString(body.value.contentType, "contentType"),
+      target_byte_size: requireInteger(body.value.byteSize, "byteSize"),
+      target_source: optionalString(body.value.source) ?? "skima.lpg.mobile.fleet",
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+      target_metadata: optionalRecord(body.value.metadata) ?? {},
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-applications/documents/review" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("review_fleet_application_document_submission", {
+      target_document_submission_id: requireUuid(body.value.documentSubmissionId, "documentSubmissionId"),
+      target_decision: requireString(body.value.decision, "decision"),
+      target_reason: requireString(body.value.reason, "reason"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/my-fleet/vehicles" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("register_fleet_partner_vehicle", {
+      target_fleet_partner_id: requireUuid(body.value.fleetPartnerId, "fleetPartnerId"),
+      target_vehicle_type_id: requireUuid(body.value.vehicleTypeId, "vehicleTypeId"),
+      target_registration_number: requireString(body.value.registrationNumber, "registrationNumber"),
+      target_manufacturer: requireString(body.value.manufacturer, "manufacturer"),
+      target_model: requireString(body.value.model, "model"),
+      target_model_year: optionalInteger(body.value.modelYear),
+      target_color: optionalString(body.value.color),
+      target_fuel_type: optionalString(body.value.fuelType),
+      target_max_load_kg: optionalNumber(body.value.maxLoadKg),
+      target_service_keys: requireStringArray(body.value.serviceKeys, "serviceKeys"),
+      target_ownership_relationship: requireString(body.value.ownershipRelationship, "ownershipRelationship"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+      target_metadata: optionalRecord(body.value.metadata) ?? {},
+    }), id);
+  }
+
+  if (routePath === "/runtime/my-fleet/staff/invitations" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("invite_fleet_staff", {
+      target_fleet_partner_id: requireUuid(body.value.fleetPartnerId, "fleetPartnerId"),
+      target_invited_email: requireString(body.value.email, "email"),
+      target_access_role: requireString(body.value.accessRole, "accessRole"),
+      target_reason: requireString(body.value.reason, "reason"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/my-fleet/staff/invitations/accept" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("accept_fleet_staff_invitation", {
+      target_invitation_id: requireUuid(body.value.invitationId, "invitationId"),
     }), id);
   }
 
