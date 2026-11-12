@@ -6,6 +6,7 @@ on:
     # Only native-affecting Refill changes run the Expo validation job.
     # Web-only PWA assets, HTML shells and web export script edits do not.
     paths:
+      - ".github/workflows/android-production-apk.yml"
       - "apps/lpg-mobile/app.config.ts"
       - "apps/lpg-mobile/eas.json"
       - "apps/lpg-mobile/package-lock.json"
