@@ -71,12 +71,15 @@ begin
       'id', geography.id,
       'canonical_name', geography.canonical_name,
       'country_code', geography.country_code,
+      'geography_level_name', level.display_name,
+      'parent_name', parent.canonical_name,
       'status', geography.status
     ) order by level.specificity_rank, geography.canonical_name
   ), '[]'::jsonb)
   into geographies
   from public.geographies geography
   join public.geography_levels level on level.id = geography.geography_level_id
+  left join public.geographies parent on parent.id = geography.parent_id
   where geography.status = 'active'
     and level.status = 'active';
 
