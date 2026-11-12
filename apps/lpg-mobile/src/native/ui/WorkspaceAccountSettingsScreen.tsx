@@ -42,6 +42,11 @@ type StationAffiliateSummary = {
   referralCount?: number;
   activeReferrals?: number;
   totalEarned?: number;
+  combinedTotalEarned?: number;
+  fuelReferralCount?: number;
+  fuelActiveReferrals?: number;
+  fuelTotalEarned?: number;
+  fuelReferrals?: AffiliateReferral[];
   reviewReason?: string | null;
   referrals?: AffiliateReferral[];
 };
@@ -59,7 +64,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
   const refreshAffiliate = useCallback(async () => {
     setAffiliateLoading(true);
     try {
-      const result = await session.supabase.rpc("read_my_lpg_station_affiliate");
+      const result = await session.supabase.rpc("read_my_station_affiliate");
       if (result.error) throw result.error;
       setAffiliate((result.data ?? null) as StationAffiliateSummary | null);
       setAffiliateError(null);
@@ -197,7 +202,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
               <View style={styles.copy}>
                 <Text style={[styles.label, { color: theme.palette.ink }]}>SKIMA Station Affiliate</Text>
                 <Text style={[styles.detail, { color: theme.palette.muted }]}>
-                  Refer LPG stations to SKIMA. When a referred station starts serving customers, you can earn commission for a limited time. Read the programme terms before applying.
+                  Refer LPG and Fuel stations to SKIMA. Eligible Fuel commissions are calculated only from SKIMA's settled Fuel platform fee. Rates and earning periods are configured and approved separately by SKIMA.
                 </Text>
               </View>
             </View>
@@ -249,7 +254,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                 <View style={[styles.affiliateBalance, { backgroundColor: theme.palette.surfaceSubtle }]}>
                   <Text style={[styles.detail, { color: theme.palette.muted }]}>Total affiliate commissions</Text>
                   <Text style={[styles.balanceValue, { color: theme.palette.ink }]}>
-                    ₦{Number(affiliate.totalEarned ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₦{Number(affiliate.combinedTotalEarned ?? (Number(affiliate.totalEarned ?? 0) + Number(affiliate.fuelTotalEarned ?? 0))).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                   <Text style={[styles.detail, { color: theme.palette.muted }]}>
                     Available in affiliate wallet: ₦{Number(affiliate.availableBalance ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -280,6 +285,33 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                     ))}
                   </View>
                 ) : null}
+                <View style={styles.affiliateReferralList}>
+                  <Text style={[styles.affiliateStatusTitle, { color: theme.palette.ink }]}>Fuel station referrals</Text>
+                  <View style={styles.affiliateMetrics}>
+                    <View style={styles.affiliateMetric}>
+                      <Text style={[styles.metricValue, { color: theme.palette.ink }]}>{affiliate.fuelReferralCount ?? 0}</Text>
+                      <Text style={[styles.detail, { color: theme.palette.muted }]}>Fuel stations referred</Text>
+                    </View>
+                    <View style={styles.affiliateMetric}>
+                      <Text style={[styles.metricValue, { color: theme.palette.ink }]}>{affiliate.fuelActiveReferrals ?? 0}</Text>
+                      <Text style={[styles.detail, { color: theme.palette.muted }]}>Fuel stations active</Text>
+                    </View>
+                  </View>
+                  {(affiliate.fuelReferrals ?? []).length ? (affiliate.fuelReferrals ?? []).slice(0, 8).map((referral) => (
+                    <View key={referral.id} style={[styles.affiliateReferralRow, { borderBottomColor: theme.palette.border }]}>
+                      <View style={styles.copy}>
+                        <Text style={[styles.label, { color: theme.palette.ink }]}>{referral.stationName ?? "Fuel station"}</Text>
+                        <Text style={[styles.detail, { color: theme.palette.muted }]}>{referral.status.replaceAll("_", " ")}</Text>
+                      </View>
+                      <Text style={[styles.detail, { color: theme.palette.ink }]}>
+                        ₦{Number(referral.earned ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </View>
+                  )) : (
+                    <Text style={[styles.detail, { color: theme.palette.muted }]}>No Fuel referrals yet. Your active code can be entered during station onboarding.</Text>
+                  )}
+                  <Text style={[styles.detail, { color: theme.palette.muted }]}>Fuel commissions are credited only after an attributed Fuel station becomes active, completes eligible Fuel orders, and SKIMA's approved Fuel affiliate policy permits payment.</Text>
+                </View>
               </>
             ) : (
               <View style={[styles.affiliateStatus, { backgroundColor: theme.palette.surfaceSubtle }]}>
