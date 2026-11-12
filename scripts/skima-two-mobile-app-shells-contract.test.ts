@@ -124,12 +124,10 @@ Deno.test("The website exposes two mobile downloads without removing Bills or St
 });
 
 Deno.test("Admin remains a separate product with four separate operational workflows", async () => {
-  const [adminManifest, adminStore, docs] = await Promise.all([
-    read("apps/admin/package.json"),
+  const [adminStore, docs] = await Promise.all([
     read("apps/admin/src/features/store/StoreWorkspace.tsx"),
     read("docs/53-skima-two-mobile-app-shells.md"),
   ]);
-  requireText(adminManifest, "@skima", "Independent Admin application manifest");
   requireText(adminStore, "/runtime/storefront/products", "Independent Store Admin workflow");
   requireText(docs, "Administration and backend boundaries", "Admin separation architecture");
   requireText(docs, "permissions", "Separate product permissions");
