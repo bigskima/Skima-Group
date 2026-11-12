@@ -936,7 +936,15 @@ begin
     join public.organization_branches b on b.id=e.branch_id join public.financial_policy_versions v on v.id=e.policy_version_id),'[]'::jsonb),
   'commissionFailures',coalesce((select jsonb_agg(jsonb_build_object('id',f.id,'orderId',f.fuel_order_id,
     'lastError',f.last_error,'attemptCount',f.attempt_count) order by f.last_attempt_at desc)
-    from public.fuel_station_affiliate_commission_failures f where f.status='pending'),'[]'::jsonb)
+    from public.fuel_station_affiliate_commission_failures f where f.status='pending'),'[]'::jsonb),
+  'reversalFailures',coalesce((select jsonb_agg(jsonb_build_object(
+    'id',failure.id,'earningId',failure.earning_id,'orderId',earning.fuel_order_id,
+    'lastError',failure.last_error,'requiredAmount',failure.required_amount,
+    'availableAmount',failure.available_amount,'attemptCount',failure.attempt_count)
+    order by failure.last_attempt_at desc)
+    from public.fuel_station_affiliate_reversal_failures failure
+    join public.fuel_station_affiliate_earnings earning on earning.id=failure.earning_id
+    where failure.status='pending'),'[]'::jsonb)
  );
 end $$;
 
@@ -1028,6 +1036,7 @@ alter table public.fleet_vehicle_service_lines enable row level security;
 alter table public.fuel_station_affiliate_referrals enable row level security;
 alter table public.fuel_station_affiliate_earnings enable row level security;
 alter table public.fuel_station_affiliate_commission_failures enable row level security;
+alter table public.fuel_station_affiliate_reversal_failures enable row level security;
 
 drop policy if exists fleet_staff_invitation_related_read on public.fleet_staff_invitations;
 create policy fleet_staff_invitation_related_read on public.fleet_staff_invitations for select to authenticated
@@ -1045,14 +1054,17 @@ create policy fuel_station_affiliate_earnings_service_role_only on public.fuel_s
 drop policy if exists fuel_station_affiliate_commission_failures_service_role_only on public.fuel_station_affiliate_commission_failures;
 create policy fuel_station_affiliate_commission_failures_service_role_only on public.fuel_station_affiliate_commission_failures
  for all to service_role using(true) with check(true);
+drop policy if exists fuel_station_affiliate_reversal_failures_service_role_only on public.fuel_station_affiliate_reversal_failures;
+create policy fuel_station_affiliate_reversal_failures_service_role_only on public.fuel_station_affiliate_reversal_failures
+ for all to service_role using(true) with check(true);
 
 revoke all on public.fleet_staff_invitations,public.fleet_vehicle_registrations,public.fleet_vehicle_service_lines,
  public.fuel_station_affiliate_referrals,public.fuel_station_affiliate_earnings,
- public.fuel_station_affiliate_commission_failures from anon,authenticated;
+ public.fuel_station_affiliate_commission_failures,public.fuel_station_affiliate_reversal_failures from anon,authenticated;
 grant select on public.fleet_staff_invitations,public.fleet_vehicle_service_lines to authenticated;
 grant all on public.fleet_staff_invitations,public.fleet_vehicle_registrations,public.fleet_vehicle_service_lines,
  public.fuel_station_affiliate_referrals,public.fuel_station_affiliate_earnings,
- public.fuel_station_affiliate_commission_failures to service_role;
+ public.fuel_station_affiliate_commission_failures,public.fuel_station_affiliate_reversal_failures to service_role;
 
 revoke all on function public.register_fleet_partner_vehicle(uuid,uuid,text,text,text,integer,text,text,numeric,text[],text,text,jsonb) from public,anon;
 revoke all on function public.invite_fleet_staff(uuid,text,text,text,text) from public,anon;
@@ -1064,6 +1076,8 @@ revoke all on function public.award_fuel_station_affiliate_commission(uuid,uuid)
 revoke all on function public.read_my_station_affiliate() from public,anon;
 revoke all on function public.read_fuel_station_affiliate_admin_workspace() from public,anon;
 revoke all on function public.retry_fuel_station_affiliate_commission(uuid,text) from public,anon;
+revoke all on function public.reverse_fuel_station_affiliate_commission(uuid,text) from public,anon;
+revoke all on function public.retry_fuel_station_affiliate_reversal(uuid,text) from public,anon;
 
 grant execute on function public.register_fleet_partner_vehicle(uuid,uuid,text,text,text,integer,text,text,numeric,text[],text,text,jsonb) to authenticated,service_role;
 grant execute on function public.invite_fleet_staff(uuid,text,text,text,text) to authenticated,service_role;
@@ -1075,6 +1089,8 @@ grant execute on function public.read_my_fleet_workspace() to authenticated,serv
 grant execute on function public.read_my_station_affiliate() to authenticated,service_role;
 grant execute on function public.read_fuel_station_affiliate_admin_workspace() to authenticated,service_role;
 grant execute on function public.retry_fuel_station_affiliate_commission(uuid,text) to authenticated,service_role;
+grant execute on function public.reverse_fuel_station_affiliate_commission(uuid,text) to authenticated,service_role;
+grant execute on function public.retry_fuel_station_affiliate_reversal(uuid,text) to authenticated,service_role;
 
 notify pgrst,'reload schema';
 commit;
