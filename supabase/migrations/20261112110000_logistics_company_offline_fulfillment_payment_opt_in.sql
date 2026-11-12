@@ -124,17 +124,17 @@ grant execute on function public.update_logistics_company_offline_payment_accept
   to authenticated;
 
 -- Enforce company opt-in in the booking transaction itself. Hiding the choice
--- in the app is not sufficient: API callers cannot create an offline booking
--- for a company that has not accepted offline fulfilment.
+-- in the app is not sufficient: clients cannot create offline bookings for a
+-- company that has not accepted offline fulfilment.
 do $offline_booking_acceptance_guard$
 declare
   function_sql text;
-  old_guard text := $old_guard$
-  if job_record.requester_user_id <> actor then
-    raise exception 'only the customer who created the job may book a provider offer';
-  end if;
-  $old_guard$;
-  new_guard text := $new_guard$
+  guard_pattern text := $pattern$
+    if job_record\.requester_user_id <> actor then[[:space:]]+
+    raise exception 'only the customer who created the job may book a provider offer';[[:space:]]+
+    end if;
+  $pattern$;
+  new_guard text := $replacement$
   if job_record.requester_user_id <> actor then
     raise exception 'only the customer who created the job may book a provider offer';
   end if;
@@ -148,15 +148,20 @@ declare
     raise exception using errcode = '22023',
       message = 'This logistics company does not accept offline fulfilment payment. Choose online wallet payment.';
   end if;
-  $new_guard$;
+  $replacement$;
 begin
   function_sql := pg_get_functiondef(
     'public.create_logistics_booking_for_offer(uuid,text,text)'::regprocedure
   );
-  if position(old_guard in function_sql) = 0 then
-    raise exception 'Logistics booking owner guard changed; refusing an unsafe offline-payment patch';
+  if function_sql !~ guard_pattern then
+    raise exception 'Logistics booking owner guard not found; refusing an unsafe offline-payment patch';
   end if;
-  function_sql := replace(function_sql, old_guard, new_guard);
+
+  function_sql := regexp_replace(function_sql, guard_pattern, new_guard);
+  if function_sql ~ guard_pattern then
+    raise exception 'Multiple Logistics booking owner guards found; refusing an ambiguous offline-payment patch';
+  end if;
+
   execute function_sql;
 end;
 $offline_booking_acceptance_guard$;
