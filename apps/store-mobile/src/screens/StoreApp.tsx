@@ -3,7 +3,7 @@ import { ArrowLeft, Bell, Package, Settings2, ShoppingBag, UserRound, WalletCard
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { StoreBrandMark } from "../ui/BrandMark";
-import { subscribeStoreNavigation, type StorePage } from "../navigation/storeNavigation";
+import { navigateStoreRoute, subscribeStoreNavigation, type StorePage } from "../navigation/storeNavigation";
 import { StoreShopScreen } from "./StoreShopScreen";
 import { StoreOrdersScreen } from "./StoreOrdersScreen";
 import { StoreWalletScreen, StoreTopUpScreen, StoreWithdrawScreen } from "./StoreWalletScreens";
@@ -22,7 +22,7 @@ const tabs = [
   { key: "account", label: "Account", icon: UserRound },
 ] as const;
 
-export function StoreApp({ onExit }: { readonly onExit?: () => void } = {}) {
+export function StoreApp({ onExit, initialRoute }: { readonly onExit?: () => void; readonly initialRoute?: string } = {}) {
   const { palette } = useAppTheme();
   const guide = useStoreGuide();
   const session = useSession();
@@ -36,6 +36,7 @@ export function StoreApp({ onExit }: { readonly onExit?: () => void } = {}) {
     guide.setCurrentPage(allowedPage);
   }, [guide.setCurrentPage, canManageStore]);
   useEffect(() => subscribeStoreNavigation((event) => open(event.page)), [open]);
+  useEffect(() => { if (initialRoute) navigateStoreRoute(initialRoute); }, [initialRoute]);
   const title = page === "shop" ? "Shop SKIMA" : page === "orders" ? "Your orders" :
     page === "wallet" ? "SKIMA Wallet" : page === "account" ? "Account" :
     page === "top-up" ? "Add funds" : page === "withdraw" ? "Withdraw funds" : page === "referrals" ? "Referrals & rewards" : page === "manage" ? "Store management" : page === "support" ? "Help & Support" : "Notifications";
