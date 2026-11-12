@@ -54,6 +54,8 @@ const GeographySchema = z.object({
   id: z.string().uuid(),
   canonical_name: z.string(),
   country_code: z.string(),
+  geography_level_name: z.string(),
+  parent_name: z.string().nullable(),
   status: z.string(),
 });
 const ControlsSchema = z.object({
@@ -219,7 +221,11 @@ export function AdminAvailabilityControlsWorkspace() {
   const geographyOptions = [
     { label: "Choose a geography", value: "" },
     ...geographies.map((geography) => ({
-      label: geography.canonical_name,
+      label: [
+        geography.canonical_name,
+        geography.geography_level_name,
+        geography.parent_name,
+      ].filter(Boolean).join(" · "),
       value: geography.id,
     })),
   ];
