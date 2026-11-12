@@ -66,6 +66,7 @@ Deno.test("Module navigation has explicit, independent return controls and valid
     read("apps/lpg-mobile/src/native/notifications/useNotificationLifecycle.native.ts"),
     read("apps/store-mobile/src/notifications/StoreNotificationLifecycle.tsx"),
     read("apps/bills-mobile/src/notifications/BillsNotificationLifecycle.tsx"),
+    read("apps/logistics-mobile/src/navigation/CustomerTabs.tsx"),
   ]);
   requireText(storeApp, "Back to Logistics", "Store return control");
   requireText(billsApp, "Back to Refill", "Bills return control");
@@ -75,6 +76,10 @@ Deno.test("Module navigation has explicit, independent return controls and valid
   requireText(refillPush, 'data.app === "bills"', "Refill Bills push routing");
   requireText(storePush, "navigateStoreRoute(route)", "Store module push deep links");
   requireText(billsPush, "navigateBillsRoute(route)", "Bills module push deep links");
+  requireText(logisticsPush, 'data.app === "store"', "Logistics app-scope routing");
+  requireText((await read("apps/logistics-mobile/src/navigation/CustomerTabs.tsx")), 'title: "Store"', "Store top-level Logistics tab");
+  requireText((await read("apps/logistics-mobile/src/navigation/CustomerTabs.tsx")), 'tabBarStyle: { display: "none" }', "Store fullscreen shell navigation");
+  requireText((await read("apps/lpg-mobile/src/native/navigation/WorkspaceTabs.tsx")), 'name === "bills" ? { href: null, tabBarStyle: { display: "none" } }', "Bills fullscreen shell navigation");
 });
 
 Deno.test("All four complete web applications and their production web projects remain independent", async () => {
