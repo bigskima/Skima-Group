@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { StoreHostedAppProviders } from "../../../store-mobile/src/providers/HostedAppProviders";
 import { StoreApp } from "../../../store-mobile/src/screens/StoreApp";
 import type { SessionValue as StoreSessionValue } from "../../../store-mobile/src/session/SessionProvider";
@@ -11,6 +11,8 @@ import { useSession } from "../session/SessionProvider";
  */
 export function EmbeddedStoreWorkspace() {
   const host = useSession();
+  const params = useLocalSearchParams<{ moduleRoute?: string | string[] }>();
+  const initialRoute = Array.isArray(params.moduleRoute) ? params.moduleRoute[0] : params.moduleRoute;
   const sessionValue = useMemo<StoreSessionValue>(() => ({
     status: host.status,
     session: host.session,
@@ -56,7 +58,7 @@ export function EmbeddedStoreWorkspace() {
 
   return (
     <StoreHostedAppProviders sessionValue={sessionValue}>
-      <StoreApp onExit={exit} />
+      <StoreApp onExit={exit} initialRoute={initialRoute} />
     </StoreHostedAppProviders>
   );
 }
