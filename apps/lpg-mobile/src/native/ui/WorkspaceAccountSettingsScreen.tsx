@@ -67,7 +67,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
   const refreshAffiliate = useCallback(async () => {
     setAffiliateLoading(true);
     try {
-      const result = await session.supabase.rpc("read_my_station_affiliate");
+      const result = await session.supabase.rpc("read_my_lpg_station_affiliate");
       if (result.error) throw result.error;
       setAffiliate((result.data ?? null) as StationAffiliateSummary | null);
       setAffiliateError(null);
