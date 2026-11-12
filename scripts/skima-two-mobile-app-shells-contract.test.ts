@@ -34,7 +34,7 @@ Deno.test("Refill and Logistics host the complete Bills and Store applications r
 });
 
 Deno.test("Hosted service modules reuse the parent app session and query client", async () => {
-  const [billsProvider, storeProvider, billsSession, storeSession, refillHost, logisticsHost] = await Promise.all([
+  const [billsProvider, storeProvider, billsSession, storeSession, refillHost, storeHost] = await Promise.all([
     read("apps/bills-mobile/src/providers/HostedAppProviders.tsx"),
     read("apps/store-mobile/src/providers/HostedAppProviders.tsx"),
     read("apps/bills-mobile/src/session/SessionProvider.tsx"),
