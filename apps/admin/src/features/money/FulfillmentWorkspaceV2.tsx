@@ -159,7 +159,7 @@ export function FulfillmentWorkspaceV2(props: {
 
   const configuration = useQuery({
     queryKey: ["lpg-launch-assurance-configuration"],
-    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates" && section !== "fuel-affiliates" && section !== "fuel-affiliates",
+    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates" && section !== "fuel-affiliates",
     retry: false,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("read_lpg_launch_assurance_configuration");
@@ -200,7 +200,7 @@ export function FulfillmentWorkspaceV2(props: {
           canDraftPolicy={canDraftFinancialPolicy}
           canApprovePolicy={canApproveFinancialPolicy}
           canActivatePolicy={canActivateFinancialPolicy}
-          canRetryCommission={Boolean(isSuperAdmin || context?.permissions.includes("platform.revenue.manage") || context?.permissions.includes("platform.wallets.manage"))}
+          canRetryCommission={Boolean(isSuperAdmin || (context?.permissions.includes("platform.financial.manage") && context?.permissions.includes("platform.wallets.manage")))}
         />
       </div>
     );
