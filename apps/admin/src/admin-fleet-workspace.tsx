@@ -95,7 +95,7 @@ export function AdminFleetWorkspace() {
   });
 
   const approvedDrivers = data.data?.drivers ?? emptyRows;
-  const workspace = data.data;
+  const workspace = data.data ?? Workspace.parse({ partners: [], applications: [], vehicles: [], assignments: [], compliance: [], ownership: [], audit: [] });
   const documents: RowType[] = [
     ...workspace.applicationDocuments.map((row) => ({
       ...row,
