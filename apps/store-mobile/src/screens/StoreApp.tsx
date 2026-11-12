@@ -82,8 +82,8 @@ export function StoreApp({ onExit }: { readonly onExit?: () => void } = {}) {
             </View>
             {!desktop ? <Pressable accessibilityRole="button" accessibilityLabel="Notifications" onPress={() => open("notifications")}
               style={[styles.bell, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}><Bell color={palette.ink} size={18} /></Pressable> : null}
-          </View>
             {onExit ? <Pressable accessibilityRole="button" accessibilityLabel="Back to Logistics" onPress={onExit} style={[styles.exitButton, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><ArrowLeft color={palette.brand} size={15} /><Text style={{ color: palette.brand, fontSize: 11, fontWeight: "900" }}>Logistics</Text></Pressable> : null}
+          </View>
           <View style={styles.content}>
             {page === "shop" ? <StoreShopScreen /> : null}
             {page === "orders" ? <StoreOrdersScreen /> : null}
