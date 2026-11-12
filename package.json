@@ -31,8 +31,8 @@
     "station-inventory:contract": "deno test --allow-read scripts/station-inventory-runtime-contract.test.ts",
     "deploy:check:admin": "npm run frontend:check && npm run frontend:build",
     "deploy:check:lpg": "npm run lpg-mobile:check && npm run lpg-mobile:build",
-    "deploy:check": "npm run deploy:check:admin && npm run deploy:check:lpg && npm run deploy:check:bills && npm run deploy:check:store",
-    "verify": "npm run native:assets:verify && npm run pwa:verify && npm run check && npm run lint && npm run migration-history:verify && npm run validate && npm run frontend:validate && npm run mobile:validate && npm run financial-governance:verify && npm run logistics:contract && npm run location-maps:contract && npm run station-inventory:contract && npm run fuel:contract && npm run ai-runtime:contract && npm run bills-mobile:contract && npm run store-mobile:contract && npm run storefront-parity:contract && npm run customer-experience:contract && npm run four-app-policy:contract && npm run supplier-funds:contract",
+    "deploy:check": "npm run deploy:check:admin && npm run mobile:shells:check && npm run deploy:check:bills && npm run deploy:check:store",
+    "verify": "npm run native:assets:verify && npm run pwa:verify && npm run check && npm run lint && npm run migration-history:verify && npm run validate && npm run frontend:validate && npm run mobile:validate && npm run financial-governance:verify && npm run logistics:contract && npm run location-maps:contract && npm run station-inventory:contract && npm run fuel:contract && npm run ai-runtime:contract && npm run mobile:shells:check && npm run two-app-shells:contract && npm run bills-mobile:contract && npm run store-mobile:contract && npm run storefront-parity:contract && npm run customer-experience:contract && npm run four-app-policy:contract && npm run supplier-funds:contract",
     "migration-history:verify": "deno run --allow-read scripts/verify-migration-history.ts",
     "financial-governance:verify": "deno run --allow-read scripts/verify-financial-policy-governance.ts",
     "supabase:link": "deno run --allow-env --allow-run --allow-read scripts/supabase-remote.ts link",
@@ -98,7 +98,9 @@
     "four-app-policy:contract": "deno test --allow-read scripts/four-app-policy-consent-contract.test.ts",
     "storefront-parity:contract": "deno test --allow-read scripts/skima-storefront-parity-contract.test.ts",
     "pwa:verify": "node scripts/verify-skima-pwa.mjs",
-    "supplier-funds:contract": "deno test --allow-read scripts/skima-supplier-funds-cash-cycle-contract.test.ts"
+    "supplier-funds:contract": "deno test --allow-read scripts/skima-supplier-funds-cash-cycle-contract.test.ts",
+    "mobile:shells:check": "npm run lpg-mobile:check && npm run logistics:mobile:check",
+    "two-app-shells:contract": "deno test --allow-read scripts/skima-two-mobile-app-shells-contract.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.9",
