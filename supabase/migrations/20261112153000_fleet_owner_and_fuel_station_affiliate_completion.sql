@@ -264,7 +264,8 @@ select jsonb_build_object(
  'invitations',coalesce((select jsonb_agg(jsonb_build_object('id',i.id,'fleetPartnerId',i.fleet_partner_id,
    'accessRole',i.access_role,'status',i.status,'expiresAt',i.expires_at,'invitedEmail',i.invited_email,'reason',i.reason)
    order by i.created_at desc) from public.fleet_staff_invitations i
-   where lower(i.invited_email)=lower(coalesce(auth.jwt()->>'email',''))
+   where (lower(i.invited_email)=lower(coalesce(auth.jwt()->>'email',''))
+     or public.is_fleet_staff(i.fleet_partner_id,array['owner_admin','fleet_manager']))
    and i.status='pending' and i.expires_at>timezone('utc',now())),'[]'::jsonb),
  'serviceLines',coalesce((select jsonb_agg(to_jsonb(l) order by l.created_at desc)
    from public.fleet_vehicle_service_lines l
