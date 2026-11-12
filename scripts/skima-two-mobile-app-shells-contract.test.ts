@@ -56,6 +56,27 @@ Deno.test("Hosted service modules reuse the parent app session and query client"
   requireText(storeHost, "host.signOut", "Store host-auth delegation");
 });
 
+Deno.test("Customer-facing entry points keep Bills in Refill and Store in Logistics", async () => {
+  const [refillTabs, refillLayout, refillDashboard, logisticsTabs, logisticsHome, androidWorkflow] = await Promise.all([
+    read("apps/lpg-mobile/src/native/navigation/WorkspaceTabs.tsx"),
+    read("apps/lpg-mobile/app/(customer)/_layout.tsx"),
+    read("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx"),
+    read("apps/logistics-mobile/src/navigation/CustomerTabs.tsx"),
+    read("apps/logistics-mobile/src/screens/CustomerHomeScreen.tsx"),
+    read(".github/workflows/android-four-app-build.yml"),
+  ]);
+  requireText(refillTabs, '{ name: "bills", title: "Bills", icon: Receipt }', "Refill dedicated Bills tab");
+  rejectText(refillLayout, '"bills",', "Bills must not be hidden in Refill navigation");
+  rejectText(refillDashboard, 'accessibilityLabel="Explore the SKIMA Store"', "Refill must not promote Store");
+  rejectText(refillDashboard, 'router.push("/(customer)/store"', "Refill must not route customers to Store");
+  requireText(logisticsTabs, 'title: "Store", tabBarShowLabel: true', "Logistics labelled Store tab");
+  rejectText(logisticsHome, 'Pay bills', "Logistics must not expose Bills shortcut");
+  requireText(androidWorkflow, 'options:\n          - all\n          - refill\n          - logistics', "Only two Android app build choices");
+  requireText(androidWorkflow, '["lpg-mobile","logistics-mobile"]', "All Android builds are only Refill and Logistics");
+  rejectText(androidWorkflow, '"store-mobile"', "Store must not be an Android build target");
+  rejectText(androidWorkflow, '"bills-mobile"', "Bills must not be an Android build target");
+});
+
 Deno.test("Module navigation has explicit, independent return controls and validates push routes", async () => {
   const [storeApp, billsApp, storeRoutes, billsRoutes, logisticsPush, refillPush, storePush, billsPush] = await Promise.all([
     read("apps/store-mobile/src/screens/StoreApp.tsx"),
