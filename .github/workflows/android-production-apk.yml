@@ -10,9 +10,11 @@ on:
       - "apps/lpg-mobile/eas.json"
       - "apps/lpg-mobile/package-lock.json"
       - "apps/lpg-mobile/assets/**"
+      - "apps/lpg-mobile/app/**"
       - "apps/lpg-mobile/src/native/**"
       - "apps/lpg-mobile/scripts/**"
       - "packages/frontend-core/**"
+      - "packages/mobile-experience/**"
   workflow_dispatch:
     inputs:
       build_profile:
@@ -65,7 +67,7 @@ jobs:
 
       - name: Validate Expo dependencies and native configuration
         run: |
-          npx --yes expo-doctor@latest
+          npx expo install --check
           npx expo config --type public > /dev/null
 
   build:

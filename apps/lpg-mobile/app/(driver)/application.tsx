@@ -1,5 +1,5 @@
-import { DriverApplicationScreen } from "../../src/native/ui/DriverApplicationScreen";
+import { DriverApplicationEntryScreen } from "../../src/native/ui/DriverApplicationEntryScreen";
 
 export default function Application() {
-  return <DriverApplicationScreen />;
+  return <DriverApplicationEntryScreen />;
 }

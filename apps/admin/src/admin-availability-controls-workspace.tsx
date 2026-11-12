@@ -50,22 +50,23 @@ const MaintenanceSchema = z.object({
   endsAt: z.string().nullable(),
   updatedAt: z.string(),
 });
+const GeographySchema = z.object({
+  id: z.string().uuid(),
+  canonical_name: z.string(),
+  country_code: z.string(),
+  geography_level_name: z.string(),
+  parent_name: z.string().nullable(),
+  status: z.string(),
+});
 const ControlsSchema = z.object({
   applicationAccessRules: z.array(AccessRuleSchema),
   maintenanceNotices: z.array(MaintenanceSchema),
+  geographies: z.array(GeographySchema),
   canManage: z.boolean(),
-});
-const GeographySetupSchema = z.object({
-  geographies: z.array(z.object({
-    id: z.string().uuid(),
-    canonical_name: z.string(),
-    country_code: z.string(),
-    status: z.string(),
-  }).passthrough()),
 });
 type AccessRule = z.infer<typeof AccessRuleSchema>;
 type MaintenanceNotice = z.infer<typeof MaintenanceSchema>;
-type Geography = z.infer<typeof GeographySetupSchema>["geographies"][number];
+type Geography = z.infer<typeof GeographySchema>;
 type AccessForm = {
   id: string | null;
   applicationKey: "driver" | "station";
@@ -165,16 +166,6 @@ export function AdminAvailabilityControlsWorkspace() {
     },
     refetchInterval: 60_000,
   });
-  const geographySetup = useQuery({
-    queryKey: ["platform-availability-geographies"],
-    enabled,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("read_geography_admin_setup");
-      if (error) throw error;
-      return GeographySetupSchema.parse(data);
-    },
-  });
-
   const saveAccess = useMutation({
     mutationFn: async (form: AccessForm) => {
       const { error } = await supabase.rpc("save_platform_application_access_rule", {
@@ -224,22 +215,26 @@ export function AdminAvailabilityControlsWorkspace() {
   const accessRules = controls.data?.applicationAccessRules ?? [];
   const maintenanceNotices = controls.data?.maintenanceNotices ?? [];
   const geographies = useMemo(
-    () => (geographySetup.data?.geographies ?? []).filter((item) => item.status === "active"),
-    [geographySetup.data],
+    () => (controls.data?.geographies ?? []).filter((item) => item.status === "active"),
+    [controls.data?.geographies],
   );
   const geographyOptions = [
     { label: "Choose a geography", value: "" },
     ...geographies.map((geography) => ({
-      label: geography.canonical_name,
+      label: [
+        geography.canonical_name,
+        geography.geography_level_name,
+        geography.parent_name,
+      ].filter(Boolean).join(" · "),
       value: geography.id,
     })),
   ];
-  const isLoading = controls.isLoading || geographySetup.isLoading;
-  const loadError = controls.error ?? geographySetup.error;
+  const isLoading = controls.isLoading;
+  const loadError = controls.error;
 
   const refresh = async () => {
     setNotice(null);
-    await Promise.all([controls.refetch(), geographySetup.refetch()]);
+    await controls.refetch();
   };
 
   const accessColumns = useMemo<TableColumn<AccessRule>[]>(() => [

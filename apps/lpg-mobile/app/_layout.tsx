@@ -53,7 +53,7 @@ function AppNavigator() {
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
       <PlatformMaintenanceNotices
         supabase={session.supabase}
-        serviceKeys={["lpg", "fuel", "payments", "wallets"]}
+        serviceKeys={["lpg", "fuel", "payments", "wallets", "support"]}
         palette={palette}
         resolveLocation={resolveMaintenanceLocation}
       />
