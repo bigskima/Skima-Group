@@ -465,7 +465,11 @@ select jsonb_build_object(
     'vehicleId',d.metadata->>'vehicle_id','purposeKey',d.purpose_key,'documentSubmissionId',d.document_submission_id,
     'status',doc.status,'decisionReason',doc.decision_reason,'validFrom',d.valid_from,'validUntil',d.valid_until))
     from public.fleet_partner_documents d join public.document_submissions doc on doc.id=d.document_submission_id
-    where public.is_fleet_staff(d.fleet_partner_id,null)),'[]'::jsonb)
+    where public.is_fleet_staff(d.fleet_partner_id,null)),'[]'::jsonb),
+  'vehicleDocumentRequirements',coalesce((select jsonb_agg(jsonb_build_object('key',r.key,'displayName',r.display_name,
+    'description',r.display_name,'documentPurposeKey',r.document_purpose_key,'moduleKey',r.module_key,
+    'required',r.required,'capabilityKey',r.capability_key))
+    from public.compliance_requirement_definitions r where r.subject_type='vehicle' and r.status='active' and r.required),'[]'::jsonb)
 );
 $$;
 
@@ -930,6 +934,28 @@ grant execute on function public.award_fuel_station_affiliate_commission(uuid),
   public.reverse_fuel_station_affiliate_commission(uuid,text),
   public.reverse_fuel_station_affiliate_on_refund()
 to service_role;
+
+
+-- Keep the original LPG summary implementation, then add Fuel commission amounts from
+-- the same affiliate wallet so the customer sees one consolidated earning balance.
+alter function public.read_my_lpg_station_affiliate() rename to read_my_lpg_station_affiliate_lpg_only;
+create or replace function public.read_my_lpg_station_affiliate() returns jsonb
+language plpgsql stable security definer set search_path=public,pg_temp as $
+declare result jsonb; affiliate_id uuid; fuel_earned numeric(28,8):=0;
+begin
+  result:=public.read_my_lpg_station_affiliate_lpg_only();
+  select a.id into affiliate_id from public.lpg_station_affiliates a where a.affiliate_user_id=auth.uid();
+  if affiliate_id is null then return result; end if;
+  select coalesce(sum(e.amount),0) into fuel_earned
+  from public.fuel_station_affiliate_earnings e where e.affiliate_id=affiliate_id and e.status='posted';
+  result:=jsonb_set(result,'{totalEarned}',to_jsonb(coalesce(nullif(result->>'totalEarned','')::numeric,0)+fuel_earned),true);
+  result:=jsonb_set(result,'{fuelTotalEarned}',to_jsonb(fuel_earned),true);
+  result:=jsonb_set(result,'{lpgTotalEarned}',to_jsonb(coalesce(nullif(result->>'totalEarned','')::numeric,0)-fuel_earned),true);
+  return result;
+end;
+$;
+revoke all on function public.read_my_lpg_station_affiliate() from public,anon;
+grant execute on function public.read_my_lpg_station_affiliate() to authenticated,service_role;
 
 notify pgrst,'reload schema';
 commit;
