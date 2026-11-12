@@ -496,63 +496,101 @@ create table if not exists public.fuel_station_affiliate_commission_failures (
  metadata jsonb not null default '{}'::jsonb
 );
 
-create or replace function public.capture_fuel_station_affiliate_referral()
-returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
-declare code text; affiliate public.lpg_station_affiliates%rowtype; self_member boolean;
+create or replace function public.ensure_fuel_station_affiliate_referral(target_branch_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+declare branch_row public.organization_branches%rowtype;
+  application_row public.application_records%rowtype;
+  version_payload jsonb; affiliate public.lpg_station_affiliates%rowtype;
+  code text; referral_id uuid; source_application_text text;
 begin
- code:=upper(btrim(coalesce(new.metadata->>'stationAffiliateReferralCode',
-  new.metadata->>'station_affiliate_referral_code',new.metadata->>'affiliateReferralCode','')));
- if code='' then return new; end if;
- if not (new.metadata->>'module_key'='fuel' or coalesce(new.metadata->'service_lines','[]'::jsonb) ? 'fuel'
-  or coalesce(new.metadata->'service_line_keys','[]'::jsonb) ? 'fuel') then return new; end if;
- select * into affiliate from public.lpg_station_affiliates where referral_code=code and status='active';
- if not found then raise exception using errcode='22023',message='Fuel Station Affiliate referral code is not active'; end if;
- select exists(select 1 from public.organization_memberships m where m.organization_id=new.organization_id
-  and m.user_id=affiliate.affiliate_user_id and m.status='active') or new.created_by=affiliate.affiliate_user_id
- into self_member;
- if self_member then raise exception using errcode='22023',message='You cannot refer your own Fuel station'; end if;
- insert into public.fuel_station_affiliate_referrals(
-  affiliate_id,organization_id,branch_id,applicant_user_id,referral_code_snapshot,status,metadata
- ) values(affiliate.id,new.organization_id,new.id,new.created_by,affiliate.referral_code,'submitted',
-  jsonb_build_object('source','fuel_station_branch','branchKey',new.key))
- on conflict(branch_id) do nothing;
- return new;
+  select * into branch_row from public.organization_branches where id=target_branch_id;
+  if not found or branch_row.status<>'active' then return null; end if;
+  if not exists(select 1 from public.fuel_branch_product_offers offer
+    where offer.branch_id=target_branch_id and offer.status='active') then return null; end if;
+
+  code:=upper(btrim(coalesce(
+    branch_row.metadata->>'stationAffiliateReferralCode',
+    branch_row.metadata->>'station_affiliate_referral_code',
+    branch_row.metadata->>'affiliateReferralCode',''
+  )));
+  source_application_text:=branch_row.metadata->>'source_application_id';
+  if code='' and coalesce(source_application_text,'') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+    select * into application_row from public.application_records
+    where id=source_application_text::uuid;
+    if found then
+      select version.payload into version_payload from public.application_versions version
+      where version.application_id=application_row.id and version.version=application_row.active_version;
+      code:=upper(btrim(coalesce(version_payload->'station'->>'affiliateReferralCode',
+        version_payload->'station'->>'affiliate_referral_code','')));
+    end if;
+  end if;
+  if code='' then return null; end if;
+
+  select * into affiliate from public.lpg_station_affiliates
+  where referral_code=code and status='active';
+  if not found then return null; end if;
+  if affiliate.affiliate_user_id=coalesce(application_row.applicant_user_id,branch_row.created_by)
+    or exists(select 1 from public.organization_memberships membership
+      where membership.organization_id=branch_row.organization_id
+        and membership.user_id=affiliate.affiliate_user_id and membership.status='active') then
+    return null;
+  end if;
+
+  insert into public.fuel_station_affiliate_referrals(
+    affiliate_id,organization_id,branch_id,applicant_user_id,referral_code_snapshot,status,activated_at,metadata
+  ) values(
+    affiliate.id,branch_row.organization_id,branch_row.id,
+    coalesce(application_row.applicant_user_id,branch_row.created_by),affiliate.referral_code,
+    'activated',timezone('utc',now()),
+    jsonb_build_object('source','fuel_branch_first_active_offer','sourceApplicationId',application_row.id,
+      'activatedAt',timezone('utc',now()))
+  ) on conflict(branch_id) do update
+    set affiliate_id=public.fuel_station_affiliate_referrals.affiliate_id
+  returning id into referral_id;
+  if referral_id is null then
+    select id into referral_id from public.fuel_station_affiliate_referrals where branch_id=target_branch_id;
+  end if;
+  return referral_id;
 end $$;
 
 create or replace function public.activate_fuel_station_affiliate_referral_for_branch()
-returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
 begin
- if new.status='active' and exists(select 1 from public.fuel_branch_product_offers offer
-   where offer.branch_id=new.id and offer.status='active') then
-  update public.fuel_station_affiliate_referrals set status='activated',
-   activated_at=coalesce(activated_at,timezone('utc',now())),
-   metadata=metadata||jsonb_build_object('activatedAt',timezone('utc',now()))
-  where branch_id=new.id and status='submitted';
- end if;
- return new;
+  if new.status='active' then
+    perform public.ensure_fuel_station_affiliate_referral(new.id);
+  end if;
+  return new;
 end $$;
 
 create or replace function public.activate_fuel_station_affiliate_referral_for_offer()
-returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
 begin
- if new.status='active' then
-  update public.fuel_station_affiliate_referrals referral set status='activated',
-   activated_at=coalesce(referral.activated_at,timezone('utc',now())),
-   metadata=referral.metadata||jsonb_build_object('activatedAt',timezone('utc',now()))
-  from public.organization_branches branch
-  where referral.branch_id=new.branch_id and branch.id=new.branch_id
-   and branch.status='active' and referral.status='submitted';
- end if;
- return new;
+  if new.status='active' then
+    perform public.ensure_fuel_station_affiliate_referral(new.branch_id);
+  end if;
+  return new;
 end $$;
+
 drop trigger if exists trg_capture_fuel_station_affiliate_referral on public.organization_branches;
-create trigger trg_capture_fuel_station_affiliate_referral after insert on public.organization_branches
-for each row execute function public.capture_fuel_station_affiliate_referral();
 drop trigger if exists trg_activate_fuel_station_affiliate_referral_branch on public.organization_branches;
-create trigger trg_activate_fuel_station_affiliate_referral_branch after insert or update of status on public.organization_branches
+create trigger trg_activate_fuel_station_affiliate_referral_branch
+after insert or update of status on public.organization_branches
 for each row execute function public.activate_fuel_station_affiliate_referral_for_branch();
 drop trigger if exists trg_activate_fuel_station_affiliate_referral_offer on public.fuel_branch_product_offers;
-create trigger trg_activate_fuel_station_affiliate_referral_offer after insert or update of status on public.fuel_branch_product_offers
+create trigger trg_activate_fuel_station_affiliate_referral_offer
+after insert or update of status on public.fuel_branch_product_offers
 for each row execute function public.activate_fuel_station_affiliate_referral_for_offer();
 
 create or replace function public.award_fuel_station_affiliate_commission(target_fuel_order_id uuid,target_settlement_transaction_id uuid)
