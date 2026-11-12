@@ -130,8 +130,8 @@ export function BillsApp({ onExit }: { readonly onExit?: () => void } = {}) {
                 <Bell color={palette.ink} size={19} />
               </Pressable>
             ) : null}
-          </View>
             {onExit ? <Pressable accessibilityRole="button" accessibilityLabel="Back to Refill" onPress={onExit} style={[styles.exitButton, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><ArrowLeft color={palette.brand} size={15} /><Text style={{ color: palette.brand, fontSize: 11, fontWeight: "900" }}>Refill</Text></Pressable> : null}
+          </View>
 
           <View style={styles.content}>
             {page === "bills" ? <BillsHomeScreen onOpenPage={open} onReceipt={onReceipt} /> : null}
