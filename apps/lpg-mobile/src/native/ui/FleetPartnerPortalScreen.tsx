@@ -193,24 +193,51 @@ export function FleetPartnerPortalScreen() {
     } finally { setBusy(null); }
   };
 
+  const presentInvitationLink = async (invitationId: string, inviteeEmail: string, existingToken?: string) => {
+    const token = existingToken ?? (await session.api.post("/runtime/fleet-staff-invitations/issue-link", {
+      invitationId,
+    }, InviteResponseSchema)).inviteToken;
+    if (!token) throw new Error("A fresh invitation link could not be issued. Try again.");
+    const inviteUrl = `https://refill.skima.online/fleet-invite?token=${encodeURIComponent(token)}`;
+    await Share.share({
+      title: "SKIMA Fleet invitation",
+      message: `You have been invited to a SKIMA fleet workspace. Sign in with ${inviteeEmail} and accept here: ${inviteUrl}`,
+    });
+  };
+
   const inviteStaff = async () => {
     if (!partnerId) return;
-    if (!inviteEmail.trim() || inviteReason.trim().length < 5) { setError("Enter the staff email and a reason of at least five characters."); return; }
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || inviteReason.trim().length < 5) { setError("Enter the staff email and a reason of at least five characters."); return; }
     setBusy("invite"); setError(""); setNotice("");
     try {
       const invitation = await session.api.post("/runtime/fleet-staff-invitations", {
-        fleetPartnerId: partnerId, email: inviteEmail.trim(), role: inviteRole,
+        fleetPartnerId: partnerId, email, role: inviteRole,
         reason: inviteReason.trim(),
-        idempotencyKey: idempotencyKey("fleet-staff-invitation", `${partnerId}:${inviteEmail.toLowerCase()}:${inviteRole}`),
+        idempotencyKey: idempotencyKey("fleet-staff-invitation", `${partnerId}:${email}:${inviteRole}`),
       }, InviteResponseSchema);
-      await fleet.refetch(); setInviteEmail("");
-      if (invitation.inviteToken) {
-        const inviteUrl = `https://refill.skima.online/fleet-invite?token=${encodeURIComponent(invitation.inviteToken)}`;
-        await Share.share({ title: "SKIMA Fleet invitation", message: `You have been invited to a SKIMA fleet workspace. Sign in with ${inviteEmail.trim()} and accept here: ${inviteUrl}` });
-      }
-      setNotice("Invitation created. Share the secure link with the invited email address. The link expires after seven days.");
+      await fleet.refetch();
+      setInviteEmail("");
+      // The creation RPC returns the token only on first creation. If this is an
+      // idempotent replay, rotate a fresh link rather than leaving an unshareable invite.
+      await presentInvitationLink(invitation.id, email, invitation.inviteToken);
+      setNotice("Invitation link issued. Share it with the invited email address; it expires after seven days.");
     } catch (cause) {
-      setError(friendlyError(cause, "The fleet invitation could not be created."));
+      setError(friendlyError(cause, "The fleet invitation could not be created or shared."));
+    } finally { setBusy(null); }
+  };
+
+  const reissueInvitationLink = async (invitation: PlatformRecord) => {
+    const invitationId = firstString(invitation, ["id"]);
+    const email = firstString(invitation, ["email", "invitee_email"]);
+    if (!invitationId || !email) return;
+    setBusy(`invite-link:${invitationId}`); setError(""); setNotice("");
+    try {
+      await presentInvitationLink(invitationId, email);
+      await fleet.refetch();
+      setNotice(`A fresh seven-day invitation link was issued for ${email}.`);
+    } catch (cause) {
+      setError(friendlyError(cause, "A fresh fleet invitation link could not be issued."));
     } finally { setBusy(null); }
   };
 
@@ -480,13 +507,16 @@ export function FleetPartnerPortalScreen() {
                 <Text style={[styles.meta,{color:palette.muted}]}>{firstString(person,["user_id"]) ?? "Authorised SKIMA account"} · {firstString(person,["status"]) ?? "active"}</Text>
               </View>
             </View>)}
-            {staffInvitations.filter((invite)=>firstString(invite,["status"])==="pending").map((invite)=>(
+            {staffInvitations.filter((invite)=>["pending","expired"].includes(firstString(invite,["status"]) ?? "")).map((invite)=>(
               <View key={String(invite.id)} style={styles.documentRow}>
                 <View style={styles.copy}>
                   <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(invite,["email","invitee_email"]) ?? "Invited staff"}</Text>
-                  <Text style={[styles.meta,{color:palette.muted}]}>{firstString(invite,["role","access_role"])?.replaceAll("_"," ")} · pending invitation</Text>
+                  <Text style={[styles.meta,{color:palette.muted}]}>{firstString(invite,["role","access_role"])?.replaceAll("_"," ")} · {firstString(invite,["status"]) ?? "pending"}</Text>
                 </View>
-                <StatusPill label="Pending" tone="warning" />
+                <AppButton size="sm" variant="secondary"
+                  label={firstString(invite,["status"])==="expired" ? "Renew link" : "Share link"}
+                  loading={busy===`invite-link:${String(invite.id)}`} disabled={busy!==null}
+                  onPress={()=>void reissueInvitationLink(invite)} />
               </View>
             ))}
           </View>
