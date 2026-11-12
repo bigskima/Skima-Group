@@ -55,8 +55,16 @@ export async function registerLogisticsPushDevice(session: Session | null, supab
 
 function openNotificationRoute(response: Notifications.NotificationResponse | null) {
   if (!response) return;
-  const data = response.notification.request.content.data;
-  const raw = data?.path ?? data?.deepLink ?? data?.route;
+  const data = response.notification.request.content.data ?? {};
+  const routeData = data.route;
+  const raw = routeData && typeof routeData === "object" && !Array.isArray(routeData)
+    ? (routeData as Record<string, unknown>).path
+    : data.path ?? data.deepLink ?? data.route;
+  if (data.app === "store") {
+    const safeRoute = typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+    router.push({ pathname: "/(customer)/store", params: { moduleRoute: safeRoute } } as never);
+    return;
+  }
   if (typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//")) {
     router.push(raw as never);
   }

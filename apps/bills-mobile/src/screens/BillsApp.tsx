@@ -3,7 +3,7 @@ import { Bell, BookOpen, History, ShoppingBag, UserRound, WalletCards, ArrowLeft
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { BillsBrandMark } from "../ui/BrandMark";
-import { subscribeBillsNavigation } from "../navigation/billsNavigation";
+import { navigateBillsRoute, subscribeBillsNavigation } from "../navigation/billsNavigation";
 import { BillsHomeScreen } from "./BillsHomeScreen";
 import { BillsActivityScreen } from "./BillsActivityScreen";
 import { BillsWalletScreen, BillsTopUpScreen, BillsWithdrawScreen } from "./BillsWalletScreens";
@@ -25,7 +25,7 @@ const tabs = [
   { key: "account", label: "Account", icon: UserRound },
 ] as const;
 
-export function BillsApp() {
+export function BillsApp({ onExit, initialRoute }: { readonly onExit?: () => void; readonly initialRoute?: string } = {}) {
   const { palette } = useAppTheme();
   const guide = useBillsGuide();
   const { width } = useWindowDimensions();
@@ -42,6 +42,7 @@ export function BillsApp() {
     open(event.page);
     setReceiptId(event.receiptId ?? null);
   }), [open]);
+  useEffect(() => { if (initialRoute) navigateBillsRoute(initialRoute); }, [initialRoute]);
 
   const onReceipt = (id: string) => {
     setReceiptId(id);
@@ -130,6 +131,7 @@ export function BillsApp() {
                 <Bell color={palette.ink} size={19} />
               </Pressable>
             ) : null}
+            {onExit ? <Pressable accessibilityRole="button" accessibilityLabel="Back to Refill" onPress={onExit} style={[styles.exitButton, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><ArrowLeft color={palette.brand} size={15} /><Text style={{ color: palette.brand, fontSize: 11, fontWeight: "900" }}>Refill</Text></Pressable> : null}
           </View>
 
           <View style={styles.content}>
@@ -173,6 +175,7 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 10, fontWeight: "700", marginTop: 2 },
   back: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   bell: { width: 38, height: 38, borderRadius: 13, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
+  exitButton: { minHeight: 36, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 },
   content: { flex: 1, minHeight: 0 },
   tabs: { minHeight: 68, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingHorizontal: 8, paddingBottom: 5 },
   tab: { flex: 1, minHeight: 58, alignItems: "center", justifyContent: "center", gap: 4 },

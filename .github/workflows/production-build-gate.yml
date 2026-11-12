@@ -36,7 +36,9 @@ on:
       - "scripts/skima-whatsapp-lifecycle-contract.test.ts"
       - "scripts/skima-logistics-*-contract.test.ts"
       - "scripts/skima-bills-mobile-contract.test.ts"
+      - "scripts/skima-four-app-experience-contract.test.ts"
       - "scripts/skima-store-mobile-contract.test.ts"
+      - "scripts/skima-two-mobile-app-shells-contract.test.ts"
       - "scripts/skima-customer-facing-copy-contract.test.ts"
       - "scripts/four-app-policy-consent-contract.test.ts"
       - "scripts/in-app-guide-target-contract.test.ts"
@@ -110,6 +112,8 @@ jobs:
         run: deno test --allow-read scripts/skima-customer-facing-copy-contract.test.ts
       - name: Verify four-app customer policy consent and progressive reading
         run: npm run four-app-policy:contract
+      - name: Verify two mobile shells and four full web products
+        run: npm run two-app-shells:contract
       - name: Verify service discovery and post-completion customer experience
         run: deno test --allow-read scripts/skima-customer-success-experience-contract.test.ts
       - name: Verify LPG auth production contracts

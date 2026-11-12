@@ -95,9 +95,9 @@ Current native identities that must remain stable:
 
 Store and Bills must receive distinct Android package names and iOS bundle identifiers before their first store registration and production build. Do not reuse a package/bundle ID across apps.
 
-Use a distinct EAS project ID for each standalone product app. The Expo project ID is used to associate an Expo push token with the correct project. Resolve it from app configuration (for example ``Constants.expoConfig?.extra?.eas?.projectId`` with the EAS config fallback), not from one shared hardcoded literal.
+Use a distinct EAS project ID for each standalone **mobile app**, not each web product. SKIMA's customer mobile release plan has two native apps: Refill and Logistics. The product-scoped notification registrations continue to use separate ``app_key`` values (``refill``, ``bills``, ``logistics`` and ``store``), even when two modules are hosted by one native app. Expo project IDs identify the native app that generated the token; they do not replace the product ``app_key`` used by notification policy and delivery.
 
-Refill uses its existing ``EXPO_PUBLIC_EAS_PROJECT_ID`` configuration. Store, Logistics and Bills each require their own ``EXPO_PUBLIC_STORE_EAS_PROJECT_ID``, ``EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID`` and ``EXPO_PUBLIC_BILLS_EAS_PROJECT_ID`` values in the matching EAS production environment. Do not use a shared project ID as a fallback between products; that would associate device tokens with the wrong app identity.
+Refill uses its existing ``EXPO_PUBLIC_EAS_PROJECT_ID`` configuration. Logistics uses ``EXPO_PUBLIC_LOGISTICS_EAS_PROJECT_ID``. The Bills module hosted inside Refill uses the Refill EAS project ID, and the Store module hosted inside Logistics uses the Logistics EAS project ID. Do not generate a different Expo project ID for a hosted module that is not a separate installed native app. Do not use one mobile app's EAS project ID for the other native app.
 
 An EAS project ID is not a Firebase or Apple secret. It is a public project identifier; credentials remain protected in EAS.
 

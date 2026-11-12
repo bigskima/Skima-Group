@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
-import { ClipboardList, Home, Plus, UserRound } from "lucide-react-native";
+import { ClipboardList, Home, Plus, Store, UserRound } from "lucide-react-native";
 import { StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -38,6 +38,7 @@ export function CustomerTabs() {
       <Tabs.Screen name="request" options={{ title: "Request", tabBarIcon: ({ color }) => <Plus color={String(color)} size={21} strokeWidth={3} /> }} />
       <Tabs.Screen name="jobs" options={{ title: "Activity", tabBarIcon: ({ color, size }) => <ClipboardList color={String(color)} size={size} /> }} />
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <UserRound color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="store" options={{ title: "Store", tabBarShowLabel: true, tabBarIcon: ({ color, size }) => <Store color={String(color)} size={size} />, tabBarStyle: { display: "none" } }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="support" options={{ href: null }} />
       <Tabs.Screen name="support" options={{ href: null }} />
@@ -45,7 +46,6 @@ export function CustomerTabs() {
       <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="wallet/top-up" options={{ href: null }} />
       <Tabs.Screen name="wallet/withdraw" options={{ href: null }} />
-      <Tabs.Screen name="store" options={{ href: null }} />
       <Tabs.Screen name="bills" options={{ href: null }} />
       <Tabs.Screen name="jobs/[id]" options={{ href: null }} />
       <Tabs.Screen name="bookings/[id]" options={{ href: null }} />

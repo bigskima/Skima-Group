@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Home,
   QrCode,
+  Receipt,
   WalletCards,
 } from "lucide-react-native";
 import type { ComponentType } from "react";
@@ -98,7 +99,13 @@ export function WorkspaceTabs({ tabs, hidden = [], guideScope }: { tabs: readonl
           }}
         />
       ))}
-      {hidden.map((name) => <Tabs.Screen key={name} name={name} options={{ href: null }} />)}
+      {hidden.map((name) => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={name === "bills" ? { href: null, tabBarStyle: { display: "none" } } : { href: null }}
+        />
+      ))}
     </Tabs>
   );
 }
@@ -117,6 +124,7 @@ export const customerTabs = [
   { name: "index", title: "Home", icon: Home },
   { name: "cylinders", title: "Cylinders", icon: QrCode },
   { name: "orders", title: "Orders", icon: ClipboardList },
+  { name: "bills", title: "Bills", icon: Receipt },
   { name: "wallet", title: "Wallet", icon: WalletCards },
   { name: "account", title: "Account", icon: CircleUserRound },
 ] as const;

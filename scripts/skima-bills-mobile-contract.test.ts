@@ -78,15 +78,18 @@ Deno.test("Saved billers are owner scoped with row-level security", async () => 
   requireText(screen, "utility_saved_beneficiaries", "Saved biller screen");
 });
 
-Deno.test("Refill and Logistics keep existing customer journeys with Bills entry points", async () => {
+Deno.test("Bills is owned by the Refill mobile workspace, not Logistics", async () => {
   const refill = await read("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
-  const refillBills = await read("apps/lpg-mobile/src/native/ui/UtilityBillsScreen.tsx");
+  const refillBillsRoute = await read("apps/lpg-mobile/app/(customer)/bills.tsx");
+  const refillTabs = await read("apps/lpg-mobile/src/native/navigation/WorkspaceTabs.tsx");
   const logistics = await read("apps/logistics-mobile/src/screens/CustomerHomeScreen.tsx");
-  const logisticsRoute = await read("apps/logistics-mobile/app/(customer)/bills.tsx");
+  const legacyLogisticsRoute = await read("apps/logistics-mobile/app/(customer)/bills.tsx");
   requireText(refill, 'label="Pay bills"', "Refill customer dashboard");
-  requireText(refillBills, "openDedicatedBillsApp", "Refill Bills entry");
-  requireText(logistics, 'router.push("/(customer)/bills"', "Logistics customer dashboard");
-  requireText(logisticsRoute, "QuickBillsScreen", "Logistics Bills route");
+  requireText(refillBillsRoute, "EmbeddedBillsWorkspace", "Refill full Bills workspace");
+  requireText(refillTabs, '{ name: "bills", title: "Bills", icon: Receipt }', "Refill Bills navigation tab");
+  rejectText(logistics, "Pay bills", "Logistics customer dashboard");
+  requireText(legacyLogisticsRoute, 'router.replace("/(customer)"', "Legacy Logistics Bills links return to Logistics home");
+  rejectText(legacyLogisticsRoute, "QuickBillsScreen", "Logistics must not mount a second Bills app");
 });
 
 Deno.test("Bills inbox uses the canonical shared notification center", async () => {

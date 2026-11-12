@@ -19,7 +19,11 @@ Notifications.setNotificationHandler({
 
 function openNotificationRoute(response: Notifications.NotificationResponse | null) {
   if (!response) return;
-  const route = response.notification.request.content.data?.path;
+  const data = response.notification.request.content.data ?? {};
+  const routeData = data.route;
+  const route = routeData && typeof routeData === "object" && !Array.isArray(routeData)
+    ? (routeData as Record<string, unknown>).path
+    : data.path ?? data.deepLink;
   navigateBillsRoute(route);
 }
 
