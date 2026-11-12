@@ -465,6 +465,48 @@ begin
 end;
 $$;
 
+-- Tokens are stored only as hashes. Owners/managers can rotate a pending or expired link
+-- when the first share sheet was dismissed or the original token was lost.
+create or replace function public.issue_fleet_staff_invitation_link(target_invitation_id uuid) returns jsonb
+language plpgsql security definer set search_path=public,extensions,pg_temp as $
+declare invite record; token_value text;
+begin
+  if auth.uid() is null or target_invitation_id is null then
+    raise exception using errcode='42501',message='Fleet owner or manager authentication is required';
+  end if;
+  select i.* into invite
+  from public.fleet_staff_invitations i
+  where i.id=target_invitation_id
+    and public.is_fleet_staff(i.fleet_partner_id,array['owner_admin','fleet_manager'])
+  for update;
+  if not found then
+    raise exception using errcode='42501',message='Fleet invitation management access is required';
+  end if;
+  if invite.status not in ('pending','expired') then
+    raise exception using errcode='55000',message='Only pending or expired fleet invitations can be reissued';
+  end if;
+  if not exists (
+    select 1 from public.fleet_partners f
+    where f.id=invite.fleet_partner_id and f.verification_status='approved' and f.operational_status='active'
+  ) then
+    raise exception using errcode='55000',message='The fleet partner must be active before a staff invitation can be reissued';
+  end if;
+  token_value:=encode(extensions.gen_random_bytes(24),'hex');
+  update public.fleet_staff_invitations
+  set token_hash=encode(extensions.digest(convert_to(token_value,'UTF8'),'sha256'),'hex'),
+      status='pending',expires_at=timezone('utc',now())+interval '7 days',updated_at=timezone('utc',now())
+  where id=invite.id
+  returning * into invite;
+  insert into public.event_log(event_type_key,source,subject_type,subject_id,actor_user_id,idempotency_key,payload,status)
+  values('event.fleet.staff.invitation_link_issued','skima.fleet.staff','fleet_partner',invite.fleet_partner_id,auth.uid(),
+    'fleet-invitation-link:'||invite.id::text||':'||gen_random_uuid()::text,
+    jsonb_build_object('invitationId',invite.id,'inviteeEmail',invite.invitee_email,'expiresAt',invite.expires_at),
+    'processed');
+  return jsonb_build_object('id',invite.id,'status',invite.status,'expiresAt',invite.expires_at,
+    'inviteToken',token_value,'inviteeEmail',invite.invitee_email);
+end;
+$;
+
 create or replace function public.accept_fleet_staff_invitation(target_invite_token text) returns uuid
 language plpgsql security definer set search_path=public,extensions,pg_temp as $$
 declare invite record; user_email text:=lower(coalesce(auth.jwt()->>'email','')); staff_id uuid;
@@ -1083,6 +1125,7 @@ revoke all on function public.register_fleet_application_document(uuid,text,uuid
   public.review_fleet_vehicle_service_line(uuid,text,text,text,text),
   public.assign_fleet_driver_vehicle(uuid,uuid,uuid,text,text,text,text),
   public.create_fleet_staff_invitation(uuid,text,text,text,text),
+  public.issue_fleet_staff_invitation_link(uuid),
   public.accept_fleet_staff_invitation(text),
   public.revoke_fleet_staff_access(uuid,uuid,text,text),
   public.validate_fuel_station_affiliate_policy_version(),
@@ -1102,6 +1145,7 @@ grant execute on function public.register_fleet_application_document(uuid,text,u
   public.register_fleet_vehicle_document(uuid,text,uuid,date,date,text,text),
   public.assign_fleet_driver_vehicle(uuid,uuid,uuid,text,text,text,text),
   public.create_fleet_staff_invitation(uuid,text,text,text,text),
+  public.issue_fleet_staff_invitation_link(uuid),
   public.accept_fleet_staff_invitation(text),
   public.revoke_fleet_staff_access(uuid,uuid,text,text),
   public.read_my_fleet_workspace()
