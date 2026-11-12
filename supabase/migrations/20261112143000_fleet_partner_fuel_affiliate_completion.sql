@@ -468,7 +468,7 @@ $$;
 -- Tokens are stored only as hashes. Owners/managers can rotate a pending or expired link
 -- when the first share sheet was dismissed or the original token was lost.
 create or replace function public.issue_fleet_staff_invitation_link(target_invitation_id uuid) returns jsonb
-language plpgsql security definer set search_path=public,extensions,pg_temp as $
+language plpgsql security definer set search_path=public,extensions,pg_temp as $fleet_invitation_reissue$
 declare invite record; token_value text;
 begin
   if auth.uid() is null or target_invitation_id is null then
@@ -505,7 +505,7 @@ begin
   return jsonb_build_object('id',invite.id,'status',invite.status,'expiresAt',invite.expires_at,
     'inviteToken',token_value,'inviteeEmail',invite.invitee_email);
 end;
-$;
+$fleet_invitation_reissue$;
 
 create or replace function public.accept_fleet_staff_invitation(target_invite_token text) returns uuid
 language plpgsql security definer set search_path=public,extensions,pg_temp as $$
