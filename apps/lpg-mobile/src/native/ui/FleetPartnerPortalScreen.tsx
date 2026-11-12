@@ -94,7 +94,7 @@ export function FleetPartnerPortalScreen() {
   const partner = partners.find((row) =>
     firstString(row, ["verification_status"]) === "approved" &&
     firstString(row, ["operational_status"]) === "active"
-  ) ?? partners[0] ?? null;
+  ) ?? null;
   const partnerId = firstString(partner, ["id"]);
   const hasOpenApplication = applications.some((row) =>
     ["submitted", "correction_required", "resubmitted", "approved"].includes(firstString(row, ["status"]) ?? "")
