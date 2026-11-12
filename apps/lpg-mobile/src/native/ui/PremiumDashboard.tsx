@@ -13,14 +13,13 @@ import {
   QrCode,
   ScanLine,
   ShieldCheck,
-  ShoppingBag,
   Sparkles,
   Truck,
   X,
   WalletCards,
   Zap,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
   Pressable,
