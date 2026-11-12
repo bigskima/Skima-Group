@@ -1,2 +1,3 @@
-import { LogisticsStoreScreen } from "../../src/screens/LogisticsStoreScreen";
-export default LogisticsStoreScreen;
+import { EmbeddedStoreWorkspace } from "../../src/screens/EmbeddedStoreWorkspace";
+
+export default EmbeddedStoreWorkspace;
