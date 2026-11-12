@@ -25,7 +25,7 @@ import { friendlyError } from "../utilities/friendlyError";
 
 type Status = "loading" | "authenticated" | "unauthenticated" | "error";
 
-interface SignUpInput {
+export interface SignUpInput {
   readonly displayName: string;
   readonly email: string;
   readonly password: string;
@@ -33,12 +33,12 @@ interface SignUpInput {
   readonly referralCode?: string;
 }
 
-interface SignUpResult {
+export interface SignUpResult {
   readonly sessionStarted: boolean;
   readonly confirmationRequired: boolean;
 }
 
-interface SessionValue {
+export interface SessionValue {
   status: Status;
   session: Session | null;
   context: SessionContext | null;
@@ -56,6 +56,10 @@ interface SessionValue {
 }
 
 const Context = createContext<SessionValue | null>(null);
+
+export function SessionValueProvider({ value, children }: PropsWithChildren<{ value: SessionValue }>) {
+  return <Context.Provider value={value}>{children}</Context.Provider>;
+}
 
 export function SessionProvider({ children }: PropsWithChildren) {
   const config = useMemo(readConfig, []);
