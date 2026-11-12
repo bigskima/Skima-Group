@@ -995,11 +995,13 @@ begin
     return jsonb_build_object('status','pending_recovery','earningId',earning.id,'requiredAmount',earning.amount,'availableAmount',coalesce(available,0));
   end if;
   transaction_id:=public.post_financial_transaction(
-    'reversal',earning.currency_code,'fuel.station_affiliate.reversal','fuel_station_affiliate_earning',earning.id,
+    -- The shared posting engine's supported correction transaction is refund;
+    -- commission remains the supported ledger classification on both entries.
+    'refund',earning.currency_code,'fuel.station_affiliate.reversal','fuel_station_affiliate_earning',earning.id,
     jsonb_build_array(
-      jsonb_build_object('wallet_id',earning.commission_wallet_id,'direction','debit','amount',earning.amount,'entry_type','reversal',
+      jsonb_build_object('wallet_id',earning.commission_wallet_id,'direction','debit','amount',earning.amount,'entry_type','commission',
         'metadata',jsonb_build_object('role','affiliate_commission_recovery','fuel_order_id',earning.fuel_order_id)),
-      jsonb_build_object('wallet_id',earning.revenue_wallet_id,'direction','credit','amount',earning.amount,'entry_type','reversal',
+      jsonb_build_object('wallet_id',earning.revenue_wallet_id,'direction','credit','amount',earning.amount,'entry_type','commission',
         'metadata',jsonb_build_object('role','skima_revenue_recovery','fuel_order_id',earning.fuel_order_id))
     ),
     'fuel-station-affiliate-reversal:'||earning.id::text,null,earning.fuel_order_id::text,
