@@ -45,6 +45,16 @@ revoke all on public.fleet_partner_service_lines,public.fleet_staff_invitations 
 grant select on public.fleet_partner_service_lines,public.fleet_staff_invitations to authenticated;
 grant all on public.fleet_partner_service_lines,public.fleet_staff_invitations to service_role;
 
+drop policy if exists fleet_partner_service_lines_related_read on public.fleet_partner_service_lines;
+create policy fleet_partner_service_lines_related_read
+on public.fleet_partner_service_lines
+for select to authenticated
+using (
+  public.is_fleet_staff(fleet_partner_id,null)
+  or public.has_permission('platform.fleets.read',null)
+  or public.has_permission('platform.vehicles.manage',null)
+);
+
 -- Dedicated document requirement records make fleet application evidence reviewable by
 -- the existing protected document-review workflow even though fleet applications have
 -- their own lifecycle table (not application_records).
