@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import {
   Bell, Box, BriefcaseBusiness, CarFront, ChevronRight, House, Package,
-  PackageCheck, ShoppingBag, ShieldCheck, Truck, WalletCards, Receipt,
+  PackageCheck, ShoppingBag, ShieldCheck, Truck, WalletCards,
 } from "lucide-react-native";
 import { useMemo } from "react";
 import { useWindowDimensions, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -115,15 +115,7 @@ export function CustomerHomeScreen() {
 
       </GuideTarget>
 
-      <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/bills" as never)}
-        style={[styles.walletLink,{backgroundColor:palette.surface,borderColor:palette.border}]}>
-        <View style={[styles.walletIcon,{backgroundColor:palette.brandSoft}]}><Receipt color={palette.brand} size={18}/></View>
-        <View style={styles.requestCopy}>
-          <Text style={[styles.requestTitle,{color:palette.ink}]}>Pay bills</Text>
-          <Text style={[styles.requestMeta,{color:palette.muted}]}>Airtime, data, electricity and TV</Text>
-        </View>
-        <ChevronRight color={palette.muted} size={18}/>
-      </Pressable>
+
 
       <GuideTarget targetKey="customer-home-services" style={styles.section}>
       <View style={styles.section}>
