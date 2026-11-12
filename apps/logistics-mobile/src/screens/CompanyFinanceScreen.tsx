@@ -77,6 +77,7 @@ export function CompanyFinanceScreen() {
     },
   });
   const paymentMethod = asString(settings.data,"default_driver_payment_method") ?? "offline";
+  const acceptsOfflineCustomerPayment = settings.data?.accepts_offline_customer_payment === true;
   const banksQuery=useQuery({
     queryKey:["logistics-payout-banks"],
     queryFn:()=>session.api.get("/runtime/banks",MoneySchema),
@@ -100,6 +101,28 @@ export function CompanyFinanceScreen() {
     },
     onSuccess:async()=>{await settings.refetch();Alert.alert("Payment setting saved","New driver payments will use the selected company method.");},
     onError:(e)=>Alert.alert("Could not save setting",e instanceof Error?e.message:"Please try again."),
+  });
+
+  const saveOfflineCustomerPayment=useMutation({
+    mutationFn:async(enabled:boolean)=>{
+      if(!organizationId) throw new Error("Company profile is unavailable.");
+      const {data,error}=await session.supabase.rpc("update_logistics_company_offline_payment_acceptance",{
+        target_organization_id:organizationId,
+        target_accepts_offline_customer_payment:enabled,
+      });
+      if(error) throw error;
+      return record(data);
+    },
+    onSuccess:async(_result,enabled)=>{
+      await settings.refetch();
+      Alert.alert(
+        enabled ? "Offline fulfilment enabled" : "Offline fulfilment disabled",
+        enabled
+          ? "Customers may now choose to pay your agreed delivery price directly to your company. Your SKIMA receival fee remains payable from your operating wallet."
+          : "Customers will no longer be able to select offline payment for new bookings with your company.",
+      );
+    },
+    onError:(e)=>Alert.alert("Could not save payment preference",e instanceof Error?e.message:"Please try again."),
   });
 
   const configureBeneficiary=useMutation({
@@ -245,6 +268,35 @@ export function CompanyFinanceScreen() {
             )}
           </>
         )}
+      </View>
+
+      <View style={[styles.panel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
+        <View style={{flexDirection:"row",alignItems:"flex-start",gap:12}}>
+          <View style={{flex:1,gap:5}}>
+            <Text style={[styles.panelTitle,{color:palette.ink}]}>Offline fulfilment payments</Text>
+            <Text style={[styles.hint,{color:palette.muted}]}>Allow customers to pay your agreed delivery price directly to your company outside SKIMA. SKIMA still collects only the customer booking fee from the customer's wallet; your separate offline receival fee is charged to your company operating wallet.</Text>
+          </View>
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{checked:acceptsOfflineCustomerPayment,disabled:settings.isPending||settings.isError||saveOfflineCustomerPayment.isPending}}
+            disabled={settings.isPending||settings.isError||saveOfflineCustomerPayment.isPending}
+            onPress={()=>saveOfflineCustomerPayment.mutate(!acceptsOfflineCustomerPayment)}
+            style={[
+              styles.smallButton,
+              {
+                minWidth:82,
+                alignItems:"center",
+                backgroundColor:acceptsOfflineCustomerPayment?palette.successSoft:palette.surfaceSubtle,
+                opacity:settings.isPending||settings.isError||saveOfflineCustomerPayment.isPending?0.55:1,
+              },
+            ]}
+          >
+            <Text style={{color:acceptsOfflineCustomerPayment?palette.success:palette.muted,fontSize:10,fontWeight:"900"}}>
+              {saveOfflineCustomerPayment.isPending?"Saving…":acceptsOfflineCustomerPayment?"Enabled":"Disabled"}
+            </Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.hint,{color:palette.muted}]}>This controls new bookings only. Existing bookings keep the payment method agreed when they were created.</Text>
       </View>
 
       <View style={[styles.panel,{backgroundColor:palette.surface,borderColor:palette.border}]}>

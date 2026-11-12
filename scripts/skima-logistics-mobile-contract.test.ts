@@ -46,8 +46,10 @@ const providerWorkspace = await Deno.readTextFile("apps/logistics-mobile/src/scr
 const guideProvider = await Deno.readTextFile("apps/logistics-mobile/src/onboarding/LogisticsGuideProvider.tsx");
 const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
+const companyFinance = await Deno.readTextFile("apps/logistics-mobile/src/screens/CompanyFinanceScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
 const logisticsNotificationMigration = await Deno.readTextFile("supabase/migrations/20261104172000_logistics_notification_scope_and_in_app_company_invites.sql");
+const offlineFulfilmentPaymentMigration = await Deno.readTextFile("supabase/migrations/20261112110000_logistics_company_offline_fulfillment_payment_opt_in.sql");
 const providerTeamRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/team.tsx");
 const providerDriver = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
 const driverLocationShare = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverLocationShare.tsx");
@@ -809,4 +811,15 @@ Deno.test("Company image and document uploads use browser Blob uploads and retai
   requireText(companyApplication, "maxBytes: 50 * 1024 * 1024", "50 MB document limit is checked before upload");
   requireText(companyFleet, "!driversQuery.error", "a failed driver request cannot display an empty driver directory");
   requireText(companyFleet, "Retry drivers", "driver directory has an independent retry action");
+});
+
+Deno.test("Companies opt in to offline fulfilment and customers can only select an accepted method", () => {
+  requireText(companyFinance, "accepts_offline_customer_payment", "company finance reads its offline fulfilment preference");
+  requireText(companyFinance, 'rpc("update_logistics_company_offline_payment_acceptance"', "company owner saves the offline fulfilment preference");
+  requireText(companyFinance, "Customers may now choose to pay your agreed delivery price directly to your company", "company sees the direct-payment consequence");
+  requireText(detail, 'rpc("read_logistics_provider_payment_options"', "customer reads the selected provider's public payment preference");
+  requireText(detail, 'offlinePaymentAvailability !== "accepted"', "customer booking rejects unaccepted offline payment");
+  requireText(detail, "disabled={busy || !canChooseOffline}", "offline choice is disabled until provider opt-in is verified");
+  requireText(detail, "SKIMA collects only your booking fee", "offline fulfilment does not collect the provider delivery price from the customer wallet");
+  requireText(offlineFulfilmentPaymentMigration, "accepts_offline_customer_payment boolean not null default false", "provider offline acceptance is opt-in by default");
 });

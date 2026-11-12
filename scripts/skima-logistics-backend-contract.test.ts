@@ -40,6 +40,9 @@ const migrationCategoryAmbiguityFix = await Deno.readTextFile(
 const logisticsChatMigration = await Deno.readTextFile(
   "supabase/migrations/20261106233000_logistics_booking_chat_and_media.sql",
 );
+const offlineFulfilmentPaymentMigration = await Deno.readTextFile(
+  "supabase/migrations/20261112110000_logistics_company_offline_fulfillment_payment_opt_in.sql",
+);
 const logisticsFeesAdmin = await Deno.readTextFile("apps/admin/src/admin-logistics-fee-workspace.tsx");
 const moneyRouter = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
 const adminNavigation = await Deno.readTextFile("apps/admin/src/app/admin-v2-navigation.ts");
@@ -786,4 +789,14 @@ Deno.test("Logistics fee administration configures all booking and settlement po
   requireText(moneyRouter, "/money/pricing/logistics", "dedicated Logistics pricing route");
   requireText(adminNavigation, "\"logistics-fees\": \"/money/pricing/logistics\"", "Money workspace navigation route");
   requireNotText(logisticsFeesAdmin, "fixed_amount: 0, percentage_basis_points: 0", "no guessed zero-rate customer fee is silently activated");
+});
+
+Deno.test("Offline fulfilment is provider opt-in and does not charge the delivery price to the customer wallet", () => {
+  requireText(offlineFulfilmentPaymentMigration, "accepts_offline_customer_payment boolean not null default false", "new companies default to not accepting offline fulfilment");
+  requireText(offlineFulfilmentPaymentMigration, "public.read_logistics_provider_payment_options", "customer reads only the public provider payment capability");
+  requireText(offlineFulfilmentPaymentMigration, "public.update_logistics_company_offline_payment_acceptance", "company owner controls offline fulfilment acceptance");
+  requireText(offlineFulfilmentPaymentMigration, "accepts_offline_customer_payment = true", "booking transaction requires explicit provider acceptance");
+  requireText(offlineFulfilmentPaymentMigration, "Choose online wallet payment.", "rejected offline selection has a safe online alternative");
+  requireText(migrationBooking, "'customer_booking_fee'", "customer remains charged the configured booking fee");
+  requireText(migrationBooking, "'provider_offline_receival_fee'", "company retains the separate offline receival fee obligation");
 });

@@ -1,6 +1,6 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Clock3, MessageSquareText, RefreshCw, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -42,7 +42,7 @@ export function LogisticsJobDetailScreen() {
   const { id: routeId } = useLocalSearchParams<{ id: string }>();
   const jobId = Array.isArray(routeId) ? routeId[0] : routeId;
   const { palette } = useAppTheme();
-  const { api } = useSession();
+  const { api, supabase } = useSession();
   const jobs = useLogisticsQuery(["jobs"], "/runtime/logistics/jobs", Boolean(jobId));
   const opportunitiesQuery = useLogisticsQuery(["opportunities"], "/runtime/logistics/opportunities", Boolean(jobId));
   const offersQuery = useLogisticsQuery(["offers", jobId], `/runtime/logistics/offers?jobId=${encodeURIComponent(jobId ?? "")}`, Boolean(jobId));
@@ -68,6 +68,37 @@ export function LogisticsJobDetailScreen() {
       && status === "submitted"
       && (!expiry || new Date(expiry).getTime() > Date.now());
   }), [offersQuery.data, jobId]);
+  const selectedOffer = offers.find((item) => asString(item, "id") === selectedOfferId) ?? null;
+  const selectedOrganizationId = asString(selectedOffer, "organization_id");
+  const offlinePaymentOptions = useQuery({
+    queryKey: ["logistics-provider-payment-options", selectedOrganizationId],
+    enabled: Boolean(showBooking && selectedOrganizationId),
+    queryFn: async () => {
+      if (!selectedOrganizationId) throw new Error("The provider company is unavailable.");
+      const { data, error } = await supabase.rpc("read_logistics_provider_payment_options", {
+        target_organization_id: selectedOrganizationId,
+      });
+      if (error) throw error;
+      return data && typeof data === "object" && !Array.isArray(data)
+        ? data as Record<string, unknown>
+        : {};
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const offlinePaymentAvailability: "loading" | "accepted" | "not_accepted" | "unavailable" =
+    !selectedOrganizationId || offlinePaymentOptions.isError
+      ? "unavailable"
+      : offlinePaymentOptions.isPending
+        ? "loading"
+        : offlinePaymentOptions.data?.accepts_offline_customer_payment === true
+          ? "accepted"
+          : "not_accepted";
+  useEffect(() => {
+    if (showBooking && paymentMode === "offline" && offlinePaymentAvailability !== "accepted") {
+      setPaymentMode("online_wallet");
+    }
+  }, [showBooking, paymentMode, offlinePaymentAvailability]);
   const activeBookings = (bookings.data ?? []).filter((item) => asString(item, "job_id") === jobId);
   const existingBooking = activeBookings[0] ?? null;
   const refresh = async () => {
@@ -76,6 +107,9 @@ export function LogisticsJobDetailScreen() {
 
   const createBooking = useMutation({
     mutationFn: async (offerId: string) => {
+      if (paymentMode === "offline" && offlinePaymentAvailability !== "accepted") {
+        throw new Error("This company does not accept offline fulfilment payment. Choose online wallet payment.");
+      }
       const previous = bookingAttemptRef.current;
       const idempotencyKey = previous?.offerId === offerId && previous.paymentMode === paymentMode
         ? previous.idempotencyKey
@@ -344,9 +378,14 @@ export function LogisticsJobDetailScreen() {
         visible={showBooking}
         paymentMode={paymentMode}
         setPaymentMode={setPaymentMode}
+        offlinePaymentAvailability={offlinePaymentAvailability}
         busy={createBooking.isPending}
         onClose={() => setShowBooking(false)}
-        onConfirm={() => selectedOfferId && createBooking.mutate(selectedOfferId)}
+        onConfirm={() => {
+          if (selectedOfferId && (paymentMode !== "offline" || offlinePaymentAvailability === "accepted")) {
+            createBooking.mutate(selectedOfferId);
+          }
+        }}
       />
       <CustomerCounterOfferSheet
         visible={Boolean(counterOfferId)}
@@ -381,11 +420,20 @@ export function LogisticsJobDetailScreen() {
 
 }
 
-function BookingModeSheet({ visible, paymentMode, setPaymentMode, busy, onClose, onConfirm }: {
+function BookingModeSheet({ visible, paymentMode, setPaymentMode, offlinePaymentAvailability, busy, onClose, onConfirm }: {
   visible: boolean; paymentMode: PaymentMode; setPaymentMode(value: PaymentMode): void;
+  offlinePaymentAvailability: "loading" | "accepted" | "not_accepted" | "unavailable";
   busy: boolean; onClose(): void; onConfirm(): void;
 }) {
   const { palette } = useAppTheme();
+  const canChooseOffline = offlinePaymentAvailability === "accepted";
+  const offlinePaymentMessage = offlinePaymentAvailability === "accepted"
+    ? "Pay the agreed delivery price directly to this company. SKIMA collects only your booking fee; the company's separate receival fee is charged to its operating wallet."
+    : offlinePaymentAvailability === "loading"
+      ? "Checking whether this company accepts offline fulfilment payment…"
+      : offlinePaymentAvailability === "not_accepted"
+        ? "This company does not accept offline fulfilment payment. Choose online wallet payment instead."
+        : "Offline payment could not be verified for this company. Online wallet payment is available.";
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={[styles.modalRoot, { backgroundColor: palette.overlay }]}>
@@ -394,16 +442,29 @@ function BookingModeSheet({ visible, paymentMode, setPaymentMode, busy, onClose,
           <View style={styles.sheetHandle}><View style={[styles.handle, { backgroundColor: palette.borderStrong }]} /></View>
           <Text style={[styles.sheetEyebrow, { color: palette.brand }]}>BOOK THIS OFFER</Text>
           <Text style={[styles.sheetTitle, { color: palette.ink }]}>Choose how you’ll pay</Text>
-          <Text style={[styles.description, { color: palette.muted }]}>The delivery price and the applicable customer booking fee are locked to your booking. The exact amount appears before wallet payment.</Text>
+          <Text style={[styles.description, { color: palette.muted }]}>Online payment reserves the delivery price in escrow plus the booking fee. Offline payment is available only when the company accepts direct settlement; your booking fee is still collected by SKIMA.</Text>
           <Pressable onPress={() => setPaymentMode("online_wallet")} style={[styles.paymentChoice, { borderColor: paymentMode === "online_wallet" ? palette.brand : palette.border, backgroundColor: paymentMode === "online_wallet" ? palette.brandSofter : palette.surface }]}>
             <View style={[styles.choiceIcon, { backgroundColor: palette.brandSoft }]}><WalletCards color={palette.brand} size={19} /></View>
             <View style={styles.choiceCopy}><Text style={[styles.choiceTitle, { color: palette.ink }]}>Pay online with wallet</Text><Text style={[styles.choiceBody, { color: palette.muted }]}>Your delivery amount is reserved in escrow, plus the customer booking fee.</Text></View>
             <View style={[styles.radioOuter, { borderColor: paymentMode === "online_wallet" ? palette.brand : palette.borderStrong }]}>{paymentMode === "online_wallet" ? <View style={[styles.radioInner, { backgroundColor: palette.brand }]} /> : null}</View>
           </Pressable>
-          <Pressable onPress={() => setPaymentMode("offline")} style={[styles.paymentChoice, { borderColor: paymentMode === "offline" ? palette.brand : palette.border, backgroundColor: paymentMode === "offline" ? palette.brandSofter : palette.surface }]}>
+          <Pressable
+            disabled={busy || !canChooseOffline}
+            onPress={() => { if (canChooseOffline) setPaymentMode("offline"); }}
+            style={[
+              styles.paymentChoice,
+              { borderColor: paymentMode === "offline" ? palette.brand : palette.border, backgroundColor: paymentMode === "offline" ? palette.brandSofter : palette.surface },
+              !canChooseOffline ? { opacity: 0.62 } : null,
+            ]}
+          >
             <View style={[styles.choiceIcon, { backgroundColor: palette.successSoft }]}><Truck color={palette.success} size={19} /></View>
-            <View style={styles.choiceCopy}><Text style={[styles.choiceTitle, { color: palette.ink }]}>Pay offline</Text><Text style={[styles.choiceBody, { color: palette.muted }]}>You pay the customer booking fee. The company’s separate receival fee is charged to its wallet.</Text></View>
-            <View style={[styles.radioOuter, { borderColor: paymentMode === "offline" ? palette.brand : palette.borderStrong }]}>{paymentMode === "offline" ? <View style={[styles.radioInner, { backgroundColor: palette.brand }]} /> : null}</View>
+            <View style={styles.choiceCopy}>
+              <Text style={[styles.choiceTitle, { color: palette.ink }]}>Pay fulfilment offline</Text>
+              <Text style={[styles.choiceBody, { color: palette.muted }]}>{offlinePaymentMessage}</Text>
+            </View>
+            <View style={[styles.radioOuter, { borderColor: paymentMode === "offline" && canChooseOffline ? palette.brand : palette.borderStrong }]}>
+              {paymentMode === "offline" && canChooseOffline ? <View style={[styles.radioInner, { backgroundColor: palette.brand }]} /> : null}
+            </View>
           </Pressable>
           <AppButton label="Confirm provider" fullWidth loading={busy} onPress={onConfirm} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
           <AppButton label="Not now" fullWidth variant="ghost" onPress={onClose} />
