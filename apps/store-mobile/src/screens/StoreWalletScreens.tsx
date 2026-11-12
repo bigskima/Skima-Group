@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as WebBrowser from "expo-web-browser";
 import { ArrowDownLeft, ArrowUpRight, Building2, CheckCircle2, ChevronRight, Plus, ShieldCheck, WalletCards } from "lucide-react-native";
 import { z } from "zod";
 import { useStoreFinanceMutation, useStoreFinanceQuery } from "../api/finance";
@@ -66,7 +65,7 @@ export function StoreTopUpScreen({onBack}:{onBack:()=>void}){
  const valid=Number.isFinite(value)&&value>0;
  const fee=asNumber(previewData,"calculatedFeeAmount","calculated_fee_amount","feeAmount","fee_amount")??0;
  const charge=asNumber(previewData,"totalChargeAmount","total_charge_amount")??value+fee;
- const openCheckout=async(url:string)=>{try{if(url.startsWith("https://"))await WebBrowser.openBrowserAsync(url);else await Linking.openURL(url);}catch{setNotice("The payment page could not be opened. Your deposit request remains available in funding activity.");}};
+ const openCheckout=async(url:string)=>{try{await Linking.openURL(url);}catch{setNotice("The payment page could not be opened. Your deposit request remains available in funding activity.");}};
  const prepare=async()=>{
   if(!valid||pending)return;setPending(true);setNotice("");
   try{
