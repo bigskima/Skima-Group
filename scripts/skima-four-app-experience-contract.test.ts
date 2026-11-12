@@ -129,14 +129,19 @@ Deno.test("push delivery and private Firebase materialisation cover four app pac
   }
 });
 
-Deno.test("manual Android workflow builds APK or AAB for selected apps sequentially", async () => {
+Deno.test("manual Android workflow builds only Refill and Logistics APK or AAB releases sequentially", async () => {
   const workflow = await read(".github/workflows/android-four-app-build.yml");
   assertStringIncludes(workflow, "workflow_dispatch");
   assertStringIncludes(workflow, "production-apk");
   assertStringIncludes(workflow, "production-aab");
   assertStringIncludes(workflow, "max-parallel: 1");
   assertStringIncludes(workflow, "EXPO_TOKEN");
-  assertStringIncludes(workflow, "SKIMA_STORE_EAS_PROJECT_ID");
-  assertStringIncludes(workflow, "SKIMA_BILLS_EAS_PROJECT_ID");
+  assertStringIncludes(workflow, "SKIMA_REFILL_EAS_PROJECT_ID");
   assertStringIncludes(workflow, "SKIMA_LOGISTICS_EAS_PROJECT_ID");
+  assertStringIncludes(workflow, '["lpg-mobile","logistics-mobile"]');
+  assertStringIncludes(workflow, "- refill");
+  assertStringIncludes(workflow, "- logistics");
+  if (workflow.includes("SKIMA_STORE_EAS_PROJECT_ID") || workflow.includes("SKIMA_BILLS_EAS_PROJECT_ID")) {
+    throw new Error("Store and Bills must remain web products, not Android build targets");
+  }
 });
