@@ -771,6 +771,87 @@ begin
  );
 end $$;
 
+-- Admin Fleet Partners workspace: expose customer fleet documents, authorised people and per-service readiness.
+create or replace function public.read_fleet_admin_workspace(
+ target_search text default null,
+ target_status text default null
+)
+returns jsonb language sql stable security definer set search_path=public,pg_temp as $
+ select jsonb_build_object(
+  'partners',coalesce((select jsonb_agg(to_jsonb(f) order by f.created_at desc)
+    from public.fleet_partners f
+    where (target_status is null or f.verification_status=target_status)
+      and (target_search is null or f.display_name ilike '%'||target_search||'%')),'[]'::jsonb),
+  'applications',coalesce((select jsonb_agg(to_jsonb(a) order by a.created_at desc)
+    from public.fleet_partner_applications a
+    where (target_status is null or a.status=target_status)
+      and (target_search is null or a.legal_name ilike '%'||target_search||'%')),'[]'::jsonb),
+  'vehicles',coalesce((select jsonb_agg(to_jsonb(v) order by v.created_at desc)
+    from public.vehicles v where v.fleet_partner_id is not null
+      and (target_search is null or v.registration_number ilike '%'||target_search||'%'
+        or v.manufacturer ilike '%'||target_search||'%' or v.model ilike '%'||target_search||'%')),'[]'::jsonb),
+  'drivers',coalesce((select jsonb_agg(to_jsonb(d) order by d.created_at desc)
+    from public.driver_profiles d where d.verification_status='approved'),'[]'::jsonb),
+  'assignments',coalesce((select jsonb_agg(to_jsonb(l) order by l.created_at desc)
+    from public.driver_vehicle_links l join public.vehicles v on v.id=l.vehicle_id
+    where v.fleet_partner_id is not null),'[]'::jsonb),
+  'compliance',coalesce((select jsonb_agg(to_jsonb(c)) from public.subject_compliance_status c
+    where c.subject_type='vehicle' and exists(select 1 from public.vehicles v where v.id=c.subject_id and v.fleet_partner_id is not null)),'[]'::jsonb),
+  'ownership',coalesce((select jsonb_agg(to_jsonb(r) order by r.valid_from desc)
+    from public.vehicle_party_relationships r join public.vehicles v on v.id=r.vehicle_id
+    where v.fleet_partner_id is not null),'[]'::jsonb),
+  'audit',coalesce((select jsonb_agg(to_jsonb(h) order by h.occurred_at desc) from (
+    select id,fleet_partner_id::text entity_id,to_status,reason,actor_user_id,occurred_at
+      from public.fleet_lifecycle_history where fleet_partner_id is not null
+    union all
+    select history.id,history.vehicle_id::text,history.to_status,history.reason,history.actor_user_id,history.occurred_at
+      from public.vehicle_lifecycle_history history join public.vehicles v on v.id=history.vehicle_id
+      where v.fleet_partner_id is not null
+  ) h),'[]'::jsonb),
+  'documents',coalesce((select jsonb_agg(jsonb_build_object(
+    'id',document.id,'fleetApplicationId',application.id,'legalName',application.legal_name,
+    'partnerKind',application.partner_kind,'applicationStatus',application.status,
+    'requirementKey',link.requirement_key,'requirementName',requirement.display_name,
+    'documentSubmissionId',document.id,'status',document.status,'decisionReason',document.decision_reason,
+    'storageBucket',document.storage_bucket,'storagePath',document.storage_path,
+    'contentType',document.content_type,'byteSize',document.byte_size,
+    'createdAt',document.created_at,'reviewedAt',document.reviewed_at
+  ) order by document.created_at desc)
+    from public.fleet_application_documents link
+    join public.fleet_partner_applications application on application.id=link.fleet_application_id
+    join public.document_submissions document on document.id=link.document_submission_id
+    join public.fleet_application_document_requirements requirement on requirement.key=link.requirement_key
+    where (target_search is null or application.legal_name ilike '%'||target_search||'%')
+      and (target_status is null or document.status=target_status)),'[]'::jsonb),
+  'serviceLines',coalesce((select jsonb_agg(jsonb_build_object(
+    'id',line.id,'fleetPartnerId',line.fleet_partner_id,'vehicleId',line.vehicle_id,
+    'serviceKey',line.service_key,'status',line.status,'decisionReason',line.decision_reason,
+    'registrationNumber',vehicle.registration_number,'manufacturer',vehicle.manufacturer,'model',vehicle.model,
+    'fleetName',partner.display_name,'reviewedAt',line.reviewed_at
+  ) order by line.created_at desc)
+    from public.fleet_vehicle_service_lines line
+    join public.vehicles vehicle on vehicle.id=line.vehicle_id
+    join public.fleet_partners partner on partner.id=line.fleet_partner_id
+    where (target_search is null or vehicle.registration_number ilike '%'||target_search||'%'
+      or partner.display_name ilike '%'||target_search||'%')
+      and (target_status is null or line.status=target_status)),'[]'::jsonb),
+  'staff',coalesce((select jsonb_agg(jsonb_build_object(
+    'id',staff.id,'fleetPartnerId',staff.fleet_partner_id,'userId',staff.user_id,
+    'displayName',profile.display_name,'email',auth_user.email,'accessRole',staff.access_role,
+    'status',staff.status,'reason',staff.reason,'startsAt',staff.starts_at,'endsAt',staff.ends_at
+  ) order by staff.created_at desc)
+    from public.fleet_authorized_staff staff
+    join public.fleet_partners partner on partner.id=staff.fleet_partner_id
+    join public.profiles profile on profile.id=staff.user_id
+    left join auth.users auth_user on auth_user.id=staff.user_id
+    where (target_search is null or partner.display_name ilike '%'||target_search||'%'
+      or profile.display_name ilike '%'||target_search||'%')),'[]'::jsonb)
+ )
+ where public.has_permission('platform.fleets.read',null)
+   or public.has_permission('platform.vehicles.manage',null)
+   or public.has_permission('platform.fleets.review',null)
+$;
+
 -- RLS and execute grants.
 alter table public.fleet_staff_invitations enable row level security;
 alter table public.fleet_vehicle_registrations enable row level security;
