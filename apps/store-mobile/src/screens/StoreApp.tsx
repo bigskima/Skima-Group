@@ -22,7 +22,7 @@ const tabs = [
   { key: "account", label: "Account", icon: UserRound },
 ] as const;
 
-export function StoreApp() {
+export function StoreApp({ onExit }: { readonly onExit?: () => void } = {}) {
   const { palette } = useAppTheme();
   const guide = useStoreGuide();
   const session = useSession();
@@ -83,6 +83,7 @@ export function StoreApp() {
             {!desktop ? <Pressable accessibilityRole="button" accessibilityLabel="Notifications" onPress={() => open("notifications")}
               style={[styles.bell, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}><Bell color={palette.ink} size={18} /></Pressable> : null}
           </View>
+            {onExit ? <Pressable accessibilityRole="button" accessibilityLabel="Back to Logistics" onPress={onExit} style={[styles.exitButton, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><ArrowLeft color={palette.brand} size={15} /><Text style={{ color: palette.brand, fontSize: 11, fontWeight: "900" }}>Logistics</Text></Pressable> : null}
           <View style={styles.content}>
             {page === "shop" ? <StoreShopScreen /> : null}
             {page === "orders" ? <StoreOrdersScreen /> : null}
@@ -112,6 +113,7 @@ const styles = StyleSheet.create({
   brand: { fontSize: 12, fontWeight: "900", letterSpacing: 0.8 }, pageTitle: { fontSize: 10, fontWeight: "700", marginTop: 2 },
   back: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   bell: { width: 38, height: 38, borderRadius: 13, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
+  exitButton: { minHeight: 36, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 },
   content: { flex: 1, minHeight: 0 }, tabs: { minHeight: 68, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingHorizontal: 8, paddingBottom: 5 },
   tab: { flex: 1, minHeight: 58, alignItems: "center", justifyContent: "center", gap: 4 },
 });
