@@ -65,7 +65,7 @@ jobs:
 
       - name: Validate Expo dependencies and native configuration
         run: |
-          npx --yes expo-doctor@latest
+          npx expo install --check
           npx expo config --type public > /dev/null
 
   build:
