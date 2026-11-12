@@ -10,14 +10,15 @@ const Row = z.record(z.unknown());
 const Workspace = z.object({
   partners: z.array(Row), applications: z.array(Row), vehicles: z.array(Row), drivers: z.array(Row).default([]),
   assignments: z.array(Row), compliance: z.array(Row), ownership: z.array(Row), audit: z.array(Row),
-  documents: z.array(Row).default([]), serviceLines: z.array(Row).default([]), staff: z.array(Row).default([]),
+  applicationDocuments: z.array(Row).default([]), vehicleDocuments: z.array(Row).default([]),
+  serviceLines: z.array(Row).default([]), staff: z.array(Row).default([]), staffInvitations: z.array(Row).default([]),
 });
 type RowType = z.infer<typeof Row>;
-type Tab = "partners" | "applications" | "documents" | "vehicles" | "serviceLines" | "assignments" | "staff" | "compliance" | "ownership" | "audit";
-type Decision = { kind: "fleet" | "vehicle" | "document" | "service-line"; id: string; action: string; label: string; vehicleId?: string; serviceKey?: string; subjectType?: string; requirementKey?: string; validFrom?: string; validUntil?: string };
+type Tab = "partners" | "applications" | "documents" | "vehicles" | "serviceLines" | "assignments" | "staff" | "staffInvitations" | "compliance" | "ownership" | "audit";
+type Decision = { kind: "fleet" | "vehicle" | "document" | "service-line"; id: string; action: string; label: string; vehicleId?: string; serviceKey?: string };
 type Assignment = { vehicleId: string; fleetPartnerId: string; driverId: string; serviceKey: string; relationship: string; reason: string };
 const text = (row: RowType, key: string) => typeof row[key] === "string" ? row[key] as string : "";
-const tabs: readonly Tab[] = ["partners", "applications", "documents", "vehicles", "serviceLines", "assignments", "staff", "compliance", "ownership", "audit"];
+const tabs: readonly Tab[] = ["partners", "applications", "documents", "vehicles", "serviceLines", "assignments", "staff", "staffInvitations", "compliance", "ownership", "audit"];
 const relationships = ["driver_owned", "business_owned", "fleet_owned", "leased", "rented", "third_party_authorized"];
 const emptyRows: readonly RowType[] = [];
 
@@ -53,23 +54,24 @@ export function AdminFleetWorkspace() {
         return;
       }
       if (input.kind === "document") {
-        const result = await supabase.rpc("review_fleet_application_document_submission", { target_document_submission_id: input.id, target_decision: input.action, target_reason: input.reason, target_idempotency_key: idempotency });
+        const result = await supabase.rpc("review_fleet_application_document_submission", {
+          target_document_submission_id: input.id,
+          target_decision: input.action,
+          target_reason: input.reason,
+          target_idempotency_key: idempotency,
+        });
         if (result.error) throw result.error;
-        if (input.action === "approved" && input.subjectType === "vehicle" && input.vehicleId && input.requirementKey) {
-          const evidence = await supabase.rpc("record_compliance_evidence", {
-            target_requirement_key: input.requirementKey, target_subject_type: "vehicle", target_subject_id: input.vehicleId,
-            target_document_submission_id: input.id, target_valid_from: input.validFrom || new Date().toISOString().slice(0, 10),
-            target_valid_until: input.validUntil || null, target_reason: input.reason,
-            target_idempotency_key: createClientIdempotencyKey("admin.fleet.vehicle-evidence", input.id),
-          });
-          if (evidence.error) throw evidence.error;
-        }
+        // The central document-review workflow creates/updates compliance evidence.
+        // Do not write a second independent evidence record here.
         return;
       }
       if (!input.vehicleId || !input.serviceKey) throw new Error("Vehicle and service line details are required.");
       const result = await supabase.rpc("review_fleet_vehicle_service_line", {
-        target_vehicle_id: input.vehicleId, target_service_key: input.serviceKey,
-        target_decision: input.action, target_reason: input.reason, target_idempotency_key: idempotency,
+        target_vehicle_id: input.vehicleId,
+        target_service_key: input.serviceKey,
+        target_decision: input.action,
+        target_reason: input.reason,
+        target_idempotency_key: idempotency,
       });
       if (result.error) throw result.error;
     },
@@ -93,6 +95,26 @@ export function AdminFleetWorkspace() {
   });
 
   const approvedDrivers = data.data?.drivers ?? emptyRows;
+  const workspace = data.data;
+  const documents: RowType[] = [
+    ...workspace.applicationDocuments.map((row) => ({
+      ...row,
+      id: text(row, "documentSubmissionId") || text(row, "id"),
+      documentSubmissionId: text(row, "documentSubmissionId") || text(row, "id"),
+      subjectType: "fleet_application",
+      vehicleId: "",
+      requirementKey: text(row, "requirementKey"),
+      displayName: text(row, "legalName") || "Fleet application",
+    })),
+    ...workspace.vehicleDocuments.map((row) => ({
+      ...row,
+      id: text(row, "documentSubmissionId") || text(row, "id"),
+      documentSubmissionId: text(row, "documentSubmissionId") || text(row, "id"),
+      subjectType: "vehicle",
+      requirementKey: text(row, "purposeKey"),
+      displayName: text(row, "vehicleId") || "Fleet vehicle",
+    })),
+  ];
   const columns = useMemo<TableColumn<RowType>[]>(() => [
     { key: "identity", header: "Record", render: (row) => <><strong>{text(row, "display_name") || text(row, "legal_name") || text(row, "registration_number") || text(row, "subject_type") || text(row, "entity_id")}</strong><br /><small>{text(row, "partner_kind") || text(row, "vehicle_id") || text(row, "id")}</small></> },
     { key: "status", header: "Status", render: (row) => { const value = text(row, "verification_status") || text(row, "operational_status") || text(row, "status") || text(row, "to_status") || (row.compliant === true ? "compliant" : "attention_required"); return <StatusBadge tone={["approved", "active", "compliant"].includes(value) ? "success" : value === "suspended" ? "danger" : "neutral"}>{normalizeStatusLabel(value)}</StatusBadge>; } },
@@ -100,13 +122,12 @@ export function AdminFleetWorkspace() {
     { key: "actions", header: "Actions", render: (row) => tab === "applications" ? <Button size="sm" onClick={() => setDecision({ kind: "fleet", id: text(row, "id"), action: "approved", label: "Review fleet application" })}>Review application</Button> : tab === "vehicles" ? <span className="sk-inline-actions"><Button size="sm" onClick={() => setDecision({ kind: "vehicle", id: text(row, "id"), action: "approved", label: "Review vehicle" })}>Review vehicle</Button>{(data.data?.serviceLines ?? []).some((line) => text(line, "vehicle_id") === text(row, "id") && text(line, "status") === "active") ? <Button size="sm" variant="outline" onClick={() => {
       const services = (data.data?.serviceLines ?? []).filter((line) => text(line, "vehicle_id") === text(row, "id") && text(line, "status") === "active");
       setAssignment({ vehicleId: text(row, "id"), fleetPartnerId: text(row, "fleet_partner_id"), driverId: approvedDrivers[0] ? text(approvedDrivers[0], "id") : "", serviceKey: text(services[0], "service_key"), relationship: "fleet_owned", reason: "" });
-    }}>Assign driver</Button> : null}</span> : tab === "documents" ? text(row, "status") === "approved" ? <StatusBadge tone="success">Approved</StatusBadge> : <Button size="sm" onClick={() => setDecision({ kind: "document", id: text(row, "documentSubmissionId"), action: "approved", label: "Review fleet document", subjectType: text(row, "subjectType"), vehicleId: text(row, "vehicleId"), requirementKey: text(row, "requirementKey"), validFrom: text(row, "validFrom"), validUntil: text(row, "validUntil") })}>Review document</Button> : tab === "serviceLines" ? <Button size="sm" onClick={() => setDecision({ kind: "service-line", id: text(row, "id"), vehicleId: text(row, "vehicle_id"), serviceKey: text(row, "service_key"), action: "approved", label: "Review service eligibility" })}>Review service</Button> : null },
+    }}>Assign driver</Button> : null}</span> : tab === "documents" ? text(row, "status") === "approved" ? <StatusBadge tone="success">Approved</StatusBadge> : <Button size="sm" onClick={() => setDecision({ kind: "document", id: text(row, "documentSubmissionId"), action: "approved", label: "Review fleet document" })}>Review document</Button> : tab === "serviceLines" ? <Button size="sm" onClick={() => setDecision({ kind: "service-line", id: text(row, "id"), vehicleId: text(row, "vehicle_id"), serviceKey: text(row, "service_key"), action: "approved", label: "Review service eligibility" })}>Review service</Button> : null },
   ], [approvedDrivers, data.data?.serviceLines, tab]);
 
   if (data.isPending) return <LoadingState label="Loading fleet operations" />;
   if (data.error) return <ErrorState title="Fleet workspace unavailable" message={data.error.message} onRetry={() => void data.refetch()} />;
-  const workspace = data.data;
-  const rows = workspace[tab];
+  const rows = tab === "documents" ? documents : workspace[tab];
 
   return <section className="admin-workspace">
     <PageHeader eyebrow="People & Partners" title="Fleet Partners" description="Review external fleet-owner applications and evidence, approve vehicles and LPG/Fuel service eligibility, manage authorised staff, and audit partner fleet activity. SKIMA-owned fleet operations remain in their separate workspace." />
