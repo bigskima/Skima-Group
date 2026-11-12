@@ -61,12 +61,35 @@ select s.id,v.key,v.display_name,v.description,true,true,1,1,
   '{"privacy_classification":"PRIVATE_VERIFICATION","module":"fleet"}'::jsonb
 from public.document_requirement_sets s
 cross join (values
- ('fleet.partner.identity','Owner or authorised signatory identity','Upload a clear identity document for the applicant.'),
- ('fleet.partner.registration','Business registration evidence','Required for companies and fleet operators.'),
- ('fleet.partner.address','Operating address evidence','Proof of the fleet partner operating address.')
-) v(key,display_name,description)
+ ('fleet.identity','Owner or authorised signatory identity','Upload a clear identity document for the applicant.','["individual_owner","company","fleet_operator"]'::jsonb),
+ ('fleet.registration','Business registration evidence','Required for companies and fleet operators.','["company","fleet_operator"]'::jsonb),
+ ('fleet.address','Operating address evidence','Proof of the fleet partner operating address.','["individual_owner","company","fleet_operator"]'::jsonb)
+) v(key,display_name,description,partner_kinds)
 where s.key='documents.fleet.partner'
 and not exists(select 1 from public.document_requirements r where r.requirement_set_id=s.id and r.key=v.key);
+
+-- Fuel has its own evidence requirement. It does not inherit LPG cylinder-specific checks.
+insert into public.document_requirements(requirement_set_id,key,display_name,description,is_required,review_required,
+  min_count,max_count,allowed_content_types,max_byte_size,status,metadata)
+select s.id,'vehicle.fuel-transport','Fuel vehicle transport and safety evidence',
+  'Upload evidence that the vehicle is suitable and authorised for the requested fuel transport operation.',
+  false,true,1,2,array['application/pdf','image/jpeg','image/png','image/webp']::text[],20971520,'active',
+  '{"privacy_classification":"PRIVATE_VERIFICATION","bounded_context":"fuel","module":"fuel","media_purpose":"fuel_vehicle_transport"}'::jsonb
+from public.document_requirement_sets s
+where s.key='documents.lpg.vehicle.phase-one'
+and not exists(select 1 from public.document_requirements r where r.requirement_set_id=s.id and r.key='vehicle.fuel-transport');
+
+insert into public.compliance_requirement_definitions(
+  key,subject_type,display_name,document_purpose_key,capability_key,module_key,geography_scope,
+  required,expiry_warning_days,enforcement,status,metadata
+) values (
+  'vehicle.fuel_transport','vehicle','Fuel vehicle transport and safety evidence','vehicle.fuel-transport',
+  null,'fuel','{}'::jsonb,false,30,'dispatch_block','active',
+  '{"service_line":"fuel","collection_mode":"review_required","purpose":"confirm vehicle safety and legal suitability for liquid-fuel transport"}'::jsonb
+) on conflict(key) do update set display_name=excluded.display_name,document_purpose_key=excluded.document_purpose_key,
+  module_key='fuel',required=false,enforcement='dispatch_block',status='active',
+  metadata=public.compliance_requirement_definitions.metadata||excluded.metadata,updated_at=timezone('utc',now());
+
 
 create or replace function public.register_fleet_application_document(
   target_application_id uuid,
@@ -97,7 +120,7 @@ begin
   join public.document_requirement_sets s on s.id=r.requirement_set_id
   where s.key='documents.fleet.partner' and r.key=target_requirement_key and r.status='active';
   if not found then raise exception using errcode='22023',message='Active fleet document requirement is required'; end if;
-  if target_requirement_key='fleet.partner.registration' and app.partner_kind='individual_owner' then
+  if target_requirement_key='fleet.registration' and app.partner_kind='individual_owner' then
     raise exception using errcode='22023',message='Individual owners do not need company registration evidence';
   end if;
   select * into media from public.media_assets
@@ -136,29 +159,44 @@ begin
 end;
 $$;
 
+create or replace function public.seed_canonical_vehicle_owner()
+returns trigger
+language plpgsql security definer set search_path=public,pg_temp as $$
+declare party_type text; party_id uuid; relationship_role text;
+begin
+  party_type:=case when new.fleet_partner_id is not null then 'fleet_partner'
+    when new.organization_id is not null then 'organization'
+    when new.owner_user_id is not null then 'profile' end;
+  party_id:=coalesce(new.fleet_partner_id,new.organization_id,new.owner_user_id);
+  relationship_role:=case when new.ownership_relationship in ('leased','rented') then 'lessee'
+    when new.ownership_relationship='third_party_authorized' then 'authorized_third_party'
+    else 'legal_owner' end;
+  if party_id is not null then
+    insert into public.vehicle_party_relationships(
+      vehicle_id,party_type,party_id,relationship_role,source,idempotency_key,reason,metadata
+    ) values(
+      new.id,party_type,party_id,relationship_role,'skima.vehicle.registration','owner:'||new.id,
+      case relationship_role when 'lessee' then 'Fleet partner registered as lessee; legal ownership evidence is retained separately.'
+        when 'authorized_third_party' then 'Fleet partner registered as an authorised third party; legal ownership evidence is retained separately.'
+        else 'Canonical owner established during vehicle registration.' end,
+      jsonb_build_object('registrationProjection',true,'ownershipRelationship',new.ownership_relationship,
+        'fleetOwnershipEvidence',coalesce(new.metadata->'fleetOwnershipEvidence','{}'::jsonb))
+    ) on conflict(source,idempotency_key) do nothing;
+  end if;
+  return new;
+end;
+$$;
 create or replace function public.register_fleet_partner_vehicle(
-  target_vehicle_type_id uuid,
-  target_registration_number text,
-  target_manufacturer text,
-  target_model text,
-  target_model_year integer,
-  target_color text,
-  target_max_load_kg numeric,
-  target_cargo_volume_m3 numeric,
-  target_fuel_type text,
-  target_insurance_expires_at date,
-  target_inspection_expires_at date,
-  target_roadworthiness_expires_at date,
-  target_service_keys text[],
-  target_reason text,
-  target_idempotency_key text
+  target_vehicle_type_id uuid,target_registration_number text,target_manufacturer text,target_model text,
+  target_model_year integer,target_color text,target_max_load_kg numeric,target_cargo_volume_m3 numeric,
+  target_fuel_type text,target_insurance_expires_at date,target_inspection_expires_at date,
+  target_roadworthiness_expires_at date,target_service_keys text[],target_ownership_relationship text,
+  target_legal_owner_name text,target_legal_owner_identifier text,target_authorization_reference text,
+  target_reason text,target_idempotency_key text
 ) returns uuid
 language plpgsql security definer set search_path=public,pg_temp as $$
-declare
-  partner record;
-  vehicle_id uuid;
-  registration text:=upper(btrim(coalesce(target_registration_number,'')));
-  service_key text;
+declare partner record; vehicle_id uuid; registration text:=upper(btrim(coalesce(target_registration_number,'')));
+  service_key text; ownership_evidence jsonb;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='Authentication is required'; end if;
   if registration='' or nullif(btrim(target_manufacturer),'') is null or nullif(btrim(target_model),'') is null
@@ -177,8 +215,20 @@ begin
   if coalesce(cardinality(target_service_keys),0)=0 or exists(
     select 1 from unnest(target_service_keys) k where k not in ('lpg','fuel')
   ) then raise exception using errcode='22023',message='Select LPG, Fuel or both service lines'; end if;
+  if target_ownership_relationship not in ('fleet_owned','leased','rented','third_party_authorized') then
+    raise exception using errcode='22023',message='Select a supported fleet ownership or operating relationship';
+  end if;
+  if target_ownership_relationship<>'fleet_owned'
+    and (nullif(btrim(target_legal_owner_name),'') is null or nullif(btrim(target_legal_owner_identifier),'') is null
+      or nullif(btrim(target_authorization_reference),'') is null) then
+    raise exception using errcode='22023',message='Leased, rented and third-party vehicles require legal-owner details and an authorisation reference';
+  end if;
+  ownership_evidence:=jsonb_build_object('relationship',target_ownership_relationship,
+    'legalOwnerName',nullif(btrim(target_legal_owner_name),''),'legalOwnerIdentifier',nullif(btrim(target_legal_owner_identifier),''),
+    'authorizationReference',nullif(btrim(target_authorization_reference),''),
+    'reviewRequired',target_ownership_relationship<>'fleet_owned');
   select f.* into partner from public.fleet_partners f
-  where f.owner_user_id=auth.uid() and f.verification_status='approved' and f.operational_status='active'
+  where f.verification_status='approved' and f.operational_status='active'
     and public.is_fleet_staff(f.id,array['owner_admin','fleet_manager','vehicle_manager'])
   order by f.created_at desc limit 1;
   if not found then raise exception using errcode='42501',message='An approved active fleet partner and vehicle-management access are required'; end if;
@@ -189,21 +239,20 @@ begin
   if exists(select 1 from public.vehicles where lower(btrim(registration_number))=lower(registration)) then
     raise exception using errcode='23505',message='A vehicle with this registration number is already registered';
   end if;
-
   insert into public.vehicles(
     organization_id,owner_user_id,fleet_partner_id,vehicle_type_id,status,capacity_profile,metadata,created_by,
     ownership_type,ownership_relationship,manufacturer,model,model_year,registration_number,color,max_load_kg,
     cargo_volume_m3,fuel_type,insurance_expires_at,inspection_expires_at,roadworthiness_expires_at,platform_owned
-  ) values (
+  ) values(
     partner.organization_id,partner.owner_user_id,partner.id,target_vehicle_type_id,'pending','{}'::jsonb,
     jsonb_build_object('fleetRegistrationIdempotencyKey',target_idempotency_key,'serviceKeys',to_jsonb(target_service_keys),
-      'registrationReason',btrim(target_reason),'ownerManaged',true),auth.uid(),
-    'fleet_assigned','fleet_owned',btrim(target_manufacturer),btrim(target_model),target_model_year,registration,
+      'registrationReason',btrim(target_reason),'ownerManaged',true,'fleetOwnershipEvidence',ownership_evidence),auth.uid(),
+    case when target_ownership_relationship='fleet_owned' then 'fleet_assigned' else target_ownership_relationship end,
+    target_ownership_relationship,btrim(target_manufacturer),btrim(target_model),target_model_year,registration,
     nullif(btrim(coalesce(target_color,'')),''),target_max_load_kg,target_cargo_volume_m3,
     nullif(btrim(coalesce(target_fuel_type,'')),''),target_insurance_expires_at,target_inspection_expires_at,
     target_roadworthiness_expires_at,false
   ) returning id into vehicle_id;
-
   foreach service_key in array target_service_keys loop
     insert into public.fleet_partner_service_lines(fleet_partner_id,vehicle_id,service_key,status,requested_by)
     values(partner.id,vehicle_id,service_key,'pending',auth.uid())
@@ -215,13 +264,8 @@ end;
 $$;
 
 create or replace function public.register_fleet_vehicle_document(
-  target_vehicle_id uuid,
-  target_requirement_key text,
-  target_media_asset_id uuid,
-  target_valid_from date,
-  target_valid_until date,
-  target_reason text,
-  target_idempotency_key text
+  target_vehicle_id uuid,target_requirement_key text,target_media_asset_id uuid,target_valid_from date,
+  target_valid_until date,target_reason text,target_idempotency_key text
 ) returns uuid
 language plpgsql security definer set search_path=public,pg_temp as $$
 declare vehicle record; requirement record; document_requirement record; media record; submission_id uuid; purpose text;
@@ -230,21 +274,19 @@ begin
      or nullif(btrim(target_reason),'') is null or nullif(btrim(target_idempotency_key),'') is null then
     raise exception using errcode='22023',message='Vehicle, evidence, reason and idempotency key are required';
   end if;
-  select v.* into vehicle from public.vehicles v
-  where v.id=target_vehicle_id and v.fleet_partner_id is not null
+  select v.* into vehicle from public.vehicles v where v.id=target_vehicle_id and v.fleet_partner_id is not null
     and public.is_fleet_staff(v.fleet_partner_id,array['owner_admin','fleet_manager','vehicle_manager']);
   if not found then raise exception using errcode='42501',message='Fleet vehicle access is required'; end if;
   select * into requirement from public.compliance_requirement_definitions
-  where key=target_requirement_key and subject_type='vehicle' and status='active' and required;
+  where key=target_requirement_key and subject_type='vehicle' and status='active';
   if not found then raise exception using errcode='22023',message='Active vehicle compliance requirement is required'; end if;
   purpose:=requirement.document_purpose_key;
   select r.* into document_requirement from public.document_requirements r
   where r.key=purpose and r.status='active'
-  order by case when r.metadata->>'bounded_context'='lpg' then 0 else 1 end,r.created_at desc limit 1;
+  order by case when r.metadata->>'bounded_context'=coalesce(requirement.module_key,'') then 0 else 1 end,r.created_at desc limit 1;
   if not found then raise exception using errcode='22023',message='The document upload requirement is not configured'; end if;
-  select * into media from public.media_assets
-  where id=target_media_asset_id and owner_user_id=auth.uid() and status='active'
-    and storage_bucket in ('skima-platform-documents','skima-platform-media');
+  select * into media from public.media_assets where id=target_media_asset_id and owner_user_id=auth.uid()
+    and status='active' and storage_bucket in ('skima-platform-documents','skima-platform-media');
   if not found then raise exception using errcode='42501',message='Uploaded media must be active and owned by the fleet manager'; end if;
   if media.content_type is not null and cardinality(document_requirement.allowed_content_types)>0
      and media.content_type<>all(document_requirement.allowed_content_types) then
@@ -263,18 +305,16 @@ begin
     document_requirement.id,null,'vehicle',target_vehicle_id,auth.uid(),vehicle.organization_id,media.id,'submitted',
     media.storage_bucket,media.storage_path,media.content_type,media.byte_size,media.checksum,timezone('utc',now()),
     'skima.fleet.vehicle-document',target_idempotency_key,
-    jsonb_build_object('fleet_partner_id',vehicle.fleet_partner_id,'requirement_key',target_requirement_key,
-      'purpose_key',purpose,'valid_from',target_valid_from,'valid_until',target_valid_until,'reason',btrim(target_reason),
+    jsonb_build_object('fleet_partner_id',vehicle.fleet_partner_id,'vehicle_id',vehicle.id,
+      'requirement_key',target_requirement_key,'purpose_key',purpose,'valid_from',target_valid_from,
+      'valid_until',target_valid_until,'reason',btrim(target_reason),'module_key',requirement.module_key,
       'privacy_classification','PRIVATE_VERIFICATION'),auth.uid()
   ) returning id into submission_id;
   update public.fleet_partner_documents set status='superseded'
   where fleet_partner_id=vehicle.fleet_partner_id and purpose_key=target_requirement_key and status='current';
-  insert into public.fleet_partner_documents(
-    fleet_partner_id,document_submission_id,purpose_key,status,valid_from,valid_until,metadata,created_by
-  ) values(
-    vehicle.fleet_partner_id,submission_id,target_requirement_key,'current',target_valid_from,target_valid_until,
-    jsonb_build_object('vehicle_id',target_vehicle_id,'reason',btrim(target_reason)),auth.uid()
-  );
+  insert into public.fleet_partner_documents(fleet_partner_id,document_submission_id,purpose_key,status,valid_from,valid_until,metadata,created_by)
+  values(vehicle.fleet_partner_id,submission_id,target_requirement_key,'current',target_valid_from,target_valid_until,
+    jsonb_build_object('vehicle_id',target_vehicle_id,'reason',btrim(target_reason)),auth.uid());
   return submission_id;
 end;
 $$;
@@ -283,7 +323,7 @@ create or replace function public.review_fleet_vehicle_service_line(
   target_vehicle_id uuid,target_service_key text,target_decision text,target_reason text,target_idempotency_key text
 ) returns uuid
 language plpgsql security definer set search_path=public,pg_temp as $$
-declare result uuid; vehicle record; next_status text;
+declare result uuid; vehicle record; next_status text; missing_keys text[];
 begin
   if not public.has_permission('platform.fleets.review',null) and not public.has_permission('platform.vehicles.manage',null) then
     raise exception using errcode='42501',message='Fleet service-line review permission is required';
@@ -296,8 +336,15 @@ begin
   if not found or vehicle.fleet_partner_id is null then raise exception 'Fleet-owned vehicle not found'; end if;
   if target_decision='approved' then
     if vehicle.status<>'active' then raise exception 'The vehicle must be approved before its service line can be activated'; end if;
-    if not exists(select 1 from public.subject_compliance_status c where c.subject_type='vehicle' and c.subject_id=vehicle.id and c.compliant) then
-      raise exception 'Vehicle compliance must be complete before activating a service line';
+    select array_agg(r.key order by r.key) into missing_keys
+    from public.compliance_requirement_definitions r
+    where r.subject_type='vehicle' and r.status='active' and (r.module_key is null or r.module_key=target_service_key)
+      and (r.required or (target_service_key='fuel' and r.key='vehicle.fuel_transport'))
+      and not exists(select 1 from public.compliance_evidence e where e.requirement_key=r.key
+        and e.subject_type='vehicle' and e.subject_id=target_vehicle_id and e.status='valid'
+        and (e.valid_from is null or e.valid_from<=current_date) and (e.valid_until is null or e.valid_until>=current_date));
+    if coalesce(cardinality(missing_keys),0)>0 then
+      raise exception 'Vehicle is missing service-specific compliance evidence: %',missing_keys using errcode='55000';
     end if;
   end if;
   next_status:=case target_decision when 'approved' then 'active' else target_decision end;
@@ -306,7 +353,7 @@ begin
   where vehicle_id=target_vehicle_id and service_key=target_service_key returning id into result;
   if result is null then raise exception 'Requested service line was not found'; end if;
   insert into public.event_log(event_type_key,source,subject_type,subject_id,actor_user_id,idempotency_key,payload,status)
-  values('event.fleet.vehicle.service_line.reviewed','skima.fleet.service-line', 'vehicle',target_vehicle_id,auth.uid(),
+  values('event.fleet.vehicle.service_line.reviewed','skima.fleet.service-line','vehicle',target_vehicle_id,auth.uid(),
     target_idempotency_key,jsonb_build_object('serviceKey',target_service_key,'decision',target_decision,'reason',btrim(target_reason)),'processed')
   on conflict(source,idempotency_key) do nothing;
   return result;
@@ -318,7 +365,7 @@ create or replace function public.assign_fleet_driver_vehicle(
   target_service_key text,target_relationship text,target_reason text,target_idempotency_key text
 ) returns uuid
 language plpgsql security definer set search_path=public,pg_temp as $$
-declare saved_id uuid; vehicle record;
+declare saved_id uuid; vehicle record; missing_driver_keys text[]; missing_vehicle_keys text[];
 begin
   if auth.uid() is null or not public.is_fleet_staff(target_fleet_partner_id,array['owner_admin','fleet_manager','vehicle_manager']) then
     raise exception using errcode='42501',message='Fleet vehicle assignment access is required';
@@ -336,6 +383,25 @@ begin
   end if;
   if not exists(select 1 from public.driver_profiles where id=target_driver_profile_id and verification_status='approved') then
     raise exception 'The driver must be approved before assignment';
+  end if;
+  select array_agg(r.key order by r.key) into missing_driver_keys
+  from public.compliance_requirement_definitions r
+  where r.subject_type='driver' and r.status='active' and r.required and (r.module_key is null or r.module_key=target_service_key)
+    and not exists(select 1 from public.compliance_evidence e where e.requirement_key=r.key
+      and e.subject_type='driver' and e.subject_id=target_driver_profile_id and e.status='valid'
+      and (e.valid_from is null or e.valid_from<=current_date) and (e.valid_until is null or e.valid_until>=current_date));
+  if coalesce(cardinality(missing_driver_keys),0)>0 then
+    raise exception 'Driver is missing service compliance evidence: %',missing_driver_keys using errcode='55000';
+  end if;
+  select array_agg(r.key order by r.key) into missing_vehicle_keys
+  from public.compliance_requirement_definitions r
+  where r.subject_type='vehicle' and r.status='active' and (r.module_key is null or r.module_key=target_service_key)
+    and (r.required or (target_service_key='fuel' and r.key='vehicle.fuel_transport'))
+    and not exists(select 1 from public.compliance_evidence e where e.requirement_key=r.key
+      and e.subject_type='vehicle' and e.subject_id=target_vehicle_id and e.status='valid'
+      and (e.valid_from is null or e.valid_from<=current_date) and (e.valid_until is null or e.valid_until>=current_date));
+  if coalesce(cardinality(missing_vehicle_keys),0)>0 then
+    raise exception 'Vehicle is missing service compliance evidence: %',missing_vehicle_keys using errcode='55000';
   end if;
   if exists(select 1 from public.driver_vehicle_links where status='active' and ends_at is null and vehicle_id=target_vehicle_id) then
     raise exception 'This vehicle already has an active driver assignment';
@@ -432,6 +498,21 @@ end;
 $$;
 
 -- Extend the owner workspace without changing the existing application/vehicle payloads.
+create or replace function public.read_fleet_partner_assignable_drivers(target_fleet_partner_id uuid) returns jsonb
+language plpgsql stable security definer set search_path=public,pg_temp as $$
+begin
+  if auth.uid() is null or not public.is_fleet_staff(target_fleet_partner_id,array['owner_admin','fleet_manager','vehicle_manager']) then
+    raise exception using errcode='42501',message='Fleet driver directory access is required';
+  end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('id',d.id,'driverProfileId',d.id,'displayName',d.driver_display_name,
+      'publicDriverId',d.public_driver_id,'verificationStatus',d.verification_status) order by d.driver_display_name)
+    from public.driver_profiles d where d.verification_status='approved'
+  ),'[]'::jsonb);
+end;
+$$;
+
+
 create or replace function public.read_my_fleet_workspace() returns jsonb
 language sql stable security definer set search_path=public,pg_temp as $$
 select jsonb_build_object(
@@ -449,8 +530,34 @@ select jsonb_build_object(
   'staffInvitations',coalesce((select jsonb_agg(jsonb_build_object('id',i.id,'email',i.invitee_email,'role',i.access_role,
     'status',i.status,'expiresAt',i.expires_at,'createdAt',i.created_at,'reason',i.reason))
     from public.fleet_staff_invitations i where public.is_fleet_staff(i.fleet_partner_id,array['owner_admin','fleet_manager'])),'[]'::jsonb),
+  'invitations',coalesce((select jsonb_agg(jsonb_build_object('id',i.id,'accessRole',i.access_role,'invitedEmail',i.invitee_email,
+    'status',i.status,'expiresAt',i.expires_at,'createdAt',i.created_at))
+    from public.fleet_staff_invitations i where i.status='pending' and i.invitee_email=lower(coalesce(auth.jwt()->>'email',''))),'[]'::jsonb),
+  'drivers',case when exists(select 1 from public.fleet_partners f
+    where public.is_fleet_staff(f.id,array['owner_admin','fleet_manager','vehicle_manager']))
+    then public.read_fleet_partner_assignable_drivers((select f.id from public.fleet_partners f
+      where public.is_fleet_staff(f.id,array['owner_admin','fleet_manager','vehicle_manager']) order by f.created_at desc limit 1))
+    else '[]'::jsonb end,
   'serviceLines',coalesce((select jsonb_agg(to_jsonb(s)) from public.fleet_partner_service_lines s
     where public.is_fleet_staff(s.fleet_partner_id,null)),'[]'::jsonb),
+  'documents',coalesce((
+    select jsonb_agg(document_row order by created_at desc) from (
+      select jsonb_build_object('id',doc.id,'applicationId',app.id,'requirementKey',link.requirement_key,
+        'documentSubmissionId',doc.id,'subjectType','fleet_application','vehicleId',null,'fleetPartnerId',app.fleet_partner_id,
+        'status',doc.status,'decisionReason',doc.decision_reason,'storageBucket',doc.storage_bucket,'storagePath',doc.storage_path,
+        'contentType',doc.content_type,'createdAt',doc.created_at,'applicantUserId',app.applicant_user_id,
+        'legalName',app.legal_name,'validFrom',null,'validUntil',null) document_row,doc.created_at
+      from public.fleet_application_documents link join public.document_submissions doc on doc.id=link.document_submission_id
+      join public.fleet_partner_applications app on app.id=link.fleet_application_id
+      union all
+      select jsonb_build_object('id',doc.id,'applicationId',null,'requirementKey',d.purpose_key,
+        'documentSubmissionId',doc.id,'subjectType','vehicle','vehicleId',d.metadata->>'vehicle_id','fleetPartnerId',d.fleet_partner_id,
+        'status',doc.status,'decisionReason',doc.decision_reason,'storageBucket',doc.storage_bucket,'storagePath',doc.storage_path,
+        'contentType',doc.content_type,'createdAt',doc.created_at,'applicantUserId',doc.owner_user_id,'legalName',null,
+        'validFrom',d.valid_from,'validUntil',d.valid_until) document_row,doc.created_at
+      from public.fleet_partner_documents d join public.document_submissions doc on doc.id=d.document_submission_id
+    ) documents
+  ),'[]'::jsonb),
   'applicationDocuments',coalesce((select jsonb_agg(jsonb_build_object('id',link.id,'applicationId',link.fleet_application_id,
     'requirementKey',link.requirement_key,'documentSubmissionId',link.document_submission_id,'status',doc.status,
     'decisionReason',doc.decision_reason,'createdAt',doc.created_at))
@@ -469,7 +576,8 @@ select jsonb_build_object(
   'vehicleDocumentRequirements',coalesce((select jsonb_agg(jsonb_build_object('key',r.key,'displayName',r.display_name,
     'description',r.display_name,'documentPurposeKey',r.document_purpose_key,'moduleKey',r.module_key,
     'required',r.required,'capabilityKey',r.capability_key))
-    from public.compliance_requirement_definitions r where r.subject_type='vehicle' and r.status='active' and r.required),'[]'::jsonb)
+    from public.compliance_requirement_definitions r where r.subject_type='vehicle' and r.status='active'
+      and (r.required or r.module_key='fuel')),'[]'::jsonb)
 );
 $$;
 
@@ -502,6 +610,7 @@ select jsonb_build_object(
     from public.fleet_partner_documents d join public.document_submissions doc on doc.id=d.document_submission_id),'[]'::jsonb),
   'serviceLines',coalesce((select jsonb_agg(to_jsonb(s)) from public.fleet_partner_service_lines s),'[]'::jsonb),
   'staffInvitations',coalesce((select jsonb_agg(to_jsonb(i)) from public.fleet_staff_invitations i),'[]'::jsonb),
+  'staff',coalesce((select jsonb_agg(to_jsonb(s)) from public.fleet_authorized_staff s),'[]'::jsonb),
   'audit',coalesce((select jsonb_agg(to_jsonb(h) order by h.occurred_at desc) from
     (select id,fleet_partner_id::text entity_id,to_status,reason,actor_user_id,occurred_at from public.fleet_lifecycle_history
      union all select id,vehicle_id::text,to_status,reason,actor_user_id,occurred_at from public.vehicle_lifecycle_history) h),'[]'::jsonb)
@@ -874,14 +983,17 @@ language plpgsql security definer set search_path=public,pg_temp as $$
 declare fuel_order uuid; earning uuid;
 begin
   if new.status<>'posted' or new.transaction_type not in ('refund','reversal') then return new; end if;
-  if coalesce(new.metadata->>'module_key',new.metadata->>'bounded_context') not in ('fuel') then return new; end if;
   begin
     fuel_order:=nullif(new.metadata->>'fuel_order_id','')::uuid;
   exception when invalid_text_representation then fuel_order:=null;
   end;
   if fuel_order is null and new.subject_id is not null then
-    select op.order_id into fuel_order from public.fuel_order_operations op where op.order_id=new.subject_id;
+    select op.order_id into fuel_order from public.fuel_order_operations op
+    join public.order_records o on o.id=op.order_id
+    join public.business_modules m on m.id=o.module_id and m.key='fuel'
+    where op.order_id=new.subject_id;
   end if;
+  if fuel_order is null and coalesce(new.metadata->>'module_key',new.metadata->>'bounded_context')<>'fuel' then return new; end if;
   if fuel_order is null then return new; end if;
   select id into earning from public.fuel_station_affiliate_earnings where fuel_order_id=fuel_order and status='posted';
   if earning is not null then
@@ -895,8 +1007,39 @@ create trigger trg_reverse_fuel_station_affiliate_on_refund
 after insert or update of status on public.financial_transactions
 for each row execute function public.reverse_fuel_station_affiliate_on_refund();
 
+create or replace function public.review_fleet_application_document_submission(
+  target_document_submission_id uuid,target_decision text,target_reason text,target_idempotency_key text
+) returns uuid
+language plpgsql security definer set search_path=public,pg_temp as $$
+declare doc record;
+begin
+  if not public.has_permission('platform.fleets.review',null)
+    and not public.has_permission('platform.documents.review',null)
+    and not public.can_review_applications() then
+    raise exception using errcode='42501',message='Fleet document review permission is required';
+  end if;
+  if target_decision not in ('under_review','approved','rejected','correction_required','quarantined')
+    or length(btrim(coalesce(target_reason,'')))<5 or nullif(btrim(target_idempotency_key),'') is null then
+    raise exception using errcode='22023',message='A valid decision, reason and idempotency key are required';
+  end if;
+  select * into doc from public.document_submissions where id=target_document_submission_id for update;
+  if not found or doc.subject_type not in ('fleet_application','vehicle') then
+    raise exception using errcode='22023',message='A fleet application or fleet vehicle document is required';
+  end if;
+  perform public.review_document_submission(target_document_submission_id,target_decision,btrim(target_reason),
+    case when target_decision='correction_required' then btrim(target_reason) else null end,
+    target_idempotency_key,jsonb_build_object('source','fleet-partner-admin'));
+  if doc.subject_type='fleet_application' and target_decision='correction_required' then
+    update public.fleet_partner_applications set status='correction_required',updated_at=timezone('utc',now())
+    where id=doc.subject_id and status in ('submitted','resubmitted','correction_required');
+  end if;
+  return target_document_submission_id;
+end;
+$$;
+
+
 revoke all on function public.register_fleet_application_document(uuid,text,uuid,text),
-  public.register_fleet_partner_vehicle(uuid,text,text,text,integer,text,numeric,numeric,text,date,date,date,text[],text,text),
+  public.register_fleet_partner_vehicle(uuid,text,text,text,integer,text,numeric,numeric,text,date,date,date,text[],text,text,text,text,text,text),
   public.register_fleet_vehicle_document(uuid,text,uuid,date,date,text,text),
   public.review_fleet_vehicle_service_line(uuid,text,text,text,text),
   public.assign_fleet_driver_vehicle(uuid,uuid,uuid,text,text,text,text),
@@ -910,11 +1053,13 @@ revoke all on function public.register_fleet_application_document(uuid,text,uuid
   public.reverse_fuel_station_affiliate_commission(uuid,text),
   public.retry_fuel_station_affiliate_reversal(uuid,text),
   public.read_fuel_station_affiliate_admin_workspace(),
-  public.reverse_fuel_station_affiliate_on_refund()
+  public.reverse_fuel_station_affiliate_on_refund(),
+  public.review_fleet_application_document_submission(uuid,text,text,text),
+  public.read_fleet_partner_assignable_drivers(uuid)
 from public,anon;
 
 grant execute on function public.register_fleet_application_document(uuid,text,uuid,text),
-  public.register_fleet_partner_vehicle(uuid,text,text,text,integer,text,numeric,numeric,text,date,date,date,text[],text,text),
+  public.register_fleet_partner_vehicle(uuid,text,text,text,integer,text,numeric,numeric,text,date,date,date,text[],text,text,text,text,text,text),
   public.register_fleet_vehicle_document(uuid,text,uuid,date,date,text,text),
   public.assign_fleet_driver_vehicle(uuid,uuid,uuid,text,text,text,text),
   public.create_fleet_staff_invitation(uuid,text,text,text,text),
@@ -922,7 +1067,9 @@ grant execute on function public.register_fleet_application_document(uuid,text,u
   public.revoke_fleet_staff_access(uuid,uuid,text,text),
   public.read_my_fleet_workspace()
 to authenticated,service_role;
-grant execute on function public.review_fleet_vehicle_service_line(uuid,text,text,text,text),
+grant execute on function public.review_fleet_application_document_submission(uuid,text,text,text),
+  public.read_fleet_partner_assignable_drivers(uuid),
+  public.review_fleet_vehicle_service_line(uuid,text,text,text,text),
   public.read_fleet_admin_workspace(text,text),
   public.retry_fuel_station_affiliate_commission(uuid,text),
   public.retry_fuel_station_affiliate_reversal(uuid,text),
@@ -941,16 +1088,68 @@ to service_role;
 alter function public.read_my_lpg_station_affiliate() rename to read_my_lpg_station_affiliate_lpg_only;
 create or replace function public.read_my_lpg_station_affiliate() returns jsonb
 language plpgsql stable security definer set search_path=public,pg_temp as $fuelwrap$
-declare result jsonb; affiliate_id uuid; fuel_earned numeric(28,8):=0;
+declare
+  result jsonb;
+  affiliate_id uuid;
+  lpg_earned numeric(28,8):=0;
+  fuel_earned numeric(28,8):=0;
+  fuel_referral_count integer:=0;
+  fuel_active_referral_count integer:=0;
+  enriched_referrals jsonb:='[]'::jsonb;
+  fuel_referrals jsonb:='[]'::jsonb;
 begin
   result:=public.read_my_lpg_station_affiliate_lpg_only();
   select a.id into affiliate_id from public.lpg_station_affiliates a where a.affiliate_user_id=auth.uid();
-  if affiliate_id is null then return result; end if;
+  if affiliate_id is null then
+    result:=jsonb_set(result,'{combinedTotalEarned}',to_jsonb(0),true);
+    result:=jsonb_set(result,'{lpgTotalEarned}',to_jsonb(0),true);
+    result:=jsonb_set(result,'{fuelTotalEarned}',to_jsonb(0),true);
+    result:=jsonb_set(result,'{fuelReferralCount}',to_jsonb(0),true);
+    result:=jsonb_set(result,'{fuelActiveReferrals}',to_jsonb(0),true);
+    result:=jsonb_set(result,'{fuelReferrals}','[]'::jsonb,true);
+    return result;
+  end if;
+
+  lpg_earned:=coalesce(nullif(result->>'totalEarned','')::numeric,0);
   select coalesce(sum(e.amount),0) into fuel_earned
-  from public.fuel_station_affiliate_earnings e where e.affiliate_id=affiliate_id and e.status='posted';
-  result:=jsonb_set(result,'{totalEarned}',to_jsonb(coalesce(nullif(result->>'totalEarned','')::numeric,0)+fuel_earned),true);
+  from public.fuel_station_affiliate_earnings e
+  where e.affiliate_id=affiliate_id and e.status='posted';
+
+  select count(distinct e.referral_id)::integer,
+    count(distinct e.referral_id) filter(where r.status='activated')::integer
+  into fuel_referral_count,fuel_active_referral_count
+  from public.fuel_station_affiliate_earnings e
+  join public.lpg_station_referrals r on r.id=e.referral_id
+  where e.affiliate_id=affiliate_id and e.status='posted';
+
+  select coalesce(jsonb_agg(
+    referral || jsonb_build_object(
+      'lpgEarned',coalesce(nullif(referral->>'earned','')::numeric,0),
+      'fuelEarned',coalesce(fuel.amount,0),
+      'earned',coalesce(nullif(referral->>'earned','')::numeric,0)+coalesce(fuel.amount,0)
+    ) order by referral->>'submittedAt' desc
+  ),'[]'::jsonb)
+  into enriched_referrals
+  from jsonb_array_elements(coalesce(result->'referrals','[]'::jsonb)) referral
+  left join lateral (
+    select coalesce(sum(e.amount),0) amount
+    from public.fuel_station_affiliate_earnings e
+    where e.referral_id=(referral->>'id')::uuid and e.affiliate_id=affiliate_id and e.status='posted'
+  ) fuel on true;
+
+  select coalesce(jsonb_agg(referral order by referral->>'submittedAt' desc),'[]'::jsonb)
+  into fuel_referrals
+  from jsonb_array_elements(enriched_referrals) referral
+  where coalesce(nullif(referral->>'fuelEarned','')::numeric,0)>0;
+
+  result:=jsonb_set(result,'{lpgTotalEarned}',to_jsonb(lpg_earned),true);
   result:=jsonb_set(result,'{fuelTotalEarned}',to_jsonb(fuel_earned),true);
-  result:=jsonb_set(result,'{lpgTotalEarned}',to_jsonb(coalesce(nullif(result->>'totalEarned','')::numeric,0)-fuel_earned),true);
+  result:=jsonb_set(result,'{combinedTotalEarned}',to_jsonb(lpg_earned+fuel_earned),true);
+  result:=jsonb_set(result,'{totalEarned}',to_jsonb(lpg_earned+fuel_earned),true);
+  result:=jsonb_set(result,'{fuelReferralCount}',to_jsonb(fuel_referral_count),true);
+  result:=jsonb_set(result,'{fuelActiveReferrals}',to_jsonb(fuel_active_referral_count),true);
+  result:=jsonb_set(result,'{fuelReferrals}',fuel_referrals,true);
+  result:=jsonb_set(result,'{referrals}',enriched_referrals,true);
   return result;
 end;
 $fuelwrap$;

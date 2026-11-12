@@ -52,6 +52,7 @@ export async function uploadMedia(input: {
   contentType: string;
   ownerUserId: string;
   assetTypeKey: string;
+  scope?: string;
   onProgress?: (progress: number) => void;
 }) {
   const uploaded = await uploadFileToRuntime({
@@ -59,7 +60,7 @@ export async function uploadMedia(input: {
     uri: input.uri,
     fileName: input.fileName,
     contentType: input.contentType,
-    scope: "media-upload",
+    scope: input.scope ?? "media-upload",
     onProgress: input.onProgress,
   });
   const result = await input.api.post(

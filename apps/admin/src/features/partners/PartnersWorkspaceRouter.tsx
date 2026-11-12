@@ -81,10 +81,12 @@ export function PartnersWorkspaceRouter(props: {
   }
   if (props.route === "/partners/location-review") return <AdminPartnerLocationReviewWorkspace />;
 
+  if (props.route === "/partners/fleet/partners") {
+    return <AdminFleetWorkspace />;
+  }
   if (props.route === "/partners/fleet") {
     return <FleetManagementHub onNavigate={props.onNavigate} />;
   }
-  if (props.route === "/partners/fleet/partners") return <AdminFleetWorkspace />;
   if (props.route === "/partners/fleet/vehicles") {
     return <AdminSkimaFleetWorkspace onNavigate={props.onNavigate} />;
   }
@@ -185,6 +187,15 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           icon: MapPinned,
           meta: "Location checks",
           permissionKey: "location-review",
+        },
+        {
+          key: "fleet-partners",
+          title: "Fleet Partners",
+          description: "Review independent fleet owner, company and operator applications, vehicle evidence, staff access and LPG/Fuel service eligibility.",
+          href: "/partners/fleet/partners",
+          icon: Truck,
+          meta: "External owners & operators",
+          permissionKey: "fleet",
         },
         {
           key: "fleet",

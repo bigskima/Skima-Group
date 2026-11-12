@@ -5165,6 +5165,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       target_inspection_expires_at: optionalString(value.inspectionExpiresAt),
       target_roadworthiness_expires_at: optionalString(value.roadworthinessExpiresAt),
       target_service_keys: serviceKeys,
+      target_ownership_relationship: optionalString(value.ownershipRelationship) ?? "fleet_owned",
+      target_legal_owner_name: optionalString(value.legalOwnerName),
+      target_legal_owner_identifier: optionalString(value.legalOwnerIdentifier),
+      target_authorization_reference: optionalString(value.authorizationReference),
       target_reason: requireString(value.reason, "reason"),
       target_idempotency_key: requireString(value.idempotencyKey, "idempotencyKey"),
     }), id);

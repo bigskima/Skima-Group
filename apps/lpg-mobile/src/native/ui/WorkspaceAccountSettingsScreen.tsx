@@ -30,6 +30,8 @@ type AffiliateReferral = {
   submittedAt?: string;
   activatedAt?: string;
   earned?: number;
+  lpgEarned?: number;
+  fuelEarned?: number;
 };
 
 type StationAffiliateSummary = {
@@ -46,6 +48,7 @@ type StationAffiliateSummary = {
   fuelReferralCount?: number;
   fuelActiveReferrals?: number;
   fuelTotalEarned?: number;
+  lpgTotalEarned?: number;
   fuelReferrals?: AffiliateReferral[];
   reviewReason?: string | null;
   referrals?: AffiliateReferral[];
@@ -257,6 +260,9 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                     ₦{Number(affiliate.combinedTotalEarned ?? (Number(affiliate.totalEarned ?? 0) + Number(affiliate.fuelTotalEarned ?? 0))).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                   <Text style={[styles.detail, { color: theme.palette.muted }]}>
+                    LPG: ₦{Number(affiliate.lpgTotalEarned ?? affiliate.totalEarned ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Fuel: ₦{Number(affiliate.fuelTotalEarned ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={[styles.detail, { color: theme.palette.muted }]}>
                     Available in affiliate wallet: ₦{Number(affiliate.availableBalance ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                 </View>
@@ -280,6 +286,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                         </View>
                         <Text style={[styles.detail, { color: theme.palette.ink }]}>
                           ₦{Number(referral.earned ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <Text style={[styles.detail, { color: theme.palette.muted }]}>LPG ₦{Number(referral.lpgEarned ?? referral.earned ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Fuel ₦{Number(referral.fuelEarned ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
                         </Text>
                       </View>
                     ))}

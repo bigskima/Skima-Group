@@ -1,12 +1,12 @@
 import * as DocumentPicker from "expo-document-picker";
 import { Building2, ShieldCheck, Truck, UsersRound } from "lucide-react-native";
 import { useMemo, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { z } from "zod";
 
 import { domainQueries } from "../api/domains";
-import { ActionResponseSchema, firstString, type PlatformRecord } from "../api/records";
-import { uploadFileToRuntime } from "../media/upload";
+import { firstString, type PlatformRecord } from "../api/records";
+import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -32,8 +32,15 @@ const roles = [
   { key: "fleet_manager", label: "Fleet manager" },
   { key: "vehicle_manager", label: "Vehicle manager" },
   { key: "compliance_viewer", label: "Compliance viewer" },
-  { key: "driver_operator", label: "Authorised driver" },
 ] as const;
+
+const InviteResponseSchema = z.object({
+  id: z.string().uuid(),
+  status: z.string(),
+  expiresAt: z.string().optional(),
+  inviteToken: z.string().optional(),
+  inviteeEmail: z.string().optional(),
+});
 
 export function FleetPartnerPortalScreen() {
   const session = useSession();
@@ -56,6 +63,9 @@ export function FleetPartnerPortalScreen() {
   const [fuelType, setFuelType] = useState("");
   const [maxLoad, setMaxLoad] = useState("");
   const [ownership, setOwnership] = useState("fleet_owned");
+  const [legalOwnerName, setLegalOwnerName] = useState("");
+  const [legalOwnerIdentifier, setLegalOwnerIdentifier] = useState("");
+  const [authorizationReference, setAuthorizationReference] = useState("");
   const [serviceKeys, setServiceKeys] = useState<string[]>(["lpg", "fuel"]);
 
   const [inviteEmail, setInviteEmail] = useState("");
@@ -67,10 +77,12 @@ export function FleetPartnerPortalScreen() {
   const vehicles = records(fleet.data?.vehicles);
   const assignments = records(fleet.data?.assignments);
   const staff = records(fleet.data?.staff);
-  const invitations = records(fleet.data?.invitations);
-  const drivers = records(fleet.data?.drivers);
+  const staffInvitations = records(fleet.data?.staffInvitations);
+  const drivers = records(fleet.data?.drivers).filter((driver) => firstString(driver, ["verificationStatus", "verification_status"]) === "approved");
   const docs = records(fleet.data?.applicationDocuments);
+  const vehicleDocs = records(fleet.data?.vehicleDocuments);
   const requirements = records(fleet.data?.documentRequirements);
+  const vehicleRequirements = records(fleet.data?.vehicleDocumentRequirements);
   const serviceLines = records(fleet.data?.serviceLines);
   const currentApplication = applications.find((row) =>
     ["submitted", "correction_required", "resubmitted"].includes(firstString(row, ["status"]) ?? "")
@@ -79,7 +91,7 @@ export function FleetPartnerPortalScreen() {
   const partner = partners.find((row) =>
     firstString(row, ["verification_status"]) === "approved" &&
     firstString(row, ["operational_status"]) === "active"
-  ) ?? null;
+  ) ?? partners[0] ?? null;
   const partnerId = firstString(partner, ["id"]);
   const hasOpenApplication = applications.some((row) =>
     ["submitted", "correction_required", "resubmitted", "approved"].includes(firstString(row, ["status"]) ?? "")
@@ -122,18 +134,17 @@ export function FleetPartnerPortalScreen() {
     if (file.size && file.size > 10 * 1024 * 1024) { setError("Choose a PDF or image no larger than 10 MB."); return; }
     setBusy(`document:${key}`); setError(""); setNotice("");
     try {
-      const uploaded = await uploadFileToRuntime({
+      const ownerUserId = session.session?.user.id;
+      if (!ownerUserId) throw new Error("Sign in again before uploading private documents.");
+      const mediaAssetId = await uploadMedia({
         api: session.api, uri: file.uri, fileName: file.name,
         contentType: file.mimeType ?? "application/octet-stream",
-        scope: `fleet-document-${applicationId}-${key}`,
+        ownerUserId, assetTypeKey: "media.application-document",
+        scope: `fleet-application:${applicationId}:${key}`,
       });
-      await session.api.post("/runtime/fleet-applications/document-submissions", {
-        applicationId, requirementKey: key,
-        storageBucket: uploaded.storageBucket, storagePath: uploaded.storagePath,
-        contentType: uploaded.contentType, byteSize: uploaded.byteSize,
-        source: "skima.lpg.mobile.fleet",
-        idempotencyKey: `${uploaded.idempotencyKey}:fleet-document`,
-        metadata: { originalFileName: file.name },
+      await session.api.post("/runtime/fleet-applications/documents/register", {
+        applicationId, requirementKey: key, mediaAssetId,
+        idempotencyKey: idempotencyKey(`fleet-application-document:${key}`, `${applicationId}:${file.name}:${file.size ?? 0}`),
       }, z.string().uuid());
       await fleet.refetch();
       setNotice(`${firstString(requirement, ["display_name"]) ?? key} uploaded and submitted for review.`);
@@ -147,19 +158,25 @@ export function FleetPartnerPortalScreen() {
     if (!vehicleTypeId || !manufacturer.trim() || !model.trim() || !plate.trim() || serviceKeys.length === 0) {
       setError("Choose a vehicle type, enter the vehicle details and select LPG, Fuel or both."); return;
     }
+    if (ownership !== "fleet_owned" && (!legalOwnerName.trim() || !legalOwnerIdentifier.trim() || !authorizationReference.trim())) {
+      setError("Leased, rented and third-party vehicles require the legal owner's details and an authorisation reference."); return;
+    }
     setBusy("vehicle"); setError(""); setNotice("");
     try {
-      await session.api.post("/runtime/my-fleet/vehicles", {
-        fleetPartnerId: partnerId, vehicleTypeId, registrationNumber: plate.trim(),
-        manufacturer: manufacturer.trim(), model: model.trim(),
+      await session.api.post("/runtime/fleet-vehicles/register", {
+        vehicleTypeId, registrationNumber: plate.trim(), manufacturer: manufacturer.trim(), model: model.trim(),
         modelYear: year.trim() ? Number(year) : null, color: color.trim() || null,
         fuelType: fuelType.trim() || null, maxLoadKg: maxLoad.trim() ? Number(maxLoad) : null,
-        ownershipRelationship: ownership, serviceKeys,
+        cargoVolumeM3: null, ownershipRelationship: ownership, serviceKeys,
+        legalOwnerName: legalOwnerName.trim() || null,
+        legalOwnerIdentifier: legalOwnerIdentifier.trim() || null,
+        authorizationReference: authorizationReference.trim() || null,
         idempotencyKey: idempotencyKey("fleet-partner-vehicle", `${partnerId}:${plate.trim().toUpperCase()}`),
-        metadata: { requestedFrom: "fleet_owner_portal" },
+        reason: "Fleet partner registered a vehicle for independent compliance review.",
       }, z.string().uuid());
       await fleet.refetch();
       setPlate(""); setModel(""); setManufacturer(""); setYear(""); setColor(""); setFuelType(""); setMaxLoad("");
+      setLegalOwnerName(""); setLegalOwnerIdentifier(""); setAuthorizationReference("");
       setNotice("Vehicle registered. It remains pending until SKIMA completes vehicle and service-specific compliance review.");
     } catch (cause) {
       setError(friendlyError(cause, "The vehicle could not be registered."));
@@ -171,45 +188,88 @@ export function FleetPartnerPortalScreen() {
     if (!inviteEmail.trim() || inviteReason.trim().length < 5) { setError("Enter the staff email and a reason of at least five characters."); return; }
     setBusy("invite"); setError(""); setNotice("");
     try {
-      await session.api.post("/runtime/my-fleet/staff/invitations", {
-        fleetPartnerId: partnerId, email: inviteEmail.trim(), accessRole: inviteRole,
+      const invitation = await session.api.post("/runtime/fleet-staff-invitations", {
+        fleetPartnerId: partnerId, email: inviteEmail.trim(), role: inviteRole,
         reason: inviteReason.trim(),
         idempotencyKey: idempotencyKey("fleet-staff-invitation", `${partnerId}:${inviteEmail.toLowerCase()}:${inviteRole}`),
-      }, z.string().uuid());
+      }, InviteResponseSchema);
       await fleet.refetch(); setInviteEmail("");
-      setNotice("Invitation created. The invited person must sign in with that email and accept it in their Fleet portal.");
+      if (invitation.inviteToken) {
+        const inviteUrl = `https://refill.skima.online/fleet-invite?token=${encodeURIComponent(invitation.inviteToken)}`;
+        await Share.share({ title: "SKIMA Fleet invitation", message: `You have been invited to a SKIMA fleet workspace. Sign in with ${inviteEmail.trim()} and accept here: ${inviteUrl}` });
+      }
+      setNotice("Invitation created. Share the secure link with the invited email address. The link expires after seven days.");
     } catch (cause) {
       setError(friendlyError(cause, "The fleet invitation could not be created."));
     } finally { setBusy(null); }
   };
 
-  const acceptInvitation = async (invitationId: string) => {
-    setBusy(`accept:${invitationId}`); setError(""); setNotice("");
+  const assignDriver = async (driverProfileId: string, vehicleId: string, serviceKey: "lpg" | "fuel") => {
+    if (!partnerId) return;
+    setBusy(`assign:${driverProfileId}:${serviceKey}`); setError(""); setNotice("");
     try {
-      await session.api.post("/runtime/my-fleet/staff/invitations/accept", { invitationId }, z.string().uuid());
-      await fleet.refetch(); setNotice("Fleet invitation accepted.");
+      await session.api.post("/runtime/fleet-vehicles/assignments", {
+        fleetPartnerId: partnerId, driverProfileId, vehicleId, serviceKey,
+        relationship: "fleet_owned",
+        reason: `Fleet owner authorised this driver for ${serviceKey.toUpperCase()} vehicle operations.`,
+        idempotencyKey: idempotencyKey("fleet-driver-assignment", `${partnerId}:${driverProfileId}:${vehicleId}:${serviceKey}`),
+      }, z.string().uuid());
+      await fleet.refetch(); setNotice(`Driver assigned for ${serviceKey.toUpperCase()} operations.`);
     } catch (cause) {
-      setError(friendlyError(cause, "This fleet invitation could not be accepted."));
+      setError(friendlyError(cause, "The driver could not be assigned. Check vehicle, driver and service compliance."));
     } finally { setBusy(null); }
   };
 
-  const assignDriver = async (driverProfileId: string, vehicleId: string) => {
-    setBusy(`assign:${driverProfileId}`); setError(""); setNotice("");
+  const uploadVehicleEvidence = async (vehicle: PlatformRecord, requirement: PlatformRecord) => {
+    const vehicleId = firstString(vehicle, ["id"]);
+    const requirementKey = firstString(requirement, ["key"]);
+    const ownerUserId = session.session?.user.id;
+    if (!vehicleId || !requirementKey || !ownerUserId) return;
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+      copyToCacheDirectory: true, multiple: false,
+    });
+    if (picked.canceled || !picked.assets[0]) return;
+    const file = picked.assets[0];
+    if (file.size && file.size > 10 * 1024 * 1024) { setError("Choose a PDF or image no larger than 10 MB."); return; }
+    setBusy(`vehicle-document:${vehicleId}:${requirementKey}`); setError(""); setNotice("");
     try {
-      await session.api.post("/runtime/vehicle-assignments", {
-        driverProfileId, vehicleId, relationship: "fleet_owned",
-        startsAt: new Date().toISOString(), metadata: { source: "fleet_owner_portal" },
-      }, ActionResponseSchema);
-      await fleet.refetch(); setNotice("Driver assignment submitted.");
+      const mediaAssetId = await uploadMedia({
+        api: session.api, uri: file.uri, fileName: file.name,
+        contentType: file.mimeType ?? "application/octet-stream",
+        ownerUserId, assetTypeKey: "media.application-document",
+        scope: `fleet-vehicle:${vehicleId}:${requirementKey}`,
+      });
+      await session.api.post("/runtime/fleet-vehicles/documents", {
+        vehicleId, requirementKey, mediaAssetId,
+        validFrom: new Date().toISOString().slice(0, 10), validUntil: null,
+        reason: `Fleet owner submitted ${firstString(requirement, ["displayName"]) ?? requirementKey} for review.`,
+        idempotencyKey: idempotencyKey(`fleet-vehicle-document:${requirementKey}`, `${vehicleId}:${file.name}:${file.size ?? 0}`),
+      }, z.string().uuid());
+      await fleet.refetch(); setNotice("Vehicle evidence uploaded and sent for independent SKIMA review.");
     } catch (cause) {
-      setError(friendlyError(cause, "The driver could not be assigned. Check vehicle approval and driver authorisation."));
+      setError(friendlyError(cause, "The vehicle document could not be uploaded."));
+    } finally { setBusy(null); }
+  };
+
+  const resubmitApplication = async () => {
+    if (!applicationId) return;
+    setBusy("resubmit"); setError(""); setNotice("");
+    try {
+      await session.api.post("/runtime/fleet-applications/resubmit", {
+        applicationId,
+        applicationPayload: currentApplication?.application_payload && typeof currentApplication.application_payload === "object"
+          ? currentApplication.application_payload as Record<string, unknown> : {},
+        reason: "Resubmitted after providing the requested supporting evidence.",
+        idempotencyKey: idempotencyKey("fleet-application-resubmit", applicationId),
+      }, z.string().uuid());
+      await fleet.refetch(); setNotice("Corrected fleet application resubmitted.");
+    } catch (cause) {
+      setError(friendlyError(cause, "The corrected application could not be resubmitted."));
     } finally { setBusy(null); }
   };
 
   if (fleet.isPending) return <ScreenSkeleton cards={4} />;
-  if (fleet.error) return <EmptyState icon={<Building2 color={palette.brand} size={26} />}
-    title="Fleet workspace unavailable" description={friendlyError(fleet.error, "Your fleet information could not be loaded.")}
-    action={<AppButton label="Try again" onPress={() => void fleet.refetch()} />} />;
 
   return (
     <Screen eyebrow="Fleet owner portal" title="Your fleet"
@@ -258,7 +318,7 @@ export function FleetPartnerPortalScreen() {
           </View>
           {applicableRequirements.map((requirement) => {
             const key=firstString(requirement,["key"]) ?? "";
-            const linked=docs.filter((doc) => firstString(doc,["fleetApplicationId","fleet_application_id"])===applicationId
+            const linked=docs.filter((doc) => firstString(doc,["applicationId","fleetApplicationId","fleet_application_id"])===applicationId
               && firstString(doc,["requirementKey","requirement_key"])===key);
             const latest=linked[0];
             const status=firstString(latest,["status"]) ?? "awaiting upload";
@@ -272,6 +332,7 @@ export function FleetPartnerPortalScreen() {
                 disabled={busy!==null} onPress={() => void uploadEvidence(requirement)} />
             </View>;
           })}
+          {firstString(currentApplication,["status"])==="correction_required" ? <AppButton fullWidth label="Resubmit corrected application" disabled={busy!==null} loading={busy==="resubmit"} onPress={() => void resubmitApplication()} /> : null}
           <Text style={[styles.meta,{color:palette.muted}]}>Documents must be approved individually before the fleet application can be approved.</Text>
         </View>
       )}
@@ -302,6 +363,14 @@ export function FleetPartnerPortalScreen() {
                 ["fleet_owned","Owned by fleet"],["leased","Leased"],["rented","Rented"],["third_party_authorized","Third-party authorised"],
               ].map(([key,label])=><Choice key={key} active={ownership===key} label={label} onPress={()=>setOwnership(key)} />)}
             </View>
+            {ownership!=="fleet_owned" ? (
+              <View style={styles.assignmentGroup}>
+                <Field label="Legal owner's name" value={legalOwnerName} onChangeText={setLegalOwnerName} placeholder="Name on vehicle ownership documents" />
+                <Field label="Legal owner registration / identity reference" value={legalOwnerIdentifier} onChangeText={setLegalOwnerIdentifier} placeholder="Registered company or owner reference" />
+                <Field label="Lease, rental or authorisation reference" value={authorizationReference} onChangeText={setAuthorizationReference} placeholder="Agreement or permission reference" />
+                <Text style={[styles.meta,{color:palette.muted}]}>Upload the ownership or vehicle-use authorisation document in the vehicle evidence section after registration.</Text>
+              </View>
+            ) : null}
             <Text style={[styles.meta,{color:palette.muted}]}>Services requested</Text>
             <View style={styles.chips}>{serviceOptions.map((service) => {
               const selected=serviceKeys.includes(service.key);
@@ -318,33 +387,62 @@ export function FleetPartnerPortalScreen() {
               vehicles.map((vehicle) => {
                 const id=firstString(vehicle,["id"]) ?? "";
                 const lines=serviceLines.filter((line)=>firstString(line,["vehicle_id","vehicleId"])===id);
+                const requestedServices=lines.map((line)=>firstString(line,["service_key"])).filter((key):key is string=>key==="lpg"||key==="fuel");
+                const requirementsForVehicle=vehicleRequirements.filter((requirement)=>{
+                  const moduleKey=firstString(requirement,["module_key","moduleKey"]);
+                  return !moduleKey || requestedServices.includes(moduleKey as "lpg"|"fuel");
+                });
+                const ownershipEvidence=vehicle.metadata && typeof vehicle.metadata==="object" && !Array.isArray(vehicle.metadata)
+                  ? (vehicle.metadata as Record<string,unknown>).fleetOwnershipEvidence as Record<string,unknown> | undefined : undefined;
                 return <View key={id} style={styles.vehicleRow}>
                   <View style={styles.copy}>
                     <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(vehicle,["manufacturer"]) ?? ""} {firstString(vehicle,["model"]) ?? ""}</Text>
                     <Text style={[styles.meta,{color:palette.muted}]}>{firstString(vehicle,["registration_number"]) ?? "Registration pending"} · {firstString(vehicle,["status"]) ?? "pending"}</Text>
-                    <View style={styles.chips}>{lines.map((line) => <StatusPill key={String(line.id)} label={`${firstString(line,["service_key"])} · ${firstString(line,["status"])}`}
-                      tone={firstString(line,["status"])==="approved" ? "success" : "warning"} />)}</View>
+                    {ownershipEvidence?.relationship && ownershipEvidence.relationship!=="fleet_owned" ? <Text style={[styles.meta,{color:palette.muted}]}>Legal owner: {String(ownershipEvidence.legalOwnerName ?? "Details supplied")} · {String(ownershipEvidence.relationship)}</Text> : null}
+                    <View style={styles.chips}>{lines.map((line) => <StatusPill key={String(line.id)} label={`${firstString(line,["service_key"])?.toUpperCase()} · ${firstString(line,["status"])?.replaceAll("_"," ")}`}
+                      tone={firstString(line,["status"])==="active" ? "success" : "warning"} />)}</View>
                   </View>
+                  {requirementsForVehicle.map((requirement)=>{
+                    const key=firstString(requirement,["key"]) ?? "";
+                    const submitted=vehicleDocs.find((doc)=>firstString(doc,["vehicleId","vehicle_id"])===id &&
+                      firstString(doc,["purposeKey","purpose_key"])===key);
+                    const docStatus=firstString(submitted,["status"]) ?? "awaiting upload";
+                    return <View key={key} style={styles.documentRow}>
+                      <View style={styles.copy}>
+                        <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(requirement,["displayName","display_name"]) ?? key}</Text>
+                        <Text style={[styles.meta,{color:palette.muted}]}>{docStatus.replaceAll("_"," ")}</Text>
+                        {firstString(submitted,["decisionReason","decision_reason"]) ? <Text style={[styles.meta,{color:palette.danger}]}>{firstString(submitted,["decisionReason","decision_reason"])}</Text> : null}
+                      </View>
+                      <AppButton size="sm" variant="secondary" label="Upload / replace" disabled={busy!==null || docStatus==="approved"}
+                        loading={busy===`vehicle-document:${id}:${key}`} onPress={()=>void uploadVehicleEvidence(vehicle,requirement)} />
+                    </View>;
+                  })}
                 </View>;
               })}
             {vehicles.some((vehicle)=>firstString(vehicle,["status"])==="active") && drivers.length>0 ? (
               <View style={styles.assignmentGroup}>
-                <SectionHeader title="Authorised driver assignments" description="Only fleet-invited, verified SKIMA drivers can receive an active fleet vehicle." />
+                <SectionHeader title="Authorised driver assignments" description="Only SKIMA-approved drivers and vehicles cleared for the selected service can be assigned." />
                 {drivers.map((driver) => {
-                  const driverId=firstString(driver,["driverProfileId"]) ?? "";
+                  const driverId=firstString(driver,["id","driverProfileId"]) ?? "";
                   const assigned=assignments.find((row)=>firstString(row,["driver_profile_id"])===driverId && firstString(row,["status"])==="active");
                   return <View key={driverId} style={styles.documentRow}>
                     <View style={styles.copy}>
-                      <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(driver,["displayName"]) ?? "Approved driver"}</Text>
+                      <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(driver,["displayName","driver_display_name","publicDriverId"]) ?? "Approved driver"}</Text>
                       <Text style={[styles.meta,{color:palette.muted}]}>{assigned ? "Vehicle assignment active" : "No active assignment"}</Text>
                     </View>
-                    {!assigned ? <AppButton size="sm" variant="secondary" label="Assign vehicle" disabled={busy!==null}
-                      onPress={() => {
-                        const available=vehicles.find((vehicle)=>firstString(vehicle,["status"])==="active"
-                          && !assignments.some((row)=>firstString(row,["vehicle_id"])===firstString(vehicle,["id"]) && firstString(row,["status"])==="active"));
-                        if (available) void assignDriver(driverId,firstString(available,["id"]) ?? "");
-                        else setError("No unassigned active vehicle is available.");
-                      }} /> : null}
+                    {!assigned ? <View style={styles.chips}>
+                      {serviceOptions.map((service)=>{
+                        const candidate=vehicles.find((vehicle)=>{
+                          const vehicleId=firstString(vehicle,["id"]) ?? "";
+                          return firstString(vehicle,["status"])==="active" &&
+                            linesForService(service.key,vehicleId,serviceLines) &&
+                            !assignments.some((row)=>firstString(row,["vehicle_id"])===vehicleId && firstString(row,["status"])==="active");
+                        });
+                        return candidate ? <AppButton key={service.key} size="sm" variant="secondary" label={`Assign ${service.label}`}
+                          disabled={busy!==null} loading={busy===`assign:${driverId}:${service.key}`}
+                          onPress={()=>void assignDriver(driverId,firstString(candidate,["id"]) ?? "",service.key)} /> : null;
+                      })}
+                    </View> : null}
                   </View>;
                 })}
               </View>
@@ -352,7 +450,7 @@ export function FleetPartnerPortalScreen() {
           </View>
 
           <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
-            <SectionHeader title="Invite authorised people" description="Only invited and accepted people gain access to this fleet. Driver operators must already have an approved SKIMA Driver profile." />
+            <SectionHeader title="Invite authorised staff" description="Invited managers and compliance viewers receive role-limited access only after accepting the secure email-bound invitation." />
             <Field label="Email address" value={inviteEmail} onChangeText={setInviteEmail} placeholder="person@example.com" keyboardType="email-address" autoCapitalize="none" />
             <View style={styles.chips}>{roles.map((role)=><Choice key={role.key} active={inviteRole===role.key} label={role.label} onPress={()=>setInviteRole(role.key)} />)}</View>
             <Field label="Invitation reason" value={inviteReason} onChangeText={setInviteReason} placeholder="Reason for access" />
@@ -363,27 +461,50 @@ export function FleetPartnerPortalScreen() {
                 <Text style={[styles.meta,{color:palette.muted}]}>{firstString(person,["user_id"]) ?? "Authorised SKIMA account"} · {firstString(person,["status"]) ?? "active"}</Text>
               </View>
             </View>)}
+            {staffInvitations.filter((invite)=>firstString(invite,["status"])==="pending").map((invite)=>(
+              <View key={String(invite.id)} style={styles.documentRow}>
+                <View style={styles.copy}>
+                  <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(invite,["email","invitee_email"]) ?? "Invited staff"}</Text>
+                  <Text style={[styles.meta,{color:palette.muted}]}>{firstString(invite,["role","access_role"])?.replaceAll("_"," ")} · pending invitation</Text>
+                </View>
+                <StatusPill label="Pending" tone="warning" />
+              </View>
+            ))}
           </View>
         </>
       ) : null}
 
-      {invitations.length>0 ? (
-        <View style={[styles.card,{backgroundColor:palette.surface,borderColor:palette.border}]}>
-          <SectionHeader title="Fleet invitations" description="Accept invitations sent to your signed-in email address." />
-          {invitations.map((invitation) => {
-            const id=firstString(invitation,["id"]) ?? "";
-            return <View key={id} style={styles.documentRow}>
-              <View style={styles.copy}>
-                <Text style={[styles.cardTitle,{color:palette.ink}]}>{firstString(invitation,["accessRole"])?.replaceAll("_"," ") ?? "Fleet access"}</Text>
-                <Text style={[styles.meta,{color:palette.muted}]}>{firstString(invitation,["invitedEmail"])} · expires {firstString(invitation,["expiresAt"])}</Text>
-              </View>
-              <AppButton size="sm" label="Accept" loading={busy===`accept:${id}`} disabled={busy!==null} onPress={() => void acceptInvitation(id)} />
-            </View>;
-          })}
-        </View>
-      ) : null}
+
     </Screen>
   );
+}
+
+function linesForService(serviceKey: "lpg" | "fuel", vehicleId: string, lines: PlatformRecord[]) {
+  return lines.some((line) => firstString(line, ["vehicle_id", "vehicleId"]) === vehicleId &&
+    firstString(line, ["service_key"]) === serviceKey && firstString(line, ["status"]) === "active");
+}
+
+export function FleetInviteAcceptanceScreen({ token }: { token: string }) {
+  const session = useSession();
+  const { palette } = useAppTheme();
+  const [busy,setBusy] = useState(false);
+  const [notice,setNotice] = useState("");
+  const [error,setError] = useState("");
+  const accept = async () => {
+    if (!token) { setError("This invitation link is missing its secure token."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await session.api.post("/runtime/fleet-staff-invitations/accept",{inviteToken:token},z.string().uuid());
+      setNotice("Fleet invitation accepted. Your authorised workspace is now available.");
+    } catch (cause) {
+      setError(friendlyError(cause,"This invitation could not be accepted. Sign in with the exact invited email address and try again."));
+    } finally { setBusy(false); }
+  };
+  return <Screen eyebrow="Fleet invitation" title="Join a fleet" subtitle="Sign in with the exact email address the fleet owner invited.">
+    {error ? <Text accessibilityRole="alert" style={[styles.message,{color:palette.danger}]}>{error}</Text> : null}
+    {notice ? <Text style={[styles.message,{color:palette.success}]}>{notice}</Text> : null}
+    <AppButton fullWidth label="Accept fleet invitation" loading={busy} disabled={!token || session.status!=="authenticated"} onPress={()=>void accept()} />
+  </Screen>;
 }
 
 function records(value: unknown): PlatformRecord[] {
