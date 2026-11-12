@@ -751,6 +751,22 @@ begin
   if not found or referral.activated_at is null or operation.order_created_at<referral.activated_at then return null; end if;
   select * into affiliate from public.lpg_station_affiliates where id=referral.affiliate_id and status='active';
   if not found then return null; end if;
+  if operation.order_created_at<referral.activated_at then return null; end if;
+
+  -- Absence of an active NGN Fuel policy means the optional programme is off.
+  -- Do not turn ordinary Fuel settlements into commission retry failures.
+  if not exists(
+    select 1 from public.financial_policy_definitions definition
+    join public.financial_policy_versions version on version.policy_definition_id=definition.id
+    where definition.key='commission.fuel.station_affiliate' and definition.status='active'
+      and version.lifecycle_status in ('active','scheduled')
+      and version.currency_code=operation.currency_code
+      and version.effective_from<=timezone('utc',now())
+      and (version.effective_until is null or version.effective_until>timezone('utc',now()))
+      and version.module_id=(select module.id from public.business_modules module where module.key='fuel')
+      and version.service_key='fuel.station.affiliate'
+      and version.geography_type='country' and version.geography_key='NG'
+  ) then return null; end if;
 
   policy:=public.resolve_financial_policy('commission.fuel.station_affiliate',operation.currency_code,timezone('utc',now()),
     'fuel',null,'fuel.station.affiliate','country','NG');
@@ -810,7 +826,8 @@ begin
   ) on conflict(fuel_order_id) do nothing returning id into earning_id;
   if earning_id is null then
     select id,financial_transaction_id into existing from public.fuel_station_affiliate_earnings where fuel_order_id=target_fuel_order_id;
-    return existing.id;
+    if existing.financial_transaction_id is not null then return existing.id; end if;
+    earning_id:=existing.id;
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended(revenue_wallet::text,0));
@@ -1153,6 +1170,8 @@ begin
   return result;
 end;
 $fuelwrap$;
+revoke all on function public.read_my_lpg_station_affiliate_lpg_only() from public,anon;
+grant execute on function public.read_my_lpg_station_affiliate_lpg_only() to authenticated,service_role;
 revoke all on function public.read_my_lpg_station_affiliate() from public,anon;
 grant execute on function public.read_my_lpg_station_affiliate() to authenticated,service_role;
 

@@ -62,6 +62,9 @@ export function FleetPartnerPortalScreen() {
   const [color, setColor] = useState("");
   const [fuelType, setFuelType] = useState("");
   const [maxLoad, setMaxLoad] = useState("");
+  const [insuranceExpiresAt, setInsuranceExpiresAt] = useState("");
+  const [inspectionExpiresAt, setInspectionExpiresAt] = useState("");
+  const [roadworthinessExpiresAt, setRoadworthinessExpiresAt] = useState("");
   const [ownership, setOwnership] = useState("fleet_owned");
   const [legalOwnerName, setLegalOwnerName] = useState("");
   const [legalOwnerIdentifier, setLegalOwnerIdentifier] = useState("");
@@ -158,6 +161,11 @@ export function FleetPartnerPortalScreen() {
     if (!vehicleTypeId || !manufacturer.trim() || !model.trim() || !plate.trim() || serviceKeys.length === 0) {
       setError("Choose a vehicle type, enter the vehicle details and select LPG, Fuel or both."); return;
     }
+    const expiryDates = [insuranceExpiresAt, inspectionExpiresAt, roadworthinessExpiresAt];
+    if (expiryDates.some((date) => !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || Number.isNaN(Date.parse(date)))) {
+      setError("Enter valid YYYY-MM-DD expiry dates for insurance, inspection and roadworthiness. These dates are used for dispatch eligibility.");
+      return;
+    }
     if (ownership !== "fleet_owned" && (!legalOwnerName.trim() || !legalOwnerIdentifier.trim() || !authorizationReference.trim())) {
       setError("Leased, rented and third-party vehicles require the legal owner's details and an authorisation reference."); return;
     }
@@ -168,6 +176,7 @@ export function FleetPartnerPortalScreen() {
         modelYear: year.trim() ? Number(year) : null, color: color.trim() || null,
         fuelType: fuelType.trim() || null, maxLoadKg: maxLoad.trim() ? Number(maxLoad) : null,
         cargoVolumeM3: null, ownershipRelationship: ownership, serviceKeys,
+        insuranceExpiresAt, inspectionExpiresAt, roadworthinessExpiresAt,
         legalOwnerName: legalOwnerName.trim() || null,
         legalOwnerIdentifier: legalOwnerIdentifier.trim() || null,
         authorizationReference: authorizationReference.trim() || null,
@@ -176,6 +185,7 @@ export function FleetPartnerPortalScreen() {
       }, z.string().uuid());
       await fleet.refetch();
       setPlate(""); setModel(""); setManufacturer(""); setYear(""); setColor(""); setFuelType(""); setMaxLoad("");
+      setInsuranceExpiresAt(""); setInspectionExpiresAt(""); setRoadworthinessExpiresAt("");
       setLegalOwnerName(""); setLegalOwnerIdentifier(""); setAuthorizationReference("");
       setNotice("Vehicle registered. It remains pending until SKIMA completes vehicle and service-specific compliance review.");
     } catch (cause) {
@@ -242,7 +252,10 @@ export function FleetPartnerPortalScreen() {
       });
       await session.api.post("/runtime/fleet-vehicles/documents", {
         vehicleId, requirementKey, mediaAssetId,
-        validFrom: new Date().toISOString().slice(0, 10), validUntil: null,
+        validFrom: new Date().toISOString().slice(0, 10),
+        validUntil: requirementKey === "vehicle.insurance" ? firstString(vehicle, ["insurance_expires_at"])
+          : requirementKey === "vehicle.inspection" ? firstString(vehicle, ["inspection_expires_at"])
+            : requirementKey === "vehicle.roadworthiness" ? firstString(vehicle, ["roadworthiness_expires_at"]) : null,
         reason: `Fleet owner submitted ${firstString(requirement, ["displayName"]) ?? requirementKey} for review.`,
         idempotencyKey: idempotencyKey(`fleet-vehicle-document:${requirementKey}`, `${vehicleId}:${file.name}:${file.size ?? 0}`),
       }, z.string().uuid());
@@ -357,6 +370,12 @@ export function FleetPartnerPortalScreen() {
               <Field label="Vehicle fuel type" value={fuelType} onChangeText={setFuelType} placeholder="Diesel / Petrol" />
               <Field label="Maximum load (kg)" value={maxLoad} onChangeText={setMaxLoad} placeholder="Optional" keyboardType="numeric" />
             </View>
+            <Field label="Insurance valid until (YYYY-MM-DD)" value={insuranceExpiresAt} onChangeText={setInsuranceExpiresAt} placeholder="2027-10-31" />
+            <View style={styles.twoCols}>
+              <Field label="Inspection valid until" value={inspectionExpiresAt} onChangeText={setInspectionExpiresAt} placeholder="YYYY-MM-DD" />
+              <Field label="Roadworthiness valid until" value={roadworthinessExpiresAt} onChangeText={setRoadworthinessExpiresAt} placeholder="YYYY-MM-DD" />
+            </View>
+            <Text style={[styles.meta,{color:palette.muted}]}>These dates must match the documents you upload. Expired evidence blocks dispatch until a replacement is approved.</Text>
             <Text style={[styles.meta,{color:palette.muted}]}>Ownership or operating relationship</Text>
             <View style={styles.chips}>
               {[
