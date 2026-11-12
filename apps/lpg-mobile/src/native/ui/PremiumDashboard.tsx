@@ -222,69 +222,7 @@ export function CustomerDashboard() {
             <ActiveOrder record={order} href={`/(customer)/orders/${orderId}`} />
           ) : null}
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Explore the SKIMA Store"
-            onPress={() => router.push("/(customer)/store" as never)}
-            style={styles.storefrontFeature}
-          >
-            <LinearGradient colors={["#E7283A", "#A90A19"]} style={StyleSheet.absoluteFill} />
-            <View style={styles.storefrontFeatureTop}>
-              <View style={styles.storefrontFeatureCopy}>
-                <Text style={styles.storefrontFeatureEyebrow}>SKIMA STORE</Text>
-                <Text numberOfLines={2} style={styles.storefrontFeatureTitle}>Shop cylinders and essentials.</Text>
-                <Text numberOfLines={1} style={styles.storefrontFeatureBody}>Shop for everyday essentials.</Text>
-                <View style={styles.storefrontFeatureButton}>
-                  <Text style={styles.storefrontFeatureButtonText}>Explore Store</Text>
-                  <ChevronRight color={colors.brandDark} size={14} />
-                </View>
-              </View>
-              <View style={styles.storefrontFeatureIcon}>
-                <ShoppingBag color="#FFFFFF" size={24} strokeWidth={2.2} />
-              </View>
-            </View>
-            {marketplacePreview.length ? (
-              <View style={styles.storePreviewSection}>
-                <View style={styles.storePreviewHeading}>
-                  <Text style={styles.storePreviewLabel}>AVAILABLE IN STORE</Text>
-                  <Text style={styles.storePreviewHint}>Swipe to explore</Text>
-                </View>
-                <ScrollView
-                  ref={previewScrollRef}
-                  horizontal
-                  nestedScrollEnabled
-                  showsHorizontalScrollIndicator={false}
-                  scrollEventThrottle={16}
-                  onLayout={(event) => setPreviewViewportWidth(event.nativeEvent.layout.width)}
-                  onContentSizeChange={(contentWidth) => setPreviewContentWidth(contentWidth)}
-                  onScroll={(event) => { previewScrollOffset.current = event.nativeEvent.contentOffset.x; }}
-                  contentContainerStyle={styles.storePreviewList}
-                >
-                  {marketplacePreview.map((product) => (
-                    <Pressable
-                      key={product.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`View ${product.name} in SKIMA Store`}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        router.push({ pathname: "/(customer)/store", params: { itemId: product.id } } as never);
-                      }}
-                      style={styles.storePreviewItem}
-                    >
-                      <View style={styles.storePreviewThumb}>
-                        <RuntimeMediaImage assetId={product.imageAssetId} label={product.name} variant="avatarCompact" />
-                      </View>
-                      <View style={styles.storePreviewCopy}>
-                        <Text numberOfLines={1} style={styles.storePreviewName}>{product.name}</Text>
-                        <Text numberOfLines={1} style={styles.storePreviewPrice}>{formatMoney(product.amount, product.currency)}</Text>
-                      </View>
-                      <ChevronRight color="rgba(255,255,255,.72)" size={14} />
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-          </Pressable>
+
 
           <HomeSection
             title="Your cylinders"
