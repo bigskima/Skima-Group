@@ -1,6 +1,7 @@
 import {
   Activity,
   BadgeDollarSign,
+  PieChart,
   Landmark,
   ReceiptText,
   Settings2,
@@ -14,6 +15,7 @@ import { usePermissionCheck } from "@skima/ui";
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "../../admin-delivery-pricing-workspace";
 import { AdminLogisticsFeeWorkspace } from "../../admin-logistics-fee-workspace";
 import { AdminFinancialAnalyticsWorkspace } from "../../admin-financial-analytics-workspace";
+import { AdminProfitCapitalWorkspace } from "../../admin-profit-capital-workspace";
 import { AdminLaunchAssuranceWorkspace } from "../../admin-launch-assurance-workspace";
 import { AdminManagedDriverPayrollWorkspace } from "../../admin-managed-driver-payroll-workspace";
 import { AdminResourceConsole } from "../../admin-resource-console";
@@ -41,6 +43,7 @@ export function MoneyWorkspaceRouter(props: {
   if (props.route === "/money") return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/revenue") return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/money/balances")} />;
   if (props.route === "/money/analytics") return <AdminFinancialAnalyticsWorkspace />;
+  if (props.route === "/money/profit-capital") return <AdminProfitCapitalWorkspace />;
   if (props.route === "/money/balances") return <MoneyBalancesScreenV2 onNavigate={props.onNavigate} />;
   if (props.route === "/money/withdrawals") return <MoneyWithdrawalsScreenV2 onNavigate={props.onNavigate} />;
   if (props.route === "/money/settlements") return <MoneySettlementsScreenV2 onNavigate={props.onNavigate} />;
@@ -113,6 +116,15 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           icon: Activity,
           meta: "Finance overview",
           permissionKey: "finance",
+        },
+        {
+          key: "profit-capital",
+          title: "Profit & capital",
+          description: "Configure profit allocation templates, profit participation, vehicle principal repayments and distribution approvals.",
+          href: "/money/profit-capital",
+          icon: PieChart,
+          meta: "Capital & distributions",
+          anyOfPermissions: ["platform.profit_capital.read", "platform.profit_capital.manage", "platform.financial.read", "platform.financial.manage"],
         },
         {
           key: "balances",
