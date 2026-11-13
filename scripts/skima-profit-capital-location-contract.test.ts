@@ -4,6 +4,13 @@ const migration = await Deno.readTextFile(
   "supabase/migrations/20261113100000_platform_profit_capital_allocation_and_location_defaults.sql",
 );
 const migrationPolicy = await Deno.readTextFile("supabase/migration-history-policy.json");
+const executionMigration = await Deno.readTextFile(
+  "supabase/migrations/20261113150000_platform_profit_capital_period_closing_scheduling_and_funding.sql",
+);
+const runtimeWorker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
+const streetMap = await Deno.readTextFile("packages/mobile-experience/src/StreetMapPreview.tsx");
+const refillLocations = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/LocationsScreen.tsx");
+const stationLocations = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationLocationScreens.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const adminWorkspace = await Deno.readTextFile("apps/admin/src/admin-profit-capital-workspace.tsx");
 const moneyRouter = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
@@ -150,4 +157,109 @@ Deno.test("Logistics manual address entry geocodes street text and keeps coordin
 
 Deno.test("The migration is registered for repository migration-history verification", () => {
   assertStringIncludes(migrationPolicy, "20261113100000_platform_profit_capital_allocation_and_location_defaults.sql");
+});
+
+
+Deno.test("Period close uses posted SKIMA platform revenue and protects customer, supplier and escrow funds", () => {
+  assertStringIncludes(executionMigration, "create table if not exists public.platform_profit_period_closings");
+  assertStringIncludes(executionMigration, "generated always as");
+  assertStringIncludes(executionMigration, "net_platform_revenue");
+  assertStringIncludes(executionMigration, "operating_expenses");
+  assertStringIncludes(executionMigration, "refund_chargeback_reserve");
+  assertStringIncludes(executionMigration, "tax_and_statutory_reserve");
+  assertStringIncludes(executionMigration, "other_reserves");
+  assertStringIncludes(executionMigration, "wallet.wallet_type = 'platform_revenue'");
+  assertStringIncludes(executionMigration, "transaction_record.status = 'posted'");
+  assertStringIncludes(executionMigration, "excluded_customer_collections");
+  assertStringIncludes(executionMigration, "excluded_supplier_pass_through");
+  assertStringIncludes(executionMigration, "excluded_escrow_and_unsettled_funds");
+  assertStringIncludes(executionMigration, "A different Finance Admin must approve the period close that you prepared");
+});
+
+Deno.test("Distribution creation requires an approved period close and recurring runs stay as drafts", () => {
+  const fromClose = executionMigration.slice(
+    executionMigration.indexOf("create or replace function public.create_platform_profit_distribution_from_close("),
+    executionMigration.indexOf("create or replace function public.fund_platform_profit_distribution("),
+  );
+  assertStringIncludes(fromClose, "close_record.status <> 'approved'");
+  assertStringIncludes(fromClose, "close_record.distributable_profit");
+  assertStringIncludes(fromClose, "public.create_platform_profit_distribution(");
+  assertStringIncludes(executionMigration, "revoke execute on function public.create_platform_profit_distribution(uuid,text,date,date,numeric,text,text)");
+  const worker = executionMigration.slice(
+    executionMigration.indexOf("create or replace function public.process_due_platform_profit_distribution_schedules("),
+    executionMigration.indexOf("create or replace function public.require_funded_platform_profit_capital_payment()"),
+  );
+  assertStringIncludes(worker, "coalesce(auth.role(), '') <> 'service_role'");
+  assertStringIncludes(worker, "public.create_platform_profit_distribution_from_close");
+  assertStringIncludes(worker, "createdDrafts");
+  assertStringIncludes(worker, "Waiting for Finance to approve the matching period close");
+  assertStringIncludes(runtimeWorker, 'supabase.rpc("process_due_platform_profit_distribution_schedules"');
+});
+
+Deno.test("Funding and payouts move value using balanced posted ledger transfers", () => {
+  const funding = executionMigration.slice(
+    executionMigration.indexOf("create or replace function public.fund_platform_profit_distribution("),
+    executionMigration.indexOf("create or replace function public.ensure_platform_profit_beneficiary_wallet("),
+  );
+  assertStringIncludes(funding, "public.platform_revenue");
+  assertStringIncludes(funding, "public.ensure_platform_profit_category_wallet");
+  assertStringIncludes(funding, "public.post_financial_transaction(");
+  assertStringIncludes(funding, "'direction', 'debit'");
+  assertStringIncludes(funding, "'direction', 'credit'");
+  assertStringIncludes(funding, "'platform_profit_distribution'");
+  assertStringIncludes(funding, "execution_status = 'funded'");
+  const profitPay = executionMigration.slice(
+    executionMigration.indexOf("create or replace function public.pay_platform_profit_participant_entitlement_to_wallet("),
+    executionMigration.indexOf("create or replace function public.pay_platform_vehicle_capital_repayment_to_wallet("),
+  );
+  assertStringIncludes(profitPay, "distribution.execution_status <> 'funded'");
+  assertStringIncludes(profitPay, "public.post_financial_transaction(");
+  assertStringIncludes(profitPay, "public.record_platform_profit_participant_payment(");
+  const vehiclePay = executionMigration.slice(
+    executionMigration.indexOf("create or replace function public.pay_platform_vehicle_capital_repayment_to_wallet("),
+    executionMigration.indexOf("create or replace function public.read_platform_profit_capital_execution_workspace("),
+  );
+  assertStringIncludes(vehiclePay, "distribution.execution_status <> 'funded'");
+  assertStringIncludes(vehiclePay, "'interestRatePercent', 0");
+  assertStringIncludes(vehiclePay, "public.record_platform_vehicle_capital_repayment(");
+  assertStringIncludes(executionMigration, "platform_profit_category_accounts");
+});
+
+Deno.test("Admin exposes close approval, recurring schedules, category funding and linked-wallet payouts", () => {
+  assertStringIncludes(adminWorkspace, "read_platform_profit_capital_execution_workspace");
+  assertStringIncludes(adminWorkspace, "save_platform_profit_period_close");
+  assertStringIncludes(adminWorkspace, "approve_platform_profit_period_close");
+  assertStringIncludes(adminWorkspace, "save_platform_profit_distribution_schedule");
+  assertStringIncludes(adminWorkspace, "process_due_platform_profit_distribution_schedules");
+  assertStringIncludes(adminWorkspace, "create_platform_profit_distribution_from_close");
+  assertStringIncludes(adminWorkspace, "fund_platform_profit_distribution");
+  assertStringIncludes(adminWorkspace, "pay_platform_profit_participant_entitlement_to_wallet");
+  assertStringIncludes(adminWorkspace, "pay_platform_vehicle_capital_repayment_to_wallet");
+  assertStringIncludes(adminWorkspace, "Linked SKIMA profile UUID");
+  assertStringIncludes(adminWorkspace, "Fund six category wallets");
+});
+
+Deno.test("Street search retains full provider address while resolving an LGA parent separately", () => {
+  assertStringIncludes(logisticsPicker, "const lgaCandidates");
+  assertStringIncludes(logisticsPicker, "for (const candidate of lgaCandidates)");
+  assertStringIncludes(logisticsPicker, "for (const candidate of localityCandidates)");
+  assertStringIncludes(logisticsPicker, "const addressContextSearch");
+  assertStringIncludes(logisticsPicker, "address-parent-geography");
+  assertStringIncludes(logisticsPicker, "canonical_name: description");
+  assertStringIncludes(logisticsPicker, "formatted_address:");
+  assertStringIncludes(logisticsPicker, "street_line: streetLine || street || null");
+  assertStringIncludes(logisticsPicker, "location: location");
+  assertStringIncludes(logisticsPicker, "coordinates: place.location");
+});
+
+Deno.test("Keyless map preview renders OSM tiles in all customer address workflows", () => {
+  assertStringIncludes(streetMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertStringIncludes(streetMap, '"User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)"');
+  assertStringIncludes(streetMap, "© OpenStreetMap contributors");
+  assertStringIncludes(streetMap, "cachePolicy=\"memory-disk\"");
+  assertStringIncludes(logisticsPicker, 'import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview"');
+  assertStringIncludes(storeScreen, 'import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview"');
+  assertStringIncludes(refillLocations, "<StreetMapPreview");
+  assertStringIncludes(stationLocations, "<StreetMapPreview");
+  assertStringIncludes(storeScreen, "<StreetMapPreview");
 });
