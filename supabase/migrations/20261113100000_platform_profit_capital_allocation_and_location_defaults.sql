@@ -1015,8 +1015,10 @@ begin
   end if;
   if target_distributable_profit is null or target_distributable_profit <= 0
      or target_period_start is null or target_period_end is null or target_period_end < target_period_start
+     or nullif(btrim(target_notes), '') is null
      or nullif(btrim(target_idempotency_key), '') is null then
-    raise exception using errcode = '22023', message = 'A positive approved profit amount, valid period and idempotency key are required';
+    raise exception using errcode = '22023',
+      message = 'A positive Finance-approved profit amount, valid period, reconciliation reference and idempotency key are required';
   end if;
 
   select id into existing_id
@@ -1265,6 +1267,11 @@ begin
   select * into existing_payment
   from public.platform_profit_participant_payments
   where idempotency_key = target_idempotency_key;
+  if existing_payment.id is null then
+    select * into existing_payment
+    from public.platform_profit_participant_payments
+    where financial_transaction_id = target_financial_transaction_id;
+  end if;
   if existing_payment.id is not null then
     if existing_payment.entitlement_id <> target_entitlement_id
        or existing_payment.amount <> target_amount
@@ -1390,6 +1397,11 @@ begin
   select * into existing_payment
   from public.platform_vehicle_capital_repayment_payments
   where idempotency_key = target_idempotency_key;
+  if existing_payment.id is null then
+    select * into existing_payment
+    from public.platform_vehicle_capital_repayment_payments
+    where financial_transaction_id = target_financial_transaction_id;
+  end if;
   if existing_payment.id is not null then
     if existing_payment.repayment_id <> target_repayment_id
        or existing_payment.amount <> target_amount
