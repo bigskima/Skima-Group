@@ -1145,10 +1145,13 @@ Deno.test("Refill customer address search preserves and displays street-level ad
   assertIncludes(locations, "Street / road");
   assertIncludes(locations, "<StreetMapPreview");
 
-  assertIncludes(locationGateway, "street: clean(value?.street)");
-  assertIncludes(locationGateway, "route: clean(value?.route)");
-  assertIncludes(locationGateway, "houseNumber: clean(value?.houseNumber)");
-  assertIncludes(locationGateway, "lga: clean(value?.lga)");
+  assertIncludes(locationGateway, "street: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "route: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "houseNumber: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "lga: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "function operationalAddress(value: AddressPayload");
+  assertIncludes(locationGateway, "street: streetNumber && route");
+  assertIncludes(locationGateway, "street: primary.street ?? fallback.street");
 
   assertIncludes(addressSave, "address: OperationalAddress");
   assertIncludes(addressSave, "metadata: {");
