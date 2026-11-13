@@ -472,7 +472,7 @@ as $$
 declare
   currency text := upper(btrim(target_currency_code));
   account public.platform_profit_category_accounts%rowtype;
-  wallet_id uuid;
+  wallet_id_value uuid;
   created_wallet boolean := false;
   wallet_source text := 'platform.profit_capital';
   wallet_key text;
@@ -510,7 +510,7 @@ begin
     select id into wallet_id
     from public.wallet_accounts
     where id = account.wallet_id and status = 'active';
-    if wallet_id is not null then return wallet_id; end if;
+    if wallet_id is not null then return wallet_id_value; end if;
     raise exception using errcode = '55000', message = 'The profit category wallet is not active. Contact a Super Admin.';
   end if;
 
@@ -533,8 +533,8 @@ begin
   on conflict do nothing
   returning id into wallet_id;
 
-  if wallet_id is null then
-    select id into wallet_id
+  if wallet_id_value is null then
+    select id into wallet_id_value
     from public.wallet_accounts
     where wallet_type = 'generic'
       and owner_entity_type = 'module'
@@ -545,29 +545,29 @@ begin
     created_wallet := true;
   end if;
 
-  if wallet_id is null then
+  if wallet_id_value is null then
     raise exception using errcode = '55000', message = 'Could not create the SKIMA profit category account';
   end if;
 
-  update public.platform_profit_category_accounts
-  set wallet_id = ensure_platform_profit_category_wallet.wallet_id
-  where id = account.id;
+  update public.platform_profit_category_accounts account_record
+  set wallet_id = wallet_id_value
+  where account_record.id = account.id;
 
   if created_wallet then
     insert into public.wallet_account_events(
       wallet_account_id, event_type, status, idempotency_key, metadata, created_by
     )
     values (
-      wallet_id, 'created', 'active', wallet_key || ':created',
+      wallet_id_value, 'created', 'active', wallet_key || ':created',
       jsonb_build_object('source', wallet_source, 'categoryKey', target_category_key, 'currencyCode', currency),
       auth.uid()
     )
     on conflict do nothing;
   end if;
 
-  return wallet_id;
+  return wallet_id_value;
 end;
-$$;
+$;
 
 create or replace function public.create_platform_profit_distribution_from_close(
   target_template_id uuid,
@@ -671,7 +671,7 @@ declare
   allocation_total numeric(28,8) := 0;
   entries jsonb;
   allocation record;
-  category_wallet_id uuid;
+  v_category_wallet_id uuid;
   transaction_id uuid;
 begin
   if coalesce(auth.role(), '') <> 'service_role'
@@ -750,12 +750,12 @@ begin
     if allocation.allocated_amount <= 0 then
       continue;
     end if;
-    category_wallet_id := public.ensure_platform_profit_category_wallet(
+    v_category_wallet_id := public.ensure_platform_profit_category_wallet(
       distribution.currency_code,
       allocation.category_key
     );
     entries := entries || jsonb_build_array(jsonb_build_object(
-      'wallet_id', category_wallet_id,
+      'wallet_id', v_category_wallet_id,
       'direction', 'credit',
       'amount', allocation.allocated_amount,
       'entry_type', 'principal',
@@ -766,9 +766,9 @@ begin
         'allocation_percent', allocation.allocation_percent
       )
     ));
-    update public.platform_profit_distribution_allocations
-    set category_wallet_id = category_wallet_id
-    where id = allocation.id;
+    update public.platform_profit_distribution_allocations allocation_record
+    set category_wallet_id = v_category_wallet_id
+    where allocation_record.id = allocation.id;
   end loop;
 
   if jsonb_array_length(entries) < 2 then
@@ -932,7 +932,7 @@ declare
   entitlement public.platform_profit_participant_entitlements%rowtype;
   distribution public.platform_profit_distributions%rowtype;
   participant public.platform_profit_participants%rowtype;
-  category_wallet_id uuid;
+  v_category_wallet_id uuid;
   beneficiary_wallet_id uuid;
   available_balance numeric(28,8) := 0;
   transaction_id uuid;
@@ -978,17 +978,18 @@ begin
     raise exception using errcode = '23514', message = 'Link this participant to a verified SKIMA profile before using an internal wallet payout';
   end if;
 
-  select category_wallet_id into category_wallet_id
+  select allocation.category_wallet_id into v_category_wallet_id
   from public.platform_profit_distribution_allocations
-  where distribution_id = distribution.id
-    and category_key = entitlement.funding_category;
-  if category_wallet_id is null then
+  from public.platform_profit_distribution_allocations allocation
+  where allocation.distribution_id = distribution.id
+    and allocation.category_key = entitlement.funding_category;
+  if v_category_wallet_id is null then
     raise exception using errcode = '55000', message = 'The participant funding category has not been funded';
   end if;
 
   select coalesce(balance, 0) into available_balance
   from public.wallet_balances
-  where wallet_id = category_wallet_id;
+  where wallet_id = v_category_wallet_id;
   if available_balance < target_amount then
     raise exception using errcode = '55000', message = 'The allocated category wallet does not have enough available funds';
   end if;
@@ -1006,7 +1007,7 @@ begin
     'platform_profit_entitlement',
     entitlement.id,
     jsonb_build_array(
-      jsonb_build_object('wallet_id', category_wallet_id, 'direction', 'debit', 'amount', target_amount, 'entry_type', 'principal',
+      jsonb_build_object('wallet_id', v_category_wallet_id, 'direction', 'debit', 'amount', target_amount, 'entry_type', 'principal',
         'metadata', jsonb_build_object('role', 'profit_participation_source', 'entitlement_id', entitlement.id)),
       jsonb_build_object('wallet_id', beneficiary_wallet_id, 'direction', 'credit', 'amount', target_amount, 'entry_type', 'principal',
         'metadata', jsonb_build_object('role', 'profit_participation_beneficiary', 'participant_id', participant.id))
@@ -1051,7 +1052,7 @@ declare
   distribution public.platform_profit_distributions%rowtype;
   agreement public.platform_vehicle_capital_agreements%rowtype;
   participant public.platform_profit_participants%rowtype;
-  category_wallet_id uuid;
+  v_category_wallet_id uuid;
   beneficiary_wallet_id uuid;
   available_balance numeric(28,8) := 0;
   transaction_id uuid;
@@ -1105,16 +1106,17 @@ begin
     raise exception using errcode = '23514', message = 'Payout exceeds the provider original principal outstanding';
   end if;
 
-  select category_wallet_id into category_wallet_id
+  select allocation.category_wallet_id into v_category_wallet_id
   from public.platform_profit_distribution_allocations
-  where distribution_id = distribution.id
-    and category_key = 'vehicle_repayment';
-  if category_wallet_id is null then
+  from public.platform_profit_distribution_allocations allocation
+  where allocation.distribution_id = distribution.id
+    and allocation.category_key = 'vehicle_repayment';
+  if v_category_wallet_id is null then
     raise exception using errcode = '55000', message = 'The vehicle capital category has not been funded';
   end if;
   select coalesce(balance, 0) into available_balance
   from public.wallet_balances
-  where wallet_id = category_wallet_id;
+  where wallet_id = v_category_wallet_id;
   if available_balance < target_amount then
     raise exception using errcode = '55000', message = 'The vehicle repayment category wallet does not have enough available funds';
   end if;
@@ -1132,7 +1134,7 @@ begin
     'platform_vehicle_capital_repayment',
     repayment.id,
     jsonb_build_array(
-      jsonb_build_object('wallet_id', category_wallet_id, 'direction', 'debit', 'amount', target_amount, 'entry_type', 'principal',
+      jsonb_build_object('wallet_id', v_category_wallet_id, 'direction', 'debit', 'amount', target_amount, 'entry_type', 'principal',
         'metadata', jsonb_build_object('role', 'vehicle_principal_source', 'repayment_id', repayment.id)),
       jsonb_build_object('wallet_id', beneficiary_wallet_id, 'direction', 'credit', 'amount', target_amount, 'entry_type', 'principal',
         'metadata', jsonb_build_object('role', 'vehicle_capital_provider', 'participant_id', participant.id, 'interestRatePercent', 0))
@@ -1223,9 +1225,12 @@ begin
         'approvedAt', closing.approved_at,
         'createdAt', closing.created_at
       ) order by closing.period_end desc, closing.created_at desc)
-      from public.platform_profit_period_closings closing
-      where closing.currency_code = currency
-      limit 100
+      from (
+        select * from public.platform_profit_period_closings
+        where currency_code = currency
+        order by period_end desc, created_at desc
+        limit 100
+      ) closing
     ), '[]'::jsonb),
     'schedules', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -1242,8 +1247,12 @@ begin
         'successfulRuns', schedule.successful_runs,
         'createdAt', schedule.created_at
       ) order by schedule.next_run_at)
-      from public.platform_profit_distribution_schedules schedule
-      where schedule.currency_code = currency
+      from (
+        select * from public.platform_profit_distribution_schedules
+        where currency_code = currency
+        order by next_run_at
+        limit 100
+      ) schedule
     ), '[]'::jsonb),
     'categoryAccounts', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -1293,8 +1302,8 @@ begin
       and next_run_at <= timezone('utc', now())
       and (last_attempt_at is null or last_attempt_at < timezone('utc', now()) - interval '5 minutes')
     order by next_run_at, created_at
-    for update skip locked
     limit target_limit
+    for update skip locked
   loop
     claimed_count := claimed_count + 1;
     begin
@@ -1399,7 +1408,7 @@ begin
   from public.platform_profit_distributions distribution
   where distribution.id = distribution_id;
 
-  if execution_status_value <> 'funded' then
+  if coalesce(execution_status_value, '') <> 'funded' then
     raise exception using errcode = '23514',
       message = 'Fund the approved distribution from SKIMA platform revenue before recording beneficiary payments';
   end if;
@@ -1443,7 +1452,7 @@ revoke all on function public.create_platform_profit_distribution_from_close(uui
 revoke all on function public.fund_platform_profit_distribution(uuid,text)
   from public, anon;
 revoke all on function public.ensure_platform_profit_beneficiary_wallet(uuid,text,text)
-  from public, anon;
+  from public, anon, authenticated;
 revoke all on function public.link_platform_profit_participant_profile(uuid,uuid)
   from public, anon;
 revoke all on function public.pay_platform_profit_participant_entitlement_to_wallet(uuid,numeric,text)
@@ -1472,7 +1481,7 @@ grant execute on function public.create_platform_profit_distribution_from_close(
 grant execute on function public.fund_platform_profit_distribution(uuid,text)
   to authenticated, service_role;
 grant execute on function public.ensure_platform_profit_beneficiary_wallet(uuid,text,text)
-  to authenticated, service_role;
+  to service_role;
 grant execute on function public.link_platform_profit_participant_profile(uuid,uuid)
   to authenticated, service_role;
 grant execute on function public.pay_platform_profit_participant_entitlement_to_wallet(uuid,numeric,text)
