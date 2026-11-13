@@ -211,7 +211,10 @@ export function StreetMapPreview({
         {canvas.tiles.map((tile) => (
           <Image
             key={tile.key}
-            source={{ uri: tile.url }}
+            source={{
+              uri: tile.url,
+              headers: { "User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)" },
+            }}
             contentFit="cover"
             cachePolicy="memory-disk"
             onError={() => setFailedTiles((current) => current.includes(tile.key) ? current : [...current, tile.key])}
