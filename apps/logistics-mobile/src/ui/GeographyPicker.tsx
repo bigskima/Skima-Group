@@ -141,8 +141,15 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
   const locality = asString(address, "village", "town", "subLocality", "locality", "city", "district");
   const lga = asString(address, "lga", "state_district", "county", "city_district", "district");
   const houseNumber = asString(address, "houseNumber", "house_number");
-  const street = asString(address, "street", "route", "road");
-  const streetLine = [houseNumber, street].filter(Boolean).join(" ");
+  const street = asString(address, "route", "road", "street");
+  const normalizedStreet = normalized(street);
+  const normalizedHouseNumber = normalized(houseNumber);
+  const streetLine = street
+    ? houseNumber && !normalizedStreet.startsWith(normalizedHouseNumber + " ")
+      && normalizedStreet !== normalizedHouseNumber
+      ? houseNumber + " " + street
+      : street
+    : houseNumber;
   const country = asString(address, "country") ?? "Nigeria";
   const context = [locality, lga, state, country].filter(Boolean).join(" · ");
   return {
