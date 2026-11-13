@@ -462,6 +462,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
         error={error}
       />
       {selected ? (
+        <>
         <View style={[styles.selected, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
           <View style={[styles.selectedIcon, { backgroundColor: palette.surface }]}><Check color={palette.success} size={15} /></View>
           <View style={styles.selectedCopy}>
@@ -484,6 +485,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
             height={190}
           />
         ) : null}
+        </>
       ) : search.length < 2 ? (
         <View style={styles.hintRow}>
           <Search color={palette.muted} size={13} />
