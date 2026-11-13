@@ -465,35 +465,84 @@ using (exists (
     )
 ));
 
-do $$
-declare
-  table_name text;
-  policy_name text;
-begin
-  foreach table_name in array array[
-    'platform_profit_participants',
-    'platform_vehicle_capital_agreements',
-    'platform_profit_distributions',
-    'platform_profit_participant_entitlements',
-    'platform_vehicle_capital_repayments',
-    'platform_profit_participant_payments',
-    'platform_vehicle_capital_repayment_payments'
-  ]
-  loop
-    policy_name := table_name || '_finance_read';
-    execute format(
-      'create policy %I on public.%I for select to authenticated using (
-         public.is_platform_super_admin()
-         or public.has_permission(''platform.profit_capital.read'', null)
-         or public.has_permission(''platform.profit_capital.manage'', null)
-         or public.has_permission(''platform.financial.read'', null)
-         or public.has_permission(''platform.financial.manage'', null)
-       )',
-      policy_name, table_name
-    );
-  end loop;
-end;
-$$;
+create policy platform_profit_participants_finance_read
+on public.platform_profit_participants
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
+
+create policy platform_vehicle_capital_agreements_finance_read
+on public.platform_vehicle_capital_agreements
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
+
+create policy platform_profit_distributions_finance_read
+on public.platform_profit_distributions
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
+
+create policy platform_profit_participant_entitlements_finance_read
+on public.platform_profit_participant_entitlements
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
+
+create policy platform_vehicle_capital_repayments_finance_read
+on public.platform_vehicle_capital_repayments
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
+
+create policy platform_profit_participant_payments_finance_read
+on public.platform_profit_participant_payments
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
+
+create policy platform_vehicle_capital_repayment_payments_finance_read
+on public.platform_vehicle_capital_repayment_payments
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
+
+
 
 create policy platform_profit_distribution_allocations_finance_read
 on public.platform_profit_distribution_allocations
