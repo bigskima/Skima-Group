@@ -1113,9 +1113,10 @@ begin
   ), 0)
   where allocation.distribution_id = v_distribution_id;
 
-  select allocated_amount into vehicle_pool
-  from public.platform_profit_distribution_allocations
-  where allocation.distribution_id = v_distribution_id and allocation.category_key = 'vehicle_repayment';
+  select allocation.allocated_amount into vehicle_pool
+  from public.platform_profit_distribution_allocations allocation
+  where allocation.distribution_id = v_distribution_id
+    and allocation.category_key = 'vehicle_repayment';
 
   insert into public.platform_vehicle_capital_repayments(
     distribution_id, agreement_id, principal_amount
