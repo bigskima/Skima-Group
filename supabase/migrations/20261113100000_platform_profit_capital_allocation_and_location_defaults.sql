@@ -1118,26 +1118,35 @@ begin
   where allocation.distribution_id = v_distribution_id
     and allocation.category_key = 'vehicle_repayment';
 
+  with eligible_agreements as (
+    select
+      agreement.id,
+      agreement.principal_amount - agreement.principal_repaid as outstanding_principal,
+      sum(agreement.principal_amount - agreement.principal_repaid) over () as total_outstanding
+    from public.platform_vehicle_capital_agreements agreement
+    where agreement.currency_code = currency
+      and agreement.status = 'active'
+      and agreement.principal_amount > agreement.principal_repaid
+      and vehicle_pool > 0
+  ),
+  projected_repayments as (
+    select
+      eligible.id as agreement_id,
+      trunc(
+        least(
+          eligible.outstanding_principal,
+          vehicle_pool * eligible.outstanding_principal / nullif(eligible.total_outstanding, 0)
+        ),
+        decimals
+      ) as repayment_amount
+    from eligible_agreements eligible
+  )
   insert into public.platform_vehicle_capital_repayments(
     distribution_id, agreement_id, principal_amount
   )
-  select v_distribution_id,
-         agreement.id,
-         round(least(
-           agreement.principal_amount - agreement.principal_repaid,
-           vehicle_pool * (agreement.principal_amount - agreement.principal_repaid) /
-             nullif(sum(agreement.principal_amount - agreement.principal_repaid) over (), 0)
-         ), decimals)
-  from public.platform_vehicle_capital_agreements agreement
-  where agreement.currency_code = currency
-    and agreement.status = 'active'
-    and agreement.principal_amount > agreement.principal_repaid
-    and vehicle_pool > 0
-    and round(least(
-      agreement.principal_amount - agreement.principal_repaid,
-      vehicle_pool * (agreement.principal_amount - agreement.principal_repaid) /
-        nullif(sum(agreement.principal_amount - agreement.principal_repaid) over (), 0)
-    ), decimals) > 0;
+  select v_distribution_id, projected.agreement_id, projected.repayment_amount
+  from projected_repayments projected
+  where projected.repayment_amount > 0;
 
   update public.platform_profit_distribution_allocations allocation
   set committed_amount = committed_amount + coalesce((
