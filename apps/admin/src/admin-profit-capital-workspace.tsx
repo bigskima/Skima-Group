@@ -682,7 +682,7 @@ export function AdminProfitCapitalWorkspace() {
               <td>{categoryLabel(value(item, "fundingCategory"))}</td>
               <td><StatusBadge tone={value(item, "status") === "active" ? "success" : "neutral"}>{value(item, "status")}</StatusBadge></td>
             </tr>;
-          })}
+          })}</tbody>
         </table></div>
       </Panel>
 
