@@ -537,6 +537,71 @@ export function AdminProfitCapitalWorkspace() {
         </table></div>
       </Panel>
 
+      <Panel title="Financial period close & reconciliation" description="Net revenue is captured from posted SKIMA platform-revenue ledger entries only. Enter reconciled operating expenses and reserves; customer collections, supplier pass-through and escrow are recorded only as exclusions and are never added to the profit base.">
+        <Notice tone="warning">The net platform-revenue figure is a ledger movement, not a bank-statement profit calculation. Reconcile the period and attach a finance report reference before approval. The creator cannot approve their own close unless they are Super Admin.</Notice>
+        <div className="skima-pc-form-grid">
+          <Field label="Period starts" value={closeStart} onChange={setCloseStart} type="date" />
+          <Field label="Period ends" value={closeEnd} onChange={setCloseEnd} type="date" min={closeStart} />
+          <Field label="Operating expenses" value={operatingExpenses} onChange={setOperatingExpenses} type="number" min="0" step="0.01" />
+          <Field label="Refund & chargeback reserve" value={refundReserve} onChange={setRefundReserve} type="number" min="0" step="0.01" />
+          <Field label="Tax & statutory reserve" value={taxReserve} onChange={setTaxReserve} type="number" min="0" step="0.01" />
+          <Field label="Other approved reserves" value={otherReserve} onChange={setOtherReserve} type="number" min="0" step="0.01" />
+          <Field label="Customer collections excluded (reference only)" value={excludedCustomerFunds} onChange={setExcludedCustomerFunds} type="number" min="0" step="0.01" />
+          <Field label="Supplier pass-through excluded (reference only)" value={excludedSupplierFunds} onChange={setExcludedSupplierFunds} type="number" min="0" step="0.01" />
+          <Field label="Escrow & unsettled funds excluded (reference only)" value={excludedEscrowFunds} onChange={setExcludedEscrowFunds} type="number" min="0" step="0.01" />
+          <Field label="Finance reconciliation reference (required)" value={closeReference} onChange={setCloseReference} placeholder="Approved P&L, settlement report or ledger close ID" required />
+          <Field label="Close notes (optional)" value={closeNotes} onChange={setCloseNotes} placeholder="Period-end notes" />
+        </div>
+        <div className="skima-pc-actions">
+          <Button disabled={!canSaveClose || savePeriodClose.isPending} isLoading={savePeriodClose.isPending} onClick={() => savePeriodClose.mutate()}>Capture draft period close</Button>
+        </div>
+        <div className="skima-pc-table-wrap"><table className="skima-pc-table">
+          <thead><tr><th>Period</th><th>Posted platform revenue</th><th>Expenses & reserves</th><th>Distributable profit</th><th>Reconciliation</th><th>Status / approval</th></tr></thead>
+          <tbody>{periodClosings.length === 0 ? <tr><td colSpan={6}>No period closes recorded for this currency.</td></tr> : periodClosings.map((close) => <tr key={value(close, "id")}>
+            <td><strong>{dateLabel(value(close, "periodStart"))} – {dateLabel(value(close, "periodEnd"))}</strong></td>
+            <td>{money(numberValue(close, "netPlatformRevenue"), currency)}</td>
+            <td>{money(numberValue(close, "operatingExpenses") + numberValue(close, "refundChargebackReserve") + numberValue(close, "taxAndStatutoryReserve") + numberValue(close, "otherReserves"), currency)}</td>
+            <td><strong>{money(numberValue(close, "distributableProfit"), currency)}</strong></td>
+            <td><small>{value(close, "reconciliationReference")}</small></td>
+            <td><div className="skima-pc-status-actions"><StatusBadge tone={value(close, "status") === "approved" ? "success" : value(close, "status") === "rejected" ? "danger" : "neutral"}>{value(close, "status")}</StatusBadge>
+              {value(close, "status") === "draft" ? <Button size="sm" disabled={!canManage || approvePeriodClose.isPending} isLoading={approvePeriodClose.isPending} onClick={() => approvePeriodClose.mutate(value(close, "id"))}>Approve</Button> : null}</div>
+            </td>
+          </tr>)}</tbody>
+        </table></div>
+      </Panel>
+
+      <Panel title="Recurring distribution schedule" description="Schedules prepare a draft distribution when the matching period close has been separately approved. They never auto-approve or automatically pay a participant.">
+        <Notice tone="warning">A schedule cannot turn an unclosed accounting period into profit. Finance must approve each matching period close first; the worker then creates a reviewable draft for Finance.</Notice>
+        <div className="skima-pc-form-grid">
+          <Field label="Schedule name" value={scheduleName} onChange={setScheduleName} placeholder="Monthly SKIMA operating profit" />
+          <SelectField label="Frequency" value={scheduleFrequency} onChange={setScheduleFrequency} options={[
+            { label: "Weekly", value: "weekly" },
+            { label: "Fortnightly", value: "fortnightly" },
+            { label: "Monthly", value: "monthly" },
+            { label: "Quarterly", value: "quarterly" },
+          ]} />
+          <Field label="First period starts" value={scheduleStart} onChange={setScheduleStart} type="date" />
+          <Field label="First period ends" value={scheduleEnd} onChange={setScheduleEnd} type="date" min={scheduleStart} />
+          <Field label="First run at" value={scheduleNextRunAt} onChange={setScheduleNextRunAt} type="datetime-local" />
+          <Field label="Active allocation template" value={activeTemplate ? value(activeTemplate, "displayName") : "No active template"} onChange={() => undefined} disabled />
+        </div>
+        <div className="skima-pc-actions">
+          <Button disabled={!canSaveSchedule || createSchedule.isPending} isLoading={createSchedule.isPending} onClick={() => createSchedule.mutate()}>Save recurring schedule</Button>
+        </div>
+        <div className="skima-pc-table-wrap"><table className="skima-pc-table">
+          <thead><tr><th>Schedule</th><th>Cadence</th><th>Next period</th><th>Next run</th><th>Last result</th><th>Status / control</th></tr></thead>
+          <tbody>{schedules.length === 0 ? <tr><td colSpan={6}>No recurring schedules configured.</td></tr> : schedules.map((schedule) => <tr key={value(schedule, "id")}>
+            <td><strong>{value(schedule, "displayName")}</strong><small>{value(schedule, "currencyCode")}</small></td>
+            <td>{value(schedule, "frequency")}</td>
+            <td>{dateLabel(value(schedule, "periodStart"))} – {dateLabel(value(schedule, "periodEnd"))}</td>
+            <td>{dateLabel(value(schedule, "nextRunAt"))}</td>
+            <td><small>{value(schedule, "lastError") || (value(schedule, "lastDistributionId") ? "Draft created" : "Awaiting approved close")}</small></td>
+            <td><div className="skima-pc-status-actions"><StatusBadge tone={value(schedule, "status") === "active" ? "success" : "neutral"}>{value(schedule, "status")}</StatusBadge>
+              {value(schedule, "status") !== "completed" ? <Button size="sm" variant="outline" disabled={!canManage || setScheduleStatus.isPending} isLoading={setScheduleStatus.isPending} onClick={() => setScheduleStatus.mutate({ id: value(schedule, "id"), status: value(schedule, "status") === "active" ? "paused" : "active" })}>{value(schedule, "status") === "active" ? "Pause" : "Resume"}</Button> : null}</div></td>
+          </tr>)}</tbody>
+        </table></div>
+      </Panel>
+
       <Panel title="Profit participation register" description="These are contractual profit entitlements, not legal shares. The percentage is calculated from each approved distributable-profit amount.">
         <div className="skima-pc-form-grid">
           <Field label="Beneficiary name" value={participantName} onChange={setParticipantName} placeholder="Person or legal entity" />
