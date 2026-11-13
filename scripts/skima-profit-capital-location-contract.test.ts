@@ -111,6 +111,12 @@ Deno.test("Saved customer locations expose one persistent preferred address acro
   assertStringIncludes(refillOrder, "location.is_default === true");
   assertStringIncludes(storeScreen, "l.is_default===true");
   assertStringIncludes(logisticsStoreScreen, "location.is_default===true");
+  assertStringIncludes(storeScreen, "addressEditorOpen");
+  assertStringIncludes(storeScreen, 'session.api.post("/lpg/maps/autocomplete"');
+  assertStringIncludes(storeScreen, 'session.api.post("/lpg/maps/geocode"');
+  assertStringIncludes(storeScreen, 'session.api.post("/lpg/locations"');
+  assertStringIncludes(storeScreen, "Set as my preferred saved address");
+  assertStringIncludes(storeScreen, "addressSaveKey");
 });
 
 Deno.test("Logistics manual address entry geocodes street text and keeps coordinates in the booking snapshot", () => {
