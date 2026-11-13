@@ -18,7 +18,7 @@ import {
   type AddressPayload,
   type MapLookup,
 } from "../domains/maps/gateway";
-import { OperationalMap } from "../maps/OperationalMap";
+import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -300,12 +300,14 @@ export function LocationsScreen() {
 
       <View style={[styles.workspace, width >= 900 && styles.workspaceWide]}>
         <View style={[styles.mapColumn, width >= 900 && styles.mapColumnWide]}>
-          <OperationalMap
+          <StreetMapPreview
+            title="Pin your saved delivery place"
+            coordinate={selected ? { latitude: selected.latitude, longitude: selected.longitude } : null}
             points={mapPoints}
             height={width < 600 ? 340 : 470}
             initialZoom={20}
-            maxZoom={21}
             onSelectPoint={(point) => void selectMapPoint(point)}
+            interactive
           />
           {resolving ? (
             <View style={styles.mapBusy}><ActivityIndicator color="white" /><Text style={styles.mapBusyText}>Resolving address…</Text></View>
