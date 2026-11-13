@@ -44,7 +44,7 @@ import {
   type AddressPayload,
   type MapLookup,
 } from "../domains/maps/gateway";
-import { OperationalMap } from "../maps/OperationalMap";
+import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -475,12 +475,14 @@ export function StationLocationEditorScreen() {
 
       <View style={[styles.workspace, width >= 900 && styles.workspaceWide]}>
         <View style={[styles.mapColumn, width >= 900 && styles.mapColumnWide]}>
-          <OperationalMap
+          <StreetMapPreview
+            title="Pin the station entrance"
+            coordinate={selected ? { latitude: selected.latitude, longitude: selected.longitude } : null}
             points={mapPoints}
             height={width < 600 ? 330 : 460}
             initialZoom={18}
-            maxZoom={21}
             onSelectPoint={(point) => void selectMapPoint(point)}
+            interactive
           />
           {resolving ? (
             <View style={styles.mapBusy}><ActivityIndicator color="#FFFFFF" /><Text style={styles.mapBusyText}>Checking address…</Text></View>
