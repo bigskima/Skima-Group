@@ -1016,7 +1016,18 @@ export function NewRefillScreen() {
                     : `${displayTitle(selectedCylinder ?? {})} • ${requestedKg || "—"} kg`}
                 </Text>
                 <Text style={[styles.reviewLine, { color: palette.muted }]}>{selectedStation?.display_name ?? "Selected station"}</Text>
-                <Text style={[styles.reviewLine, { color: palette.muted }]}>Pickup and return: {displayTitle(selectedPickupLocation ?? {})} → {displayTitle(selectedDeliveryLocation ?? {})}</Text>
+                <View style={styles.reviewLocations}>
+                  <View style={styles.reviewLocation}>
+                    <Text style={[styles.reviewLocationLabel, { color: palette.muted }]}>PICKUP</Text>
+                    <Text style={[styles.reviewLine, { color: palette.ink }]}>{displayTitle(selectedPickupLocation ?? {})}</Text>
+                    <Text style={[styles.reviewLocationAddress, { color: palette.muted }]}>{firstString(selectedPickupLocation, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"]) ?? "Street address not recorded"}</Text>
+                  </View>
+                  <View style={styles.reviewLocation}>
+                    <Text style={[styles.reviewLocationLabel, { color: palette.muted }]}>RETURN / DELIVERY</Text>
+                    <Text style={[styles.reviewLine, { color: palette.ink }]}>{displayTitle(selectedDeliveryLocation ?? {})}</Text>
+                    <Text style={[styles.reviewLocationAddress, { color: palette.muted }]}>{firstString(selectedDeliveryLocation, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"]) ?? "Street address not recorded"}</Text>
+                  </View>
+                </View>
                 <Text style={[styles.reviewHint, { color: palette.muted }]}>Next, Matty’s pricing safeguards prepare a quote. No payment is taken until you confirm the quote.</Text>
                 <AppButton label={quoteButtonLabel} fullWidth loading={quote.isPending} onPress={() => { setReviewOpen(false); void requestQuote(); }} />
                 <AppButton label="Make changes" fullWidth variant="secondary" onPress={() => setReviewOpen(false)} />
@@ -1088,7 +1099,14 @@ function SelectionSection({
                   },
                 ]}
               >
-                <Text style={[styles.recordChoiceText, { color: palette.ink }]}>{displayTitle(item)}</Text>
+                <View style={styles.recordChoiceCopy}>
+                  <Text numberOfLines={1} style={[styles.recordChoiceText, { color: palette.ink }]}>{displayTitle(item)}</Text>
+                  {firstString(item, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"]) ? (
+                    <Text numberOfLines={2} style={[styles.recordChoiceAddress, { color: palette.muted }]}>
+                      {firstString(item, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"])}
+                    </Text>
+                  ) : null}
+                </View>
                 {active ? <CheckCircle2 color={palette.brand} size={20} /> : null}
               </Pressable>
             );
@@ -1399,7 +1417,13 @@ const styles = StyleSheet.create({
   cylinderChoice: { width: "100%", minWidth: 0, flexBasis: "100%", flexGrow: 0, minHeight: 96 },
   cylinderChoiceCopy: { flex: 1, minWidth: 0, gap: 3 },
   cylinderChoiceMeta: { ...typography.caption, fontSize: 10 },
-  recordChoiceText: { flex: 1, ...typography.bodyStrong, fontSize: 13 },
+  recordChoiceCopy: { flex: 1, minWidth: 0, gap: 3 },
+  recordChoiceText: { ...typography.bodyStrong, fontSize: 13 },
+  recordChoiceAddress: { ...typography.caption, fontSize: 10, lineHeight: 15 },
+  reviewLocations: { gap: spacing.sm },
+  reviewLocation: { gap: 3 },
+  reviewLocationLabel: { ...typography.eyebrow, fontSize: 8 },
+  reviewLocationAddress: { ...typography.caption, fontSize: 11, lineHeight: 16 },
   emptyText: { ...typography.caption, paddingVertical: spacing.xs },
   stationQueryState: { gap: spacing.sm },
   stationEmptyTitle: { ...typography.bodyStrong, fontSize: 14 },
