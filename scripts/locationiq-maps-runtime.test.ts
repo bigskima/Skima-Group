@@ -75,6 +75,59 @@ Deno.test("LocationIQ reverse geocoding preserves structured Nigerian geography"
   assertEquals(result.data.placeId, "locationiq:5678");
 });
 
+Deno.test("LocationIQ recognizes a street returned in the address name field", async () => {
+  const adapter = testAdapter(() =>
+    Promise.resolve(jsonResponse({
+      address: {
+        city: "Onitsha",
+        country: "Nigeria",
+        country_code: "ng",
+        county: "Onitsha North",
+        name: "Awka Road",
+        neighbourhood: "Fegge",
+        state: "Anambra State",
+      },
+      display_name: "Awka Road, Fegge, Onitsha, Anambra State, Nigeria",
+      lat: "6.1400",
+      lon: "6.7900",
+      place_id: "road-name-fallback",
+      type: "road",
+    }))
+  );
+
+  const result = await adapter.geocode("Awka Road, Fegge, Onitsha");
+  assertEquals(result.data.addressComponents.street, "Awka Road");
+  assertEquals(result.data.addressComponents.route, "Awka Road");
+  assertEquals(result.data.addressComponents.name, null);
+  assertEquals(result.data.addressComponents.landmark, null);
+});
+
+Deno.test("LocationIQ keeps named buildings as landmarks instead of misclassifying them as streets", async () => {
+  const adapter = testAdapter(() =>
+    Promise.resolve(jsonResponse({
+      address: {
+        city: "Awka",
+        country: "Nigeria",
+        country_code: "ng",
+        county: "Awka South",
+        name: "St Mark Centre",
+        neighbourhood: "Ifite",
+        state: "Anambra State",
+      },
+      display_name: "St Mark Centre, Ifite, Awka, Anambra State, Nigeria",
+      lat: "6.2100",
+      lon: "7.0700",
+      place_id: "named-building",
+      type: "commercial",
+    }))
+  );
+
+  const result = await adapter.geocode("St Mark Centre, Ifite, Awka");
+  assertEquals(result.data.addressComponents.street, null);
+  assertEquals(result.data.addressComponents.name, "St Mark Centre");
+  assertEquals(result.data.addressComponents.landmark, "St Mark Centre");
+});
+
 Deno.test("LocationIQ routing sends longitude before latitude and returns GeoJSON", async () => {
   const request: { url?: URL } = {};
   const adapter = testAdapter((input) => {
