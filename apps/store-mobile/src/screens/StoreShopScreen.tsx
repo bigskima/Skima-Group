@@ -17,6 +17,18 @@ type Row=Record<string,unknown>;
 type CartLine={itemId:string;variantId:string|null;name:string;variantName:string|null;quantity:number;unitAmount:number;currencyCode:string;stock:number|null};
 type Product={item:Row;id:string;variantId:string|null;name:string;variantName:string|null;description:string|null;amount:number;compareAtAmount:number|null;currency:string;stock:number|null;imageAssetId:string|null};
 const OrderSchema=z.union([z.string(),z.record(z.string(),z.unknown())]);
+const AddressAutocompleteSchema=z.object({
+ predictions:z.array(z.record(z.string(),z.unknown())),
+ provider:z.string().optional(),
+ providerAttribution:z.string().optional(),
+}).passthrough();
+const AddressGeocodeSchema=z.object({
+ addressComponents:z.record(z.string(),z.unknown()).nullable().optional(),
+ formattedAddress:z.string().nullable().optional(),
+ location:z.object({latitude:z.number(),longitude:z.number()}),
+ placeId:z.string().nullable().optional(),
+ provider:z.string(),
+}).passthrough();
 const MediaSchema=z.object({assetId:z.string(),contentType:z.string().nullable(),expiresInSeconds:z.number().positive(),signedUrl:z.string().url()});
 const record=(v:unknown):Row=>v&&typeof v==="object"&&!Array.isArray(v)?v as Row:{};
 const metadata=(v:Row)=>record(v.metadata);
@@ -30,12 +42,21 @@ export function StoreShopScreen(){
  const balances=useStoreRecords(["store","balances"],"/runtime/wallet-balances",true,20000);
  const locations=useStoreRecords(["store","locations"],"/lpg/locations",true,60000);
  const orders=useStoreRecords(["store","orders"],"/runtime/storefront/orders",true,15000);
+ useEffect(()=>{const timer=setTimeout(()=>setDebouncedAddressSearch(addressSearch.trim()),350);return()=>clearTimeout(timer);},[addressSearch]);
+ const addressAutocomplete=useQuery({
+  queryKey:["skima-store","address-autocomplete",debouncedAddressSearch.toLowerCase()],
+  enabled:addressEditorOpen&&debouncedAddressSearch.length>=3,
+  retry:false,
+  queryFn:()=>session.api.post("/lpg/maps/autocomplete",{input:debouncedAddressSearch+", Nigeria"},AddressAutocompleteSchema),
+  staleTime:60_000,
+ });
  const userId=session.session?.user.id??"";
  const moduleId=asString(store.storeModule,"id");
  const cartKey="skima:store:cart:v1:"+userId+":"+(moduleId??"unconfigured");
  const [cart,setCart]=useState<CartLine[]>([]);const [cartReady,setCartReady]=useState(false);const [loadedKey,setLoadedKey]=useState("");
  const [search,setSearch]=useState("");const [category,setCategory]=useState("all");const [selectedProduct,setSelectedProduct]=useState<Product|null>(null);const [fulfillment,setFulfillment]=useState<"delivery"|"pickup">("delivery");const [checkoutStep,setCheckoutStep]=useState<"browse"|"basket"|"fulfillment"|"review">("browse");
  const [locationId,setLocationId]=useState("");const [note,setNote]=useState("");const [notice,setNotice]=useState("");const [checkoutKey,setCheckoutKey]=useState(()=>makeIdempotencyKey("store-checkout"));
+ const [addressEditorOpen,setAddressEditorOpen]=useState(false);const [addressSearch,setAddressSearch]=useState("");const [debouncedAddressSearch,setDebouncedAddressSearch]=useState("");const [addressLabel,setAddressLabel]=useState("Home");const [addressInstructions,setAddressInstructions]=useState("");const [addressNotice,setAddressNotice]=useState("");const [addressResolving,setAddressResolving]=useState(false);const [addressSaving,setAddressSaving]=useState(false);const [makeAddressPreferred,setMakeAddressPreferred]=useState(true);
  useEffect(()=>{let active=true;setCartReady(false);void AsyncStorage.getItem(cartKey).then(saved=>{if(!active)return;try{const parsed:unknown=saved?JSON.parse(saved):[];setCart(Array.isArray(parsed)?parsed.filter(isCartLine):[]);}catch{setCart([]);}}).catch(()=>{if(active)setCart([]);}).finally(()=>{if(active){setLoadedKey(cartKey);setCartReady(true);}});return()=>{active=false;};},[cartKey]);
  useEffect(()=>{if(cartReady&&loadedKey===cartKey)void AsyncStorage.setItem(cartKey,JSON.stringify(cart)).catch(()=>undefined);},[cart,cartReady,loadedKey,cartKey]);
  const settings=store.activeSettings;const currency=asString(settings,"currency_code")??"NGN";
@@ -79,6 +100,56 @@ export function StoreShopScreen(){
  const itemCount=cart.reduce((sum,line)=>sum+line.quantity,0);
  const canReview=Boolean(cart.length&&allowedCurrency&&(fulfillment==="pickup"||locationId));
  const selectedAddress=addresses.find(address=>asString(address,"id")===locationId)??null;
+ const saveStoreAddress=async(addressText:string)=>{
+  const query=addressText.trim();
+  if(query.length<5){setAddressNotice("Enter a full street address, landmark, town and state.");return;}
+  if(addressSaving||addressResolving)return;
+  setAddressResolving(true);setAddressNotice("");
+  try{
+   const resolved=await session.api.post("/lpg/maps/geocode",{address:query+", Nigeria"},AddressGeocodeSchema);
+   const formattedAddress=resolved.formattedAddress?.trim()||query;
+   if(!Number.isFinite(resolved.location.latitude)||!Number.isFinite(resolved.location.longitude))throw new Error("The map service did not return a precise position. Add a street, area or landmark and try again.");
+   setAddressResolving(false);setAddressSaving(true);
+   const saved=await session.api.post("/lpg/locations",{
+    label:addressLabel.trim()||"Saved address",
+    formattedAddress,
+    latitude:resolved.location.latitude,
+    longitude:resolved.location.longitude,
+    address:resolved.addressComponents??{},
+    deliveryInstructions:addressInstructions.trim()||null,
+    providerPlaceId:resolved.placeId??null,
+    providerSource:resolved.provider??"locationiq",
+    captureSource:"MANUAL_ADDRESS",
+    capturedAt:new Date().toISOString(),
+    source:"skima.store.mobile",
+    metadata:{sourceApp:"store",addressEntryMode:"manual_search"},
+    idempotencyKey:makeIdempotencyKey("store-location"),
+   },OrderSchema);
+   await locations.refetch();
+   const savedRecord=record(saved);
+   let savedId=asString(savedRecord,"id","locationId","location_id")??(typeof saved==="string"?saved:"");
+   if(!savedId){
+    const refreshed=locations.data??[];
+    const match=refreshed.find(item=>asString(item,"formatted_address")===formattedAddress);
+    savedId=asString(match,"id")??"";
+   }
+   if(savedId){
+    setLocationId(savedId);
+    if(makeAddressPreferred){
+     const {error}=await session.supabase.rpc("set_lpg_customer_location_default",{target_location_id:savedId});
+     if(error)throw new Error("Address saved, but the preferred-address setting could not be updated: "+error.message);
+     await locations.refetch();
+    }
+   }
+   setCheckoutKey(makeIdempotencyKey("store-checkout"));
+   setAddressNotice("Address saved and selected for this Store delivery.");
+   setAddressEditorOpen(false);setAddressSearch("");setDebouncedAddressSearch("");setAddressInstructions("");
+  }catch(error){
+   setAddressNotice(error instanceof Error?error.message:"We couldn't resolve or save that address. Try a more specific street or landmark.");
+  }finally{
+   setAddressResolving(false);setAddressSaving(false);
+  }
+ };
  const checkout=useMutation({
   mutationFn:async()=>{
    if(!canCheckout)throw new Error("Choose delivery or pickup and make sure your SKIMA Wallet covers the total.");
@@ -124,7 +195,38 @@ export function StoreShopScreen(){
    {checkoutStep==="fulfillment"?<Card style={{gap:13}}>
     <View style={{gap:4}}><Text style={{fontSize:12,color:palette.ink,fontWeight:"900"}}>How should we get it to you?</Text><Text style={{fontSize:10,color:palette.muted}}>Select an available fulfilment method.</Text></View>
     <View style={{flexDirection:"row",gap:8}}>{allowedMethods.includes("delivery")?<View style={{flex:1}}><ActionButton label="Delivery" variant={fulfillment==="delivery"?"primary":"secondary"} disabled={checkout.isPending} onPress={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setFulfillment("delivery");}}/></View>:null}{allowedMethods.includes("pickup")?<View style={{flex:1}}><ActionButton label="Pickup" variant={fulfillment==="pickup"?"primary":"secondary"} disabled={checkout.isPending} onPress={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setFulfillment("pickup");}}/></View>:null}</View>
-    {fulfillment==="delivery"?<View style={{gap:8}}><Text style={{color:palette.ink,fontSize:11,fontWeight:"900"}}>Choose delivery address</Text>{addresses.slice(0,6).map(address=><Pressable key={asString(address,"id")??""} disabled={checkout.isPending} onPress={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setLocationId(asString(address,"id")??"");}} style={[styles.address,{backgroundColor:locationId===asString(address,"id")?palette.brandSoft:palette.surfaceSubtle,borderColor:locationId===asString(address,"id")?palette.brand:palette.border}]}><Text style={{color:palette.ink,fontSize:10,fontWeight:"700"}}>{asString(address,"formatted_address","display_name","address")??"Saved address"}</Text><Text style={{color:palette.muted,fontSize:9}}>{locationId===asString(address,"id")?"Selected":"Tap to select"}</Text></Pressable>)}{!addresses.length?<Notice text="No saved delivery address is available. Add an address in your account, or choose pickup." tone="warning"/>:null}</View>:<Notice text="Pickup selected. Your order will use the Store pickup location."/>}
+    {fulfillment==="delivery"?<View style={{gap:8}}>
+      <Text style={{color:palette.ink,fontSize:11,fontWeight:"900"}}>Choose delivery address</Text>
+      {addresses.slice(0,6).map(address=><Pressable key={asString(address,"id")??""} disabled={checkout.isPending} onPress={()=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setLocationId(asString(address,"id")??"");}} style={[styles.address,{backgroundColor:locationId===asString(address,"id")?palette.brandSoft:palette.surfaceSubtle,borderColor:locationId===asString(address,"id")?palette.brand:palette.border}]}><Text style={{color:palette.ink,fontSize:10,fontWeight:"700"}}>{asString(address,"formatted_address","display_name","address")??"Saved address"}</Text><Text style={{color:palette.muted,fontSize:9}}>{locationId===asString(address,"id")?"Selected":address.is_default===true?"Preferred · Tap to select":"Tap to select"}</Text></Pressable>)}
+      <Pressable accessibilityRole="button" disabled={checkout.isPending} onPress={()=>{setAddressEditorOpen(open=>!open);setAddressNotice("");}} style={{alignSelf:"flex-start",paddingVertical:8}}>
+       <Text style={{color:palette.brand,fontSize:11,fontWeight:"900"}}>{addressEditorOpen?"Close address search":"+ Add another delivery address"}</Text>
+      </Pressable>
+      {addressEditorOpen?<View style={{gap:9,padding:12,borderWidth:1,borderColor:palette.border,borderRadius:14,backgroundColor:palette.surface}}>
+       <Text style={{color:palette.ink,fontSize:12,fontWeight:"900"}}>Find another delivery address</Text>
+       <Text style={{color:palette.muted,fontSize:10,lineHeight:15}}>Enter the recipient’s street or house address. It does not have to be your current location.</Text>
+       <TextInput value={addressLabel} onChangeText={setAddressLabel} placeholder="Save as Home, Office or Recipient" placeholderTextColor={palette.muted} style={[styles.note,{color:palette.ink,borderColor:palette.border,minHeight:42}]}/>
+       <TextInput value={addressSearch} onChangeText={setAddressSearch} placeholder="Street, house number, landmark, town and state" placeholderTextColor={palette.muted} multiline style={[styles.note,{color:palette.ink,borderColor:palette.border,minHeight:72,textAlignVertical:"top"}]}/>
+       {addressAutocomplete.isFetching?<Text style={{color:palette.muted,fontSize:10}}>Searching street addresses…</Text>:null}
+       {(addressAutocomplete.data?.predictions??[]).slice(0,5).map((prediction,index)=>{
+        const description=asString(prediction,"description","formattedAddress","formatted_address");
+        if(!description)return null;
+        return <Pressable key={description+":"+index} disabled={addressResolving||addressSaving} onPress={()=>{setAddressSearch(description);void saveStoreAddress(description);}} style={{paddingVertical:9,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:palette.border}}>
+         <Text style={{color:palette.ink,fontSize:10,fontWeight:"700"}}>{description}</Text>
+        </Pressable>;
+       })}
+       <TextInput value={addressInstructions} onChangeText={setAddressInstructions} placeholder="Gate, floor or delivery instructions (optional)" placeholderTextColor={palette.muted} multiline style={[styles.note,{color:palette.ink,borderColor:palette.border,minHeight:52,textAlignVertical:"top"}]}/>
+       <View style={{flexDirection:"row",alignItems:"center",gap:8}}>
+        <Pressable accessibilityRole="checkbox" accessibilityState={{checked:makeAddressPreferred}} onPress={()=>setMakeAddressPreferred(value=>!value)} style={{width:20,height:20,borderWidth:1,borderRadius:5,borderColor:makeAddressPreferred?palette.brand:palette.border,backgroundColor:makeAddressPreferred?palette.brand:"transparent",alignItems:"center",justifyContent:"center"}}>
+         {makeAddressPreferred?<Text style={{color:"#fff",fontSize:12,fontWeight:"900"}}>✓</Text>:null}
+        </Pressable>
+        <Text style={{color:palette.muted,fontSize:10,flex:1}} onPress={()=>setMakeAddressPreferred(value=>!value)}>Set as my preferred saved address</Text>
+       </View>
+       <ActionButton label={addressResolving?"Finding address…":addressSaving?"Saving address…":"Find and save typed address"} disabled={addressResolving||addressSaving||addressSearch.trim().length<5||addressLabel.trim().length<2} loading={addressResolving||addressSaving} onPress={()=>void saveStoreAddress(addressSearch)}/>
+       {addressNotice?<Notice text={addressNotice} tone={addressNotice.startsWith("Address saved")?"success":"warning"}/>:null}
+       {addressAutocomplete.error?<Text style={{color:palette.warning,fontSize:10}}>Address suggestions are unavailable. You can still submit the full address to the geocoder above.</Text>:null}
+      </View>:null}
+      {!addresses.length?<Notice text="No saved delivery address is available. Add one here or choose pickup." tone="warning"/>:null}
+     </View>:<Notice text="Pickup selected. Your order will use the Store pickup location."/>}
     <View style={{gap:6}}><Text style={{color:palette.ink,fontSize:11,fontWeight:"900"}}>Order note <Text style={{color:palette.muted,fontWeight:"500"}}>(optional)</Text></Text><TextInput value={note} editable={!checkout.isPending} onChangeText={value=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setNote(value);}} placeholder="Add delivery instructions or a note" placeholderTextColor={palette.muted} multiline style={[styles.note,{borderColor:palette.border,color:palette.ink,minHeight:76,textAlignVertical:"top"}]}/></View>
     {fulfillment==="delivery"&&selectedAddress?<View style={{gap:3,padding:11,borderRadius:13,backgroundColor:palette.surfaceSubtle}}><Text style={{fontSize:9,color:palette.muted,fontWeight:"800"}}>DELIVERY TO</Text><Text style={{fontSize:11,color:palette.ink,fontWeight:"800"}}>{asString(selectedAddress,"formatted_address","display_name","address")??"Saved address"}</Text></View>:null}
     <AppButton label="Review order" fullWidth disabled={!canReview||checkout.isPending} onPress={()=>setCheckoutStep("review")}/>
