@@ -174,6 +174,7 @@ Deno.test("Period close uses posted SKIMA platform revenue and protects customer
   assertStringIncludes(executionMigration, "excluded_customer_collections");
   assertStringIncludes(executionMigration, "excluded_supplier_pass_through");
   assertStringIncludes(executionMigration, "excluded_escrow_and_unsettled_funds");
+  assertStringIncludes(executionMigration, "coalesce(transaction_record.source, '') <> 'platform.profit_capital.funding'");
   assertStringIncludes(executionMigration, "A different Finance Admin must approve the period close that you prepared");
 });
 
@@ -246,6 +247,10 @@ Deno.test("Admin exposes close approval, recurring schedules, category funding a
   assertStringIncludes(adminWorkspace, "pay_platform_vehicle_capital_repayment_to_wallet");
   assertStringIncludes(adminWorkspace, "Linked SKIMA profile UUID");
   assertStringIncludes(adminWorkspace, "Fund six category wallets");
+  assertStringIncludes(adminWorkspace, "canPostCapitalFunds");
+  assertStringIncludes(adminWorkspace, "Link profile");
+  assertStringIncludes(adminWorkspace, "Pay to SKIMA wallet");
+  assertNotMatch(adminWorkspace, /Record external transfer|Record external principal transfer/);
 });
 
 Deno.test("Street search retains full provider address while resolving an LGA parent separately", () => {
@@ -265,7 +270,7 @@ Deno.test("Keyless map preview renders OSM tiles in all customer address workflo
   assertStringIncludes(streetMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertStringIncludes(streetMap, '"User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)"');
   assertStringIncludes(streetMap, "© OpenStreetMap contributors");
-  assertStringIncludes(streetMap, "cachePolicy=\"memory-disk\"");
+  assertStringIncludes(streetMap, "cachePolicy=\"disk\"");
   assertStringIncludes(logisticsPicker, 'import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview"');
   assertStringIncludes(storeScreen, 'import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview"');
   assertStringIncludes(refillLocations, "<StreetMapPreview");
