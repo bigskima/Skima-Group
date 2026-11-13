@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Button, ErrorState, LoadingState, MetricTile, PageHeader, StatusBadge } from "@skima/ui";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useSessionState } from "./session";
-import "./profit-capital-workspace.css";
+import "./features/money/profit-capital-workspace.css";
 
 type Row = Readonly<Record<string, unknown>>;
 type CategoryKey = "platform_expenses" | "vehicle_repayment" | "skima_savings" | "daily_expenses" | "staff_payment" | "investment_savings";
