@@ -233,9 +233,13 @@ export function NewRefillScreen() {
   useEffect(() => {
     if (!hydrated) return;
     if (!cylinderId && cylinders.data?.[0]) setCylinderId(recordId(cylinders.data[0]) ?? "");
-    const firstLocationId = locations.data?.[0] ? recordId(locations.data[0]) : null;
-    if (!pickupLocationId && firstLocationId) setPickupLocationId(firstLocationId);
-    if (!deliveryLocationId && firstLocationId) setDeliveryLocationId(firstLocationId);
+    const availableLocations = locations.data ?? [];
+    const preferredLocation = availableLocations.find((location) => location.is_default === true)
+      ?? availableLocations[0]
+      ?? null;
+    const preferredLocationId = preferredLocation ? recordId(preferredLocation) : null;
+    if (!pickupLocationId && preferredLocationId) setPickupLocationId(preferredLocationId);
+    if (!deliveryLocationId && preferredLocationId) setDeliveryLocationId(preferredLocationId);
   }, [cylinderId, cylinders.data, deliveryLocationId, hydrated, locations.data, pickupLocationId]);
 
   useEffect(() => {
