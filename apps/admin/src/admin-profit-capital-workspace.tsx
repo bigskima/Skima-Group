@@ -583,11 +583,12 @@ export function AdminProfitCapitalWorkspace() {
           <Button disabled={!canSaveClose || savePeriodClose.isPending} isLoading={savePeriodClose.isPending} onClick={() => savePeriodClose.mutate()}>Capture draft period close</Button>
         </div>
         <div className="skima-pc-table-wrap"><table className="skima-pc-table">
-          <thead><tr><th>Period</th><th>Posted platform revenue</th><th>Expenses & reserves</th><th>Distributable profit</th><th>Reconciliation</th><th>Status / approval</th></tr></thead>
-          <tbody>{periodClosings.length === 0 ? <tr><td colSpan={6}>No period closes recorded for this currency.</td></tr> : periodClosings.map((close) => <tr key={value(close, "id")}>
+          <thead><tr><th>Period</th><th>Posted platform revenue</th><th>Expenses & reserves</th><th>Excluded liabilities (reference)</th><th>Distributable profit</th><th>Reconciliation</th><th>Status / approval</th></tr></thead>
+          <tbody>{periodClosings.length === 0 ? <tr><td colSpan={7}>No period closes recorded for this currency.</td></tr> : periodClosings.map((close) => <tr key={value(close, "id")}>
             <td><strong>{dateLabel(value(close, "periodStart"))} – {dateLabel(value(close, "periodEnd"))}</strong></td>
             <td>{money(numberValue(close, "netPlatformRevenue"), currency)}</td>
             <td>{money(numberValue(close, "operatingExpenses") + numberValue(close, "refundChargebackReserve") + numberValue(close, "taxAndStatutoryReserve") + numberValue(close, "otherReserves"), currency)}</td>
+            <td><small>Customer: {money(numberValue(close, "excludedCustomerCollections"), currency)} · Supplier: {money(numberValue(close, "excludedSupplierPassThrough"), currency)} · Escrow: {money(numberValue(close, "excludedEscrowAndUnsettledFunds"), currency)}</small></td>
             <td><strong>{money(numberValue(close, "distributableProfit"), currency)}</strong></td>
             <td><small>{value(close, "reconciliationReference")}</small></td>
             <td><div className="skima-pc-status-actions"><StatusBadge tone={value(close, "status") === "approved" ? "success" : value(close, "status") === "rejected" ? "warning" : "neutral"}>{value(close, "status")}</StatusBadge>
@@ -642,7 +643,7 @@ export function AdminProfitCapitalWorkspace() {
             </tr>;
           })}</tbody>
         </table></div>
-        <Notice tone="warning">Category wallets are internal accounting balances. Beneficiary payouts in this release transfer into a linked SKIMA customer wallet; external bank payout rails are not represented as completed here.</Notice>
+        <Notice tone="warning">Category wallets are internal accounting balances. Beneficiary payouts transfer into a linked SKIMA customer wallet through a posted ledger transaction. A beneficiary can use the existing verified wallet-withdrawal flow to withdraw to an approved bank account; this screen does not claim that an external bank transfer has already happened.</Notice>
       </Panel>
 
       <Panel title="Profit participation register" description="These are contractual profit entitlements, not legal shares. The percentage is calculated from each approved distributable-profit amount.">
