@@ -123,10 +123,10 @@ export function StoreShopScreen(){
     deliveryInstructions:addressInstructions.trim()||null,
     providerPlaceId:resolved.placeId??null,
     providerSource:"maps_adapter",
-    captureSource:"MANUAL_ADDRESS",
+    captureSource:"GEOCODED",
     capturedAt:new Date().toISOString(),
     source:"skima.store.mobile",
-    metadata:{sourceApp:"store",addressEntryMode:"manual_search"},
+    metadata:{sourceApp:"store",addressEntryMode:"manual_search",addressComponents:resolved.addressComponents??{}},
     idempotencyKey:saveIdempotencyKey,
    },OrderSchema);
    const refreshedLocations=await locations.refetch();
