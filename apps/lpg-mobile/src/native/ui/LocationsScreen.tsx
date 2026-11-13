@@ -443,13 +443,16 @@ function mapLookupFromPrediction(prediction: Record<string, unknown>): MapLookup
 }
 
 function normalizeAddress(value: AddressPayload | null | undefined): OperationalAddress {
+  const providerName = clean(value?.name);
   const street = clean(value?.street)
     ?? clean(value?.route)
+    ?? (isLikelyStreetName(providerName) ? providerName : null)
     ?? null;
-  const streetNumber = clean(value?.streetNumber);
+  const streetNumber = clean(value?.streetNumber) ?? clean((value as Record<string, unknown> | null | undefined)?.house_number as string | undefined);
+  const isStreetName = Boolean(providerName && street && providerName.toLocaleLowerCase() === street.toLocaleLowerCase());
   return {
-    name: clean(value?.name) ?? clean(value?.landmark) ?? clean(value?.premise),
-    street: streetNumber && street && !street.startsWith(streetNumber) ? `${streetNumber} ${street}` : street,
+    name: (isStreetName ? null : providerName) ?? clean(value?.landmark) ?? clean(value?.premise),
+    street: streetNumber && street && !street.toLocaleLowerCase().startsWith(streetNumber.toLocaleLowerCase() + " ") ? `${streetNumber} ${street}` : street,
     district: clean(value?.district) ?? clean(value?.locality) ?? clean(value?.subLocality),
     city: clean(value?.city) ?? clean(value?.town) ?? clean(value?.village),
     region: clean(value?.region) ?? clean(value?.state),
@@ -542,6 +545,11 @@ function validCoordinate(latitude: number, longitude: number) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isLikelyStreetName(value: string | null): boolean {
+  if (!value) return false;
+  return /(?:^|\\s)(?:road|rd\\.?|street|st\\.?|avenue|ave\\.?|lane|ln\\.?|drive|dr\\.?|close|crescent|cr\\.?|way|boulevard|blvd\\.?|highway|hwy\\.?|expressway|parkway|pkwy\\.?|terrace|court|ct\\.?|place|pl\\.?|square|sq\\.?|path|bypass)\\.?$/i.test(value.trim());
 }
 
 function clean(value: string | null | undefined) {
