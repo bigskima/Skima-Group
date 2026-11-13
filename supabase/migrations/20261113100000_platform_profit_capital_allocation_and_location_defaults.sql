@@ -100,11 +100,18 @@ begin
   end if;
 
   update public.lpg_customer_locations
-  set is_default = (id = selected_location),
+  set is_default = false,
       updated_at = timezone('utc', now())
   where owner_user_id = location_owner
     and status = 'active'
-    and is_default is distinct from (id = selected_location);
+    and is_default = true
+    and id <> selected_location;
+
+  update public.lpg_customer_locations
+  set is_default = true,
+      updated_at = timezone('utc', now())
+  where id = selected_location
+    and owner_user_id = location_owner;
 
   return selected_location;
 end;
@@ -584,7 +591,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  template_id uuid;
+  v_template_id uuid;
   currency text := upper(btrim(target_currency_code));
   row_item jsonb;
   row_count integer := 0;
@@ -627,7 +634,7 @@ begin
 
   if exists (
     select 1
-    from jsonb_array_elements(target_lines) item
+    from jsonb_array_elements(target_lines) as allocation_item(item)
     group by item->>'categoryKey'
     having count(*) > 1
   ) then
@@ -637,7 +644,7 @@ begin
   if target_template_id is null then
     insert into public.platform_profit_allocation_templates(display_name, currency_code, notes)
     values (btrim(target_display_name), currency, nullif(btrim(target_notes), ''))
-    returning id into template_id;
+    returning id into v_template_id;
   else
     update public.platform_profit_allocation_templates
     set display_name = btrim(target_display_name),
@@ -646,21 +653,21 @@ begin
         version = version + 1
     where id = target_template_id
       and status = 'draft'
-    returning id into template_id;
-    if template_id is null then
+    returning id into v_template_id;
+    if v_template_id is null then
       raise exception using errcode = '23514', message = 'Only a draft allocation template can be edited';
     end if;
-    delete from public.platform_profit_allocation_template_lines where template_id = template_id;
+    delete from public.platform_profit_allocation_template_lines line where line.template_id = v_template_id;
   end if;
 
   insert into public.platform_profit_allocation_template_lines(template_id, category_key, allocation_percent)
-  select template_id, item->>'categoryKey', (item->>'allocationPercent')::numeric
-  from jsonb_array_elements(target_lines) item;
+  select v_template_id, item->>'categoryKey', (item->>'allocationPercent')::numeric
+  from jsonb_array_elements(target_lines) as allocation_item(item);
 
   insert into public.platform_profit_capital_audit_events(entity_type, entity_id, action, metadata)
-  values ('allocation_template', template_id, 'saved', jsonb_build_object('currencyCode', currency, 'totalPercent', total_percent));
+  values ('allocation_template', v_template_id, 'saved', jsonb_build_object('currencyCode', currency, 'totalPercent', total_percent));
 
-  return template_id;
+  return v_template_id;
 end;
 $$;
 
@@ -929,7 +936,7 @@ as $$
 declare
   currency text := upper(btrim(target_currency_code));
   template public.platform_profit_allocation_templates%rowtype;
-  distribution_id uuid;
+  v_distribution_id uuid;
   existing_id uuid;
   decimals integer := 2;
   vehicle_pool numeric(28,8) := 0;
@@ -989,12 +996,12 @@ begin
     jsonb_build_object('templateId', template.id, 'templateName', template.display_name, 'version', template.version),
     target_idempotency_key
   )
-  returning id into distribution_id;
+  returning id into v_distribution_id;
 
   insert into public.platform_profit_distribution_allocations(
     distribution_id, category_key, allocation_percent, allocated_amount
   )
-  select distribution_id,
+  select v_distribution_id,
          line.category_key,
          line.allocation_percent,
          round(target_distributable_profit * line.allocation_percent / 100, decimals)
@@ -1004,7 +1011,7 @@ begin
   select target_distributable_profit - coalesce(sum(allocated_amount), 0)
   into rounding_delta
   from public.platform_profit_distribution_allocations
-  where distribution_id = distribution_id;
+  where allocation.distribution_id = v_distribution_id;
 
   update public.platform_profit_distribution_allocations
   set allocated_amount = allocated_amount + rounding_delta
@@ -1032,7 +1039,7 @@ begin
     join public.platform_profit_distribution_allocations allocation
       on allocation.distribution_id = entitlement.distribution_id
      and allocation.category_key = entitlement.funding_category
-    where entitlement.distribution_id = distribution_id
+    where entitlement.distribution_id = v_distribution_id
     group by entitlement.funding_category, allocation.allocated_amount
     having sum(entitlement.entitlement_amount) > allocation.allocated_amount
   ) then
@@ -1047,11 +1054,11 @@ begin
     where entitlement.distribution_id = allocation.distribution_id
       and entitlement.funding_category = allocation.category_key
   ), 0)
-  where allocation.distribution_id = distribution_id;
+  where allocation.distribution_id = v_distribution_id;
 
   select allocated_amount into vehicle_pool
   from public.platform_profit_distribution_allocations
-  where distribution_id = distribution_id and category_key = 'vehicle_repayment';
+  where allocation.distribution_id = v_distribution_id and allocation.category_key = 'vehicle_repayment';
 
   insert into public.platform_vehicle_capital_repayments(
     distribution_id, agreement_id, principal_amount
@@ -1075,11 +1082,11 @@ begin
     from public.platform_vehicle_capital_repayments repayment
     where repayment.distribution_id = allocation.distribution_id
   ), 0)
-  where allocation.distribution_id = distribution_id
+  where allocation.distribution_id = v_distribution_id
     and allocation.category_key = 'vehicle_repayment';
 
   insert into public.platform_profit_capital_audit_events(entity_type, entity_id, action, metadata)
-  values ('profit_distribution', distribution_id, 'calculated', jsonb_build_object(
+  values ('profit_distribution', v_distribution_id, 'calculated', jsonb_build_object(
     'currencyCode', currency,
     'periodStart', target_period_start,
     'periodEnd', target_period_end,
@@ -1087,7 +1094,7 @@ begin
     'templateId', template.id
   ));
 
-  return distribution_id;
+  return v_distribution_id;
 end;
 $$;
 
@@ -1305,10 +1312,6 @@ begin
       status = case when new_repaid >= principal_amount then 'fully_repaid' else status end,
       updated_at = timezone('utc', now())
   where id = agreement.id;
-
-  update public.platform_profit_distribution_allocations
-  set committed_amount = greatest(0, committed_amount - target_amount)
-  where distribution_id = distribution.id and category_key = 'vehicle_repayment';
 
   update public.platform_profit_distributions
   set status = case
