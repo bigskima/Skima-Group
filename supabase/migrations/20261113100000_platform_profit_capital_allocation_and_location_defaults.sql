@@ -363,6 +363,16 @@ create table if not exists public.platform_vehicle_capital_repayment_payments (
   unique (financial_transaction_id)
 );
 
+-- A ledger transaction may satisfy exactly one participant or vehicle payment.
+-- The primary key makes the claim atomic even when two Admins submit at once.
+create table if not exists public.platform_profit_capital_transaction_claims (
+  financial_transaction_id uuid primary key references public.financial_transactions(id) on delete restrict,
+  payment_kind text not null check (payment_kind in ('profit_participation', 'vehicle_principal')),
+  payment_record_id uuid not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  unique (payment_kind, payment_record_id)
+);
+
 create table if not exists public.platform_profit_capital_audit_events (
   id uuid primary key default gen_random_uuid(),
   entity_type text not null,
@@ -388,6 +398,7 @@ alter table public.platform_profit_participant_entitlements enable row level sec
 alter table public.platform_vehicle_capital_repayments enable row level security;
 alter table public.platform_profit_participant_payments enable row level security;
 alter table public.platform_vehicle_capital_repayment_payments enable row level security;
+alter table public.platform_profit_capital_transaction_claims enable row level security;
 alter table public.platform_profit_capital_audit_events enable row level security;
 
 do $$
@@ -412,7 +423,10 @@ begin
     execute format('grant select on table public.%I to authenticated', table_name);
   end loop;
 end;
-$$;
+$;
+
+revoke all on table public.platform_profit_capital_transaction_claims
+  from public, anon, authenticated;
 
 create policy platform_profit_allocation_templates_finance_read
 on public.platform_profit_allocation_templates
@@ -1235,6 +1249,7 @@ declare
   distribution public.platform_profit_distributions%rowtype;
   transaction_record public.financial_transactions%rowtype;
   payment_id uuid;
+  claimed_transaction_id uuid;
 begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not (public.is_platform_super_admin() or public.has_permission('platform.profit_capital.manage', null)
@@ -1287,6 +1302,18 @@ begin
   )
   returning id into payment_id;
 
+  insert into public.platform_profit_capital_transaction_claims(
+    financial_transaction_id, payment_kind, payment_record_id
+  )
+  values (target_financial_transaction_id, 'profit_participation', payment_id)
+  on conflict (financial_transaction_id) do nothing
+  returning financial_transaction_id into claimed_transaction_id;
+
+  if claimed_transaction_id is null then
+    raise exception using errcode = '23514',
+      message = 'This posted transaction has already been claimed by another capital payment';
+  end if;
+
   update public.platform_profit_participant_entitlements
   set paid_amount = paid_amount + target_amount,
       status = case when paid_amount + target_amount >= entitlement_amount then 'paid' else 'partially_paid' end
@@ -1333,6 +1360,7 @@ declare
   transaction_record public.financial_transactions%rowtype;
   payment_id uuid;
   new_repaid numeric(28,8);
+  claimed_transaction_id uuid;
 begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not (public.is_platform_super_admin() or public.has_permission('platform.profit_capital.manage', null)
@@ -1388,6 +1416,18 @@ begin
     target_financial_transaction_id, btrim(target_external_reference), target_idempotency_key
   )
   returning id into payment_id;
+
+  insert into public.platform_profit_capital_transaction_claims(
+    financial_transaction_id, payment_kind, payment_record_id
+  )
+  values (target_financial_transaction_id, 'vehicle_principal', payment_id)
+  on conflict (financial_transaction_id) do nothing
+  returning financial_transaction_id into claimed_transaction_id;
+
+  if claimed_transaction_id is null then
+    raise exception using errcode = '23514',
+      message = 'This posted transaction has already been claimed by another capital payment';
+  end if;
 
   update public.platform_vehicle_capital_repayments
   set paid_amount = paid_amount + target_amount,
