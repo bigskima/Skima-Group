@@ -93,7 +93,7 @@ export function displayLocationAddress(record: PlatformRecord | null | undefined
 
 function isLikelyStreetName(value: string | null): boolean {
   if (!value) return false;
-  return /(?:^|\\s)(?:road|rd\\.?|street|st\\.?|avenue|ave\\.?|lane|ln\\.?|drive|dr\\.?|close|crescent|cr\\.?|way|boulevard|blvd\\.?|highway|hwy\\.?|expressway|parkway|pkwy\\.?|terrace|court|ct\\.?|place|pl\\.?|square|sq\\.?|path|bypass)\\.?$/i.test(value.trim());
+  return /(?:^|\s)(?:road|rd\.?|street|st\.?|avenue|ave\.?|lane|ln\.?|drive|dr\.?|close|crescent|cr\.?|way|boulevard|blvd\.?|highway|hwy\.?|expressway|parkway|pkwy\.?|terrace|court|ct\.?|place|pl\.?|square|sq\.?|path|bypass)\.?$/i.test(value.trim());
 }
 
 function uniqueAddressParts(values: Array<string | null>) {
