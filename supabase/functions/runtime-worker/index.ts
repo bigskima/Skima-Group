@@ -95,6 +95,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const aiSupportTriage = await refreshAiSupportTriageAssessments(supabase);
     const webhooks = await processWebhooks(supabase, limit);
     const jobs = await processBackgroundJobs(supabase, limit);
+    const profitCapital = requireRecord(await requireRpcData(
+      supabase.rpc("process_due_platform_profit_distribution_schedules", { target_limit: limit }),
+    ));
     const expirations = await expireEscrowHolds(supabase, limit);
     const locationReadiness = requireRecord(await requireRpcData(
       supabase.rpc("read_location_platform_production_readiness"),
@@ -117,6 +120,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         lpgLifecycle,
         locationReadiness,
         notifications,
+        profitCapital,
         utilityPayments,
         webhooks,
         requestId: id,
@@ -143,6 +147,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         lpgLifecycle,
         locationReadiness,
         notifications,
+        profitCapital,
         utilityPayments,
         webhooks,
       },
