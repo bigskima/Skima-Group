@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { z } from "zod";
 
 import { Button, ErrorState, LoadingState, MetricTile, PageHeader, StatusBadge } from "@skima/ui";
@@ -119,6 +119,9 @@ export function AdminProfitCapitalWorkspace() {
   const [distributableProfit, setDistributableProfit] = useState("");
   const [distributionNotes, setDistributionNotes] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { amount: string; transactionId: string; reference: string }>>({});
+  const participantAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const agreementAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const distributionAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
 
   const workspaceQuery = useQuery({
     queryKey: ["platform-profit-capital-workspace", currency],
@@ -170,15 +173,28 @@ export function AdminProfitCapitalWorkspace() {
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Template activation failed.", tone: "danger" }),
   });
   const saveParticipant = useMutation({
-    mutationFn: () => runRpc("save_platform_profit_participant", {
-      target_participant_id: null, target_display_name: participantName.trim(), target_participant_type: participantType,
-      target_contact_email: participantEmail.trim() || null, target_contact_phone: participantPhone.trim() || null,
-      target_currency_code: currency, target_profit_share_percent: Number(participantPercent),
-      target_funding_category: fundingCategory, target_status: "active",
-      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.participant", participantName.trim() + ":" + currency),
-      target_notes: participantNotes.trim() || null,
-    }),
+    mutationFn: () => {
+      const payload = {
+        target_participant_id: null,
+        target_display_name: participantName.trim(),
+        target_participant_type: participantType,
+        target_contact_email: participantEmail.trim() || null,
+        target_contact_phone: participantPhone.trim() || null,
+        target_currency_code: currency,
+        target_profit_share_percent: Number(participantPercent),
+        target_funding_category: fundingCategory,
+        target_status: "active",
+        target_notes: participantNotes.trim() || null,
+      };
+      const fingerprint = JSON.stringify(payload);
+      const key = participantAttempt.current?.fingerprint === fingerprint
+        ? participantAttempt.current.key
+        : createClientIdempotencyKey("admin.profit-capital.participant", participantName.trim() + ":" + currency);
+      participantAttempt.current = { fingerprint, key };
+      return runRpc("save_platform_profit_participant", { ...payload, target_idempotency_key: key });
+    },
     onSuccess: async () => {
+      participantAttempt.current = null;
       setParticipantName(""); setParticipantEmail(""); setParticipantPhone(""); setParticipantNotes("");
       setNotice({ text: "Participant saved. This is contractual profit participation, not an issued shareholding.", tone: "success" });
       await refresh();
@@ -186,15 +202,27 @@ export function AdminProfitCapitalWorkspace() {
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Participant save failed.", tone: "danger" }),
   });
   const saveAgreement = useMutation({
-    mutationFn: () => runRpc("save_platform_vehicle_capital_agreement", {
-      target_agreement_id: null, target_participant_id: agreementParticipant,
-      target_vehicle_description: vehicleDescription.trim(), target_registration_number: registrationNumber.trim() || null,
-      target_agreement_reference: agreementReference.trim(), target_currency_code: currency,
-      target_principal_amount: Number(principalAmount), target_status: "active",
-      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.vehicle-agreement", agreementReference.trim()),
-      target_notes: agreementNotes.trim() || null,
-    }),
+    mutationFn: () => {
+      const payload = {
+        target_agreement_id: null,
+        target_participant_id: agreementParticipant,
+        target_vehicle_description: vehicleDescription.trim(),
+        target_registration_number: registrationNumber.trim() || null,
+        target_agreement_reference: agreementReference.trim(),
+        target_currency_code: currency,
+        target_principal_amount: Number(principalAmount),
+        target_status: "active",
+        target_notes: agreementNotes.trim() || null,
+      };
+      const fingerprint = JSON.stringify(payload);
+      const key = agreementAttempt.current?.fingerprint === fingerprint
+        ? agreementAttempt.current.key
+        : createClientIdempotencyKey("admin.profit-capital.vehicle-agreement", agreementReference.trim());
+      agreementAttempt.current = { fingerprint, key };
+      return runRpc("save_platform_vehicle_capital_agreement", { ...payload, target_idempotency_key: key });
+    },
     onSuccess: async () => {
+      agreementAttempt.current = null;
       setVehicleDescription(""); setRegistrationNumber(""); setAgreementReference(""); setPrincipalAmount(""); setAgreementNotes("");
       setNotice({ text: "Vehicle agreement saved. Principal only; interest is fixed at 0%.", tone: "success" });
       await refresh();
@@ -204,15 +232,23 @@ export function AdminProfitCapitalWorkspace() {
   const createDistribution = useMutation({
     mutationFn: () => {
       if (!activeTemplate) throw new Error("Activate an allocation template before creating a distribution.");
-      return runRpc("create_platform_profit_distribution", {
-        target_template_id: value(activeTemplate, "id"), target_currency_code: currency,
-        target_period_start: distributionStart, target_period_end: distributionEnd,
+      const payload = {
+        target_template_id: value(activeTemplate, "id"),
+        target_currency_code: currency,
+        target_period_start: distributionStart,
+        target_period_end: distributionEnd,
         target_distributable_profit: Number(distributableProfit),
-        target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.distribution", currency + ":" + distributionStart + ":" + distributionEnd),
         target_notes: distributionNotes.trim() || null,
-      });
+      };
+      const fingerprint = JSON.stringify(payload);
+      const key = distributionAttempt.current?.fingerprint === fingerprint
+        ? distributionAttempt.current.key
+        : createClientIdempotencyKey("admin.profit-capital.distribution", currency + ":" + distributionStart + ":" + distributionEnd);
+      distributionAttempt.current = { fingerprint, key };
+      return runRpc("create_platform_profit_distribution", { ...payload, target_idempotency_key: key });
     },
     onSuccess: async () => {
+      distributionAttempt.current = null;
       setDistributableProfit(""); setDistributionNotes("");
       setNotice({ text: "Draft distribution calculated. Review the allocation and payables before approval.", tone: "success" });
       await refresh();
@@ -263,11 +299,14 @@ export function AdminProfitCapitalWorkspace() {
     && Boolean(distributionStart && distributionEnd && distributionEnd >= distributionStart)
     && distributionNotes.trim().length >= 3;
 
-  if (status === "loading" || workspaceQuery.isPending) {
-    return <div className="skima-profit-capital"><LoadingState label="Loading profit and capital records…" /></div>;
+  if (status === "loading") {
+    return <div className="skima-profit-capital"><LoadingState label="Loading profit and capital access…" /></div>;
   }
   if (!canRead) {
     return <div className="skima-profit-capital"><PageHeader eyebrow="Money · Capital" title="Profit & capital" description="Manage SKIMA profit allocations, participation and vehicle principal repayment." /><ErrorState title="Finance access required" message="This workspace is restricted to Admins with finance read or profit-capital access." /></div>;
+  }
+  if (workspaceQuery.isPending) {
+    return <div className="skima-profit-capital"><LoadingState label="Loading profit and capital records…" /></div>;
   }
   if (workspaceQuery.error || !workspace) {
     return <div className="skima-profit-capital"><PageHeader eyebrow="Money · Capital" title="Profit & capital" description="Manage SKIMA profit allocations, participation and vehicle principal repayment." /><ErrorState title="Profit and capital data unavailable" message={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : "The workspace could not be loaded."} onRetry={() => void workspaceQuery.refetch()} /></div>;
