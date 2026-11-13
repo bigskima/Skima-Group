@@ -12,6 +12,7 @@ import { AppButton } from "../ui/AppButton";
 import { GuideTarget } from "../onboarding/StoreGuideProvider";
 import { StorePromotionBanner } from "../ui/StorePromotionBanner";
 import { StorefrontBasketLine, StorefrontCategoryChip, StorefrontDetailSheet, StorefrontHero, StorefrontProductCard } from "@skima/mobile-experience/StorefrontParity";
+import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview";
 
 type Row=Record<string,unknown>;
 type CartLine={itemId:string;variantId:string|null;name:string;variantName:string|null;quantity:number;unitAmount:number;currencyCode:string;stock:number|null};
@@ -102,6 +103,8 @@ export function StoreShopScreen(){
  const itemCount=cart.reduce((sum,line)=>sum+line.quantity,0);
  const canReview=Boolean(cart.length&&allowedCurrency&&(fulfillment==="pickup"||locationId));
  const selectedAddress=addresses.find(address=>asString(address,"id")===locationId)??null;
+ const selectedAddressCoordinate=selectedAddress&&typeof selectedAddress.latitude==="number"&&typeof selectedAddress.longitude==="number"
+  ?{latitude:selectedAddress.latitude,longitude:selectedAddress.longitude}:null;
  const saveStoreAddress=async(addressText:string)=>{
   const query=addressText.trim();
   if(query.length<5){setAddressNotice("Enter a full street address, landmark, town and state.");return;}
@@ -236,6 +239,7 @@ export function StoreShopScreen(){
      </View>:<Notice text="Pickup selected. Your order will use the Store pickup location."/>}
     <View style={{gap:6}}><Text style={{color:palette.ink,fontSize:11,fontWeight:"900"}}>Order note <Text style={{color:palette.muted,fontWeight:"500"}}>(optional)</Text></Text><TextInput value={note} editable={!checkout.isPending} onChangeText={value=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setNote(value);}} placeholder="Add delivery instructions or a note" placeholderTextColor={palette.muted} multiline style={[styles.note,{borderColor:palette.border,color:palette.ink,minHeight:76,textAlignVertical:"top"}]}/></View>
     {fulfillment==="delivery"&&selectedAddress?<View style={{gap:3,padding:11,borderRadius:13,backgroundColor:palette.surfaceSubtle}}><Text style={{fontSize:9,color:palette.muted,fontWeight:"800"}}>DELIVERY TO</Text><Text style={{fontSize:11,color:palette.ink,fontWeight:"800"}}>{asString(selectedAddress,"formatted_address","display_name","address")??"Saved address"}</Text></View>:null}
+    {fulfillment==="delivery"&&selectedAddressCoordinate?<StreetMapPreview title="Delivery address map" coordinate={selectedAddressCoordinate} height={180}/>:null}
     <AppButton label="Review order" fullWidth disabled={!canReview||checkout.isPending} onPress={()=>setCheckoutStep("review")}/>
    </Card>:null}
    {checkoutStep==="review"?<Card style={{gap:12}}>
