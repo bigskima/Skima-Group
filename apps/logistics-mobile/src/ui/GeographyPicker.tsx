@@ -600,6 +600,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
 
 const styles = StyleSheet.create({
   group: { gap: 8 },
+  parentPicker: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 11, gap: 9 },
   selected: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 10 },
   selectedIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   selectedCopy: { flex: 1, gap: 2 },
