@@ -478,8 +478,7 @@ begin
     'platform_profit_participant_entitlements',
     'platform_vehicle_capital_repayments',
     'platform_profit_participant_payments',
-    'platform_vehicle_capital_repayment_payments',
-    'platform_profit_capital_audit_events'
+    'platform_vehicle_capital_repayment_payments'
   ]
   loop
     policy_name := table_name || '_finance_read';
