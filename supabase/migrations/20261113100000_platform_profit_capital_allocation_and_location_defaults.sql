@@ -1266,6 +1266,14 @@ begin
      or transaction_record.total_amount <> target_amount then
     raise exception using errcode = '23514', message = 'Link a posted transfer/payment ledger transaction for the exact amount and currency';
   end if;
+
+  if exists (
+    select 1 from public.platform_vehicle_capital_repayment_payments payment
+    where payment.financial_transaction_id = target_financial_transaction_id
+  ) then
+    raise exception using errcode = '23514',
+      message = 'This posted transaction has already been used for a vehicle capital repayment';
+  end if;
   if target_amount > entitlement.entitlement_amount - entitlement.paid_amount then
     raise exception using errcode = '23514', message = 'Payment exceeds the outstanding profit entitlement';
   end if;
@@ -1358,6 +1366,14 @@ begin
      or transaction_record.currency_code <> distribution.currency_code
      or transaction_record.total_amount <> target_amount then
     raise exception using errcode = '23514', message = 'Link a posted transfer/payment ledger transaction for the exact principal amount and currency';
+  end if;
+
+  if exists (
+    select 1 from public.platform_profit_participant_payments payment
+    where payment.financial_transaction_id = target_financial_transaction_id
+  ) then
+    raise exception using errcode = '23514',
+      message = 'This posted transaction has already been used for a profit participation payment';
   end if;
   if target_amount > repayment.principal_amount - repayment.paid_amount
      or target_amount > agreement.principal_amount - agreement.principal_repaid then
