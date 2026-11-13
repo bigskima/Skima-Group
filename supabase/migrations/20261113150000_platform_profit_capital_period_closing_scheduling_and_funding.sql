@@ -217,8 +217,9 @@ begin
     and wallet.owner_entity_id is null
     and wallet.currency_code = currency
     and transaction_record.status = 'posted'
-    and ledger.created_at >= target_period_start::timestamptz
-    and ledger.created_at < (target_period_end + 1)::timestamptz;
+    and coalesce(transaction_record.source, '') <> 'platform.profit_capital.funding'
+    and ledger.created_at >= timezone('utc', target_period_start::timestamp)
+    and ledger.created_at < timezone('utc', (target_period_end + 1)::timestamp);
 
   net_revenue := greatest(0, net_revenue);
 
@@ -265,7 +266,7 @@ begin
       'periodStart', target_period_start,
       'periodEnd', target_period_end,
       'capturedAt', timezone('utc', now()),
-      'calculationPolicy', 'Conservative net platform-revenue wallet movements. Customer collections, escrow, supplier pass-through wallets and unsettled collections are not queried into this base.'
+      'calculationPolicy', 'Conservative net posted platform-revenue wallet movements. Customer collections, escrow, supplier pass-through wallets and unsettled collections are not queried into this base. Internal profit-category funding transfers are excluded from later revenue periods.'
     )
   )
   returning id into close_id;
