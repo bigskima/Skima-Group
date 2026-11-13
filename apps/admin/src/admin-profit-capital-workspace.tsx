@@ -602,6 +602,22 @@ export function AdminProfitCapitalWorkspace() {
         </table></div>
       </Panel>
 
+      <Panel title="Segregated profit category wallets" description="These are distinct internal ledger accounts funded from the platform-revenue wallet after an approved distribution. Customer balances, escrow and supplier float are not used.">
+        <div className="skima-pc-table-wrap"><table className="skima-pc-table">
+          <thead><tr><th>Allocation category</th><th>Wallet</th><th>Available balance</th><th>Currency</th></tr></thead>
+          <tbody>{CATEGORIES.map((category) => {
+            const account = categoryAccounts.find((item) => value(item, "categoryKey") === category.key);
+            return <tr key={category.key}>
+              <td><strong>{category.label}</strong></td>
+              <td><small>{value(account, "walletId") ? value(account, "walletId") : "Created during first funded distribution"}</small></td>
+              <td>{money(numberValue(account, "balance"), currency)}</td>
+              <td>{value(account, "currencyCode", currency)}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>
+        <Notice tone="warning">Category wallets are internal accounting balances. Beneficiary payouts in this release transfer into a linked SKIMA customer wallet; external bank payout rails are not represented as completed here.</Notice>
+      </Panel>
+
       <Panel title="Profit participation register" description="These are contractual profit entitlements, not legal shares. The percentage is calculated from each approved distributable-profit amount.">
         <div className="skima-pc-form-grid">
           <Field label="Beneficiary name" value={participantName} onChange={setParticipantName} placeholder="Person or legal entity" />
@@ -675,13 +691,20 @@ export function AdminProfitCapitalWorkspace() {
             const entitlements = records(distribution.participantEntitlements);
             const repayments = records(distribution.vehicleRepayments);
             const allocations = records(distribution.allocations);
-            const approved = value(distribution, "status") !== "draft";
+            const distributionStatus = value(distribution, "status");
+            const funded = value(distribution, "executionStatus") === "funded";
+            const approved = (distributionStatus === "approved" || distributionStatus === "completed") && funded;
             return <article className="skima-pc-distribution" key={id}>
               <div className="skima-pc-distribution-head">
                 <div><strong>{dateLabel(value(distribution, "periodStart"))} – {dateLabel(value(distribution, "periodEnd"))}</strong>
                   <small>Profit basis: {money(numberValue(distribution, "distributableProfit"), currency)} · Created {dateLabel(value(distribution, "createdAt"))}</small></div>
-                <div className="skima-pc-status-actions"><StatusBadge tone={value(distribution, "status") === "completed" ? "success" : value(distribution, "status") === "approved" ? "warning" : "neutral"}>{value(distribution, "status")}</StatusBadge>
-                  {value(distribution, "status") === "draft" ? <Button size="sm" disabled={!canManage || approveDistribution.isPending} isLoading={approveDistribution.isPending} onClick={() => approveDistribution.mutate(id)}>Approve run</Button> : null}</div>
+                <div className="skima-pc-status-actions">
+                  <StatusBadge tone={distributionStatus === "completed" ? "success" : distributionStatus === "approved" ? "warning" : "neutral"}>{distributionStatus}</StatusBadge>
+                  <StatusBadge tone={funded ? "success" : "neutral"}>{funded ? "funded" : "unfunded"}</StatusBadge>
+                  {distributionStatus === "draft" ? <Button size="sm" disabled={!canManage || approveDistribution.isPending} isLoading={approveDistribution.isPending} onClick={() => approveDistribution.mutate(id)}>Approve run</Button> : null}
+                  {distributionStatus === "approved" && !funded ? <Button size="sm" disabled={!canManage || fundDistribution.isPending} isLoading={fundDistribution.isPending} onClick={() => fundDistribution.mutate(id)}>Fund six category wallets</Button> : null}
+                </div>
+                {funded ? <small>Funding ledger transaction: {value(distribution, "fundingTransactionId")}</small> : null}
               </div>
               <div className="skima-pc-allocation-grid">{allocations.map((allocation) => <div key={value(allocation, "categoryKey")}>
                 <span>{categoryLabel(value(allocation, "categoryKey"))}</span><strong>{money(numberValue(allocation, "allocatedAmount"), currency)}</strong>
@@ -692,16 +715,20 @@ export function AdminProfitCapitalWorkspace() {
                 <tbody>{entitlements.map((item) => {
                   const itemId = value(item, "id");
                   const draft = paymentDrafts[itemId] ?? { amount: value(item, "outstandingAmount"), transactionId: "", reference: "" };
-                  return <tr key={itemId}><td><strong>{value(item, "participantName")}</strong><small>{categoryLabel(value(item, "fundingCategory"))}</small></td>
+                  const linkedParticipant = executionParticipants.find((participant) => value(participant, "id") === value(item, "participantId"));
+                  const profileId = value(linkedParticipant, "profileId");
+                  return <tr key={itemId}><td><strong>{value(item, "participantName")}</strong><small>{categoryLabel(value(item, "fundingCategory"))}{profileId ? " · SKIMA wallet linked" : " · No SKIMA wallet linked"}</small></td>
                     <td>{numberValue(item, "sharePercent").toFixed(4)}%</td><td>{money(numberValue(item, "entitlementAmount"), currency)}</td>
                     <td>{money(numberValue(item, "paidAmount"), currency)}</td><td>{money(numberValue(item, "outstandingAmount"), currency)}</td>
                     <td>{["paid", "cancelled"].includes(value(item, "status")) ? <StatusBadge tone="success">{value(item, "status")}</StatusBadge> :
                       <div className="skima-pc-payment-fields">
-                        <input aria-label="Payment amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
+                        {profileId ? <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || payParticipantToWallet.isPending}
+                          isLoading={payParticipantToWallet.isPending} onClick={() => payParticipantToWallet.mutate({ entitlementId: itemId, amount: Number(draft.amount) })}>Pay to SKIMA wallet</Button> : null}
+                        <input aria-label="External payment amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
                         <input aria-label="Posted ledger transaction ID" value={draft.transactionId} onChange={(event) => updatePaymentDraft(itemId, "transactionId", event.currentTarget.value)} placeholder="Posted transaction UUID" />
                         <input aria-label="Transfer reference" value={draft.reference} onChange={(event) => updatePaymentDraft(itemId, "reference", event.currentTarget.value)} placeholder="Transfer reference" />
                         <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || draft.transactionId.trim().length < 20 || draft.reference.trim().length < 3 || recordParticipantPayment.isPending}
-                          isLoading={recordParticipantPayment.isPending} onClick={() => recordParticipantPayment.mutate({ id: itemId, amount: Number(draft.amount), transactionId: draft.transactionId.trim(), reference: draft.reference.trim() })}>Record</Button>
+                          isLoading={recordParticipantPayment.isPending} onClick={() => recordParticipantPayment.mutate({ id: itemId, amount: Number(draft.amount), transactionId: draft.transactionId.trim(), reference: draft.reference.trim() })}>Record external transfer</Button>
                       </div>}</td>
                   </tr>;
                 })}</tbody>
@@ -711,15 +738,21 @@ export function AdminProfitCapitalWorkspace() {
                 <tbody>{repayments.map((item) => {
                   const itemId = value(item, "id");
                   const draft = paymentDrafts[itemId] ?? { amount: value(item, "outstandingAmount"), transactionId: "", reference: "" };
-                  return <tr key={itemId}><td><strong>{value(item, "participantName")}</strong><small>{value(item, "vehicleDescription")}</small></td>
+                  const agreement = agreements.find((candidate) => value(candidate, "id") === value(item, "agreementId"));
+                  const participantId = value(agreement, "participantId");
+                  const linkedParticipant = executionParticipants.find((participant) => value(participant, "id") === participantId);
+                  const profileId = value(linkedParticipant, "profileId");
+                  return <tr key={itemId}><td><strong>{value(item, "participantName")}</strong><small>{value(item, "vehicleDescription")}{profileId ? " · SKIMA wallet linked" : " · No SKIMA wallet linked"}</small></td>
                     <td>{money(numberValue(item, "principalAmount"), currency)}</td><td>{money(numberValue(item, "paidAmount"), currency)}</td><td>{money(numberValue(item, "outstandingAmount"), currency)}</td>
                     <td>{["paid", "cancelled"].includes(value(item, "status")) ? <StatusBadge tone="success">{value(item, "status")}</StatusBadge> :
                       <div className="skima-pc-payment-fields">
+                        {profileId ? <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || payVehicleToWallet.isPending}
+                          isLoading={payVehicleToWallet.isPending} onClick={() => payVehicleToWallet.mutate({ repaymentId: itemId, amount: Number(draft.amount) })}>Pay principal to SKIMA wallet</Button> : null}
                         <input aria-label="Principal payment amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
                         <input aria-label="Posted ledger transaction ID" value={draft.transactionId} onChange={(event) => updatePaymentDraft(itemId, "transactionId", event.currentTarget.value)} placeholder="Posted transaction UUID" />
                         <input aria-label="Transfer reference" value={draft.reference} onChange={(event) => updatePaymentDraft(itemId, "reference", event.currentTarget.value)} placeholder="Transfer reference" />
                         <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || draft.transactionId.trim().length < 20 || draft.reference.trim().length < 3 || recordVehiclePayment.isPending}
-                          isLoading={recordVehiclePayment.isPending} onClick={() => recordVehiclePayment.mutate({ id: itemId, amount: Number(draft.amount), transactionId: draft.transactionId.trim(), reference: draft.reference.trim() })}>Record</Button>
+                          isLoading={recordVehiclePayment.isPending} onClick={() => recordVehiclePayment.mutate({ id: itemId, amount: Number(draft.amount), transactionId: draft.transactionId.trim(), reference: draft.reference.trim() })}>Record external principal transfer</Button>
                       </div>}</td>
                   </tr>;
                 })}</tbody>
