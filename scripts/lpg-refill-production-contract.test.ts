@@ -1125,3 +1125,43 @@ Deno.test("Admin fulfillment availability saves and confirms the effective netwo
   assertIncludes(stationManagedGate, "= ''internal_only'' then");
   assertIncludes(stationManagedGate, "read_lpg_station_managed_eligible_stations_for_amount");
 });
+
+
+Deno.test("Refill customer address search preserves and displays street-level address details", async () => {
+  const [locations, addressSave, locationGateway, refillOrder, stationLocations] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/LocationsScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/locationSave.ts"),
+    read("apps/lpg-mobile/src/native/domains/maps/gateway.ts"),
+    read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationLocationScreens.tsx"),
+  ]);
+
+  assertIncludes(locations, 'input: query,');
+  assertIncludes(locations, "result.predictions");
+  assertIncludes(locations, "readString(prediction.description)");
+  assertIncludes(locations, "AddressSchema.safeParse(prediction.addressComponents)");
+  assertIncludes(locations, "function compactAddress(location: OperationalLocation)");
+  assertIncludes(locations, "location.address.street");
+  assertIncludes(locations, "Street / road");
+  assertIncludes(locations, "<StreetMapPreview");
+
+  assertIncludes(locationGateway, "street: clean(value?.street)");
+  assertIncludes(locationGateway, "route: clean(value?.route)");
+  assertIncludes(locationGateway, "houseNumber: clean(value?.houseNumber)");
+  assertIncludes(locationGateway, "lga: clean(value?.lga)");
+
+  assertIncludes(addressSave, "address: OperationalAddress");
+  assertIncludes(addressSave, "metadata: {");
+  assertIncludes(addressSave, "addressComponents: OperationalAddress");
+  assertIncludes(addressSave, "street: clean(address?.street)");
+
+  assertIncludes(refillOrder, "recordChoiceAddress");
+  assertIncludes(refillOrder, "formatted_address");
+  assertIncludes(refillOrder, "reviewLocationAddress");
+  assertIncludes(refillOrder, "PICKUP");
+  assertIncludes(refillOrder, "RETURN / DELIVERY");
+
+  assertIncludes(stationLocations, "location.address.street");
+  assertIncludes(stationLocations, 'firstString(item, ["street", "road", "street_name"])');
+  assertIncludes(stationLocations, "<StreetMapPreview");
+});
