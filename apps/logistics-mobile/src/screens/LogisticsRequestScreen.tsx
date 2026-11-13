@@ -50,6 +50,7 @@ export function LogisticsRequestScreen() {
   const { context } = useSession();
   const params = useLocalSearchParams<{ category?: string }>();
   const categoriesQuery = useLogisticsQuery(["categories"], "/runtime/logistics/categories");
+  const savedLocationsQuery = useLogisticsQuery(["customer-saved-locations"], "/lpg/locations");
   const createJob = useCreateLogisticsJob();
   const [jobIdempotencyKey, setJobIdempotencyKey] = useState(() => createClientIdempotencyKey("logistics.job.create"));
   const [step, setStep] = useState(1);
@@ -192,6 +193,40 @@ export function LogisticsRequestScreen() {
               </View>
               <SectionHeader title="Where should it go?" description="Choose an active pickup and destination from SKIMA’s location catalogue." />
               <Card padding="md">
+                {savedLocationsQuery.data?.length ? (
+                  <View style={{ gap: 9, marginBottom: 12 }}>
+                    <View style={{ gap: 2 }}>
+                      <Text style={{ color: palette.ink, fontSize: 13, fontWeight: "800" }}>Your saved addresses</Text>
+                      <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>Choose one to search for the precise street address, then confirm the matching result.</Text>
+                    </View>
+                    {savedLocationsQuery.data.filter((location) => asString(location, "status") === "active").slice(0, 6).map((location) => {
+                      const savedId = asString(location, "id") ?? "";
+                      const label = asString(location, "label") ?? "Saved address";
+                      const address = asString(location, "formatted_address") ?? "";
+                      const preferred = location.is_default === true;
+                      if (!savedId || !address) return null;
+                      return (
+                        <View key={savedId} style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 10, gap: 8, backgroundColor: palette.surfaceSubtle }}>
+                          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+                            <MapPin color={palette.brand} size={16} />
+                            <View style={{ flex: 1, gap: 2 }}>
+                              <Text style={{ color: palette.ink, fontSize: 12, fontWeight: "800" }}>{label}{preferred ? " · Preferred" : ""}</Text>
+                              <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>{address}</Text>
+                            </View>
+                          </View>
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                            <Pressable accessibilityRole="button" onPress={() => { setPickupSearch(address); setPickup(null); setFieldError(null); }}>
+                              <Text style={{ color: palette.brand, fontSize: 11, fontWeight: "800" }}>Use as pickup</Text>
+                            </Pressable>
+                            <Pressable accessibilityRole="button" onPress={() => { setDestinationSearch(address); setDestination(null); setFieldError(null); }}>
+                              <Text style={{ color: palette.brand, fontSize: 11, fontWeight: "800" }}>Use as destination</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
                 <GeographyPicker label="Pickup location" mode="address" value={pickupSearch} selected={pickup} onChange={(value) => { setPickupSearch(value); setPickup(null); }} onSelect={(place) => { setPickup(place); setPickupSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && !pickup ? fieldError : null} />
                 <View style={[styles.routeDivider, { borderColor: palette.border }]} />
                 <GeographyPicker label="Destination" mode="address" value={destinationSearch} selected={destination} onChange={(value) => { setDestinationSearch(value); setDestination(null); }} onSelect={(place) => { setDestination(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && pickup && !destination ? fieldError : null} />
