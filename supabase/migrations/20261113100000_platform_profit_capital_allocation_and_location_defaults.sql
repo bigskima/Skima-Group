@@ -474,7 +474,6 @@ begin
     'platform_profit_participants',
     'platform_vehicle_capital_agreements',
     'platform_profit_distributions',
-    'platform_profit_distribution_allocations',
     'platform_profit_participant_entitlements',
     'platform_vehicle_capital_repayments',
     'platform_profit_participant_payments',
@@ -495,6 +494,17 @@ begin
   end loop;
 end;
 $$;
+
+create policy platform_profit_distribution_allocations_finance_read
+on public.platform_profit_distribution_allocations
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
 
 create policy platform_profit_capital_audit_events_finance_read
 on public.platform_profit_capital_audit_events
