@@ -119,7 +119,7 @@ export function StoreShopScreen(){
     address:resolved.addressComponents??{},
     deliveryInstructions:addressInstructions.trim()||null,
     providerPlaceId:resolved.placeId??null,
-    providerSource:resolved.provider??"locationiq",
+    providerSource:"maps_adapter",
     captureSource:"MANUAL_ADDRESS",
     capturedAt:new Date().toISOString(),
     source:"skima.store.mobile",
