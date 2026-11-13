@@ -260,7 +260,8 @@ export function AdminProfitCapitalWorkspace() {
     && Number.isFinite(Number(principalAmount)) && Number(principalAmount) > 0;
   const canCreateDistribution = canManage && Boolean(activeTemplate)
     && Number.isFinite(Number(distributableProfit)) && Number(distributableProfit) > 0
-    && Boolean(distributionStart && distributionEnd && distributionEnd >= distributionStart);
+    && Boolean(distributionStart && distributionEnd && distributionEnd >= distributionStart)
+    && distributionNotes.trim().length >= 3;
 
   if (status === "loading" || workspaceQuery.isPending) {
     return <div className="skima-profit-capital"><LoadingState label="Loading profit and capital records…" /></div>;
@@ -365,7 +366,7 @@ export function AdminProfitCapitalWorkspace() {
           <Field label="Period starts" value={distributionStart} onChange={setDistributionStart} type="date" />
           <Field label="Period ends" value={distributionEnd} onChange={setDistributionEnd} type="date" min={distributionStart} />
           <Field label={"Approved distributable profit (" + currency + ")"} value={distributableProfit} onChange={setDistributableProfit} type="number" min="0.01" step="0.01" />
-          <Field label="Reconciliation note" value={distributionNotes} onChange={setDistributionNotes} placeholder="Accounting close / approval reference" />
+          <Field label="Reconciliation reference (required)" value={distributionNotes} onChange={setDistributionNotes} placeholder="Approved P&L close or finance report reference" required />
         </div>
         {activeTemplate ? <Notice tone="success">Active template: {value(activeTemplate, "displayName")} · {records(activeTemplate.lines).length} allocation categories</Notice> : <Notice tone="warning">No active template exists for {currency}. Save and activate one before calculating profit.</Notice>}
         <div className="skima-pc-actions"><Button disabled={!canCreateDistribution || createDistribution.isPending} isLoading={createDistribution.isPending} onClick={() => createDistribution.mutate()}>Calculate draft distribution</Button>{distributionDrafts.length ? <span className="skima-muted">{distributionDrafts.length} draft(s) await review.</span> : null}</div>
