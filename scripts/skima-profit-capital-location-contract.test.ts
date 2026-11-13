@@ -34,7 +34,7 @@ Deno.test("Profit allocation templates require all six configured buckets to tot
   assertStringIncludes(template, "row_count <> 6 or total_percent <> 100");
   assertStringIncludes(template, "Each allocation category can appear only once");
   assertStringIncludes(template, "target_idempotency_key text");
-  assertStringIncludes(template, "existing_template.idempotency_key");
+  assertStringIncludes(template, "where idempotency_key = target_idempotency_key");
   assertStringIncludes(migration, "create unique index if not exists platform_profit_allocation_one_active_per_currency");
 });
 
@@ -42,6 +42,18 @@ Deno.test("Profit participation is contractual and is bounded by each approved f
   assertStringIncludes(migration, "create table if not exists public.platform_profit_participants");
   assertStringIncludes(migration, "profit_share_percent numeric(9,6)");
   assertStringIncludes(migration, "Contractual profit-participation beneficiaries. This register does not issue legal company shares or confer voting rights.");
+  const participant = migration.slice(
+    migration.indexOf("create or replace function public.save_platform_profit_participant("),
+    migration.indexOf("create or replace function public.save_platform_vehicle_capital_agreement("),
+  );
+  assertStringIncludes(participant, "existing_participant.id is not null");
+  assertStringIncludes(participant, "where idempotency_key = target_idempotency_key");
+  const agreement = migration.slice(
+    migration.indexOf("create or replace function public.save_platform_vehicle_capital_agreement("),
+    migration.indexOf("create or replace function public.create_platform_profit_distribution("),
+  );
+  assertStringIncludes(agreement, "existing_agreement.id is not null");
+  assertStringIncludes(agreement, "where idempotency_key = target_idempotency_key");
   const distribution = migration.slice(
     migration.indexOf("create or replace function public.create_platform_profit_distribution("),
     migration.indexOf("create or replace function public.approve_platform_profit_distribution("),
