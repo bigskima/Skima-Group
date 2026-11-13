@@ -117,6 +117,7 @@ export function AdminProfitCapitalWorkspace() {
   const [fundingCategory, setFundingCategory] = useState<CategoryKey>("skima_savings");
   const [participantNotes, setParticipantNotes] = useState("");
   const [participantProfileId, setParticipantProfileId] = useState("");
+  const [profileLinkDrafts, setProfileLinkDrafts] = useState<Record<string, string>>({});
   const [closeStart, setCloseStart] = useState(todayLocal());
   const [closeEnd, setCloseEnd] = useState(todayLocal());
   const [operatingExpenses, setOperatingExpenses] = useState("0");
@@ -403,6 +404,22 @@ export function AdminProfitCapitalWorkspace() {
     },
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Participant save failed.", tone: "danger" }),
   });
+  const linkParticipantProfile = useMutation({
+    mutationFn: (input: { participantId: string; profileId: string }) => runRpc("link_platform_profit_participant_profile", {
+      target_participant_id: input.participantId,
+      target_profile_id: input.profileId,
+    }),
+    onSuccess: async (_id, input) => {
+      setProfileLinkDrafts((current) => {
+        const next = { ...current };
+        delete next[input.participantId];
+        return next;
+      });
+      setNotice({ text: "Profit participant linked to the SKIMA profile. Wallet payouts can now be sent to that customer's account.", tone: "success" });
+      await refresh();
+    },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "SKIMA profile linking failed.", tone: "danger" }),
+  });
   const saveAgreement = useMutation({
     mutationFn: () => {
       const payload = {
@@ -465,26 +482,7 @@ export function AdminProfitCapitalWorkspace() {
     onSuccess: async () => { setNotice({ text: "Distribution approved. Payables can now be settled against posted ledger transfers.", tone: "success" }); await refresh(); },
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Distribution approval failed.", tone: "danger" }),
   });
-  const recordParticipantPayment = useMutation({
-    mutationFn: (input: { id: string; amount: number; transactionId: string; reference: string }) => runRpc("record_platform_profit_participant_payment", {
-      target_entitlement_id: input.id, target_amount: input.amount, target_financial_transaction_id: input.transactionId,
-      target_external_reference: input.reference,
-      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.participant-payment", input.id + ":" + input.transactionId),
-    }),
-    onSuccess: async () => { setNotice({ text: "Profit participation payment recorded against the posted ledger transaction.", tone: "success" }); await refresh(); },
-    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Participant payment could not be recorded.", tone: "danger" }),
-  });
-  const recordVehiclePayment = useMutation({
-    mutationFn: (input: { id: string; amount: number; transactionId: string; reference: string }) => runRpc("record_platform_vehicle_capital_repayment", {
-      target_repayment_id: input.id, target_amount: input.amount, target_financial_transaction_id: input.transactionId,
-      target_external_reference: input.reference,
-      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.vehicle-payment", input.id + ":" + input.transactionId),
-    }),
-    onSuccess: async () => { setNotice({ text: "Vehicle principal repayment recorded. Outstanding principal has been reduced without interest.", tone: "success" }); await refresh(); },
-    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Vehicle repayment could not be recorded.", tone: "danger" }),
-  });
-
-  const updatePaymentDraft = (id: string, field: "amount" | "transactionId" | "reference", next: string) => {
+  const updatePaymentDraft = (id: string, field: "amount", next: string) => {
     setPaymentDrafts((current) => ({
       ...current,
       [id]: { amount: "", transactionId: "", reference: "", ...current[id], [field]: next },
@@ -663,11 +661,28 @@ export function AdminProfitCapitalWorkspace() {
         <div className="skima-pc-actions"><Button disabled={!canSaveParticipant || saveParticipant.isPending} isLoading={saveParticipant.isPending} onClick={() => saveParticipant.mutate()}>Add participant</Button></div>
         <div className="skima-pc-table-wrap"><table className="skima-pc-table">
           <thead><tr><th>Beneficiary</th><th>Arrangement</th><th>Profit rate</th><th>Funding category</th><th>Status</th></tr></thead>
-          <tbody>{participants.length === 0 ? <tr><td colSpan={5}>No profit participants registered.</td></tr> : participants.map((item) => <tr key={value(item, "id")}>
-            <td><strong>{value(item, "displayName")}</strong><small>{value(item, "contactEmail") || value(item, "contactPhone")}</small></td>
-            <td>{value(item, "participantType").replace(/_/g, " ")}</td><td>{numberValue(item, "profitSharePercent").toFixed(4)}%</td>
-            <td>{categoryLabel(value(item, "fundingCategory"))}</td><td><StatusBadge tone={value(item, "status") === "active" ? "success" : "neutral"}>{value(item, "status")}</StatusBadge></td>
-          </tr>)}</tbody>
+          <tbody>{participants.length === 0 ? <tr><td colSpan={5}>No profit participants registered.</td></tr> : participants.map((item) => {
+            const participantId = value(item, "id");
+            const linked = executionParticipants.find((entry) => value(entry, "id") === participantId);
+            const profileId = value(linked, "profileId");
+            const profileDraft = profileLinkDrafts[participantId] ?? "";
+            return <tr key={participantId}>
+              <td>
+                <strong>{value(item, "displayName")}</strong>
+                <small>{value(item, "contactEmail") || value(item, "contactPhone")}</small>
+                {profileId ? <small>SKIMA profile linked</small> : (
+                  <div className="skima-pc-payment-fields">
+                    <input aria-label={"SKIMA profile UUID for " + value(item, "displayName")} value={profileDraft} onChange={(event) => setProfileLinkDrafts((current) => ({ ...current, [participantId]: event.currentTarget.value }))} placeholder="SKIMA profile UUID" />
+                    <Button size="sm" disabled={!canManage || profileDraft.trim().length < 20 || linkParticipantProfile.isPending} isLoading={linkParticipantProfile.isPending} onClick={() => linkParticipantProfile.mutate({ participantId, profileId: profileDraft.trim() })}>Link profile</Button>
+                  </div>
+                )}
+              </td>
+              <td>{value(item, "participantType").replace(/_/g, " ")}</td>
+              <td>{numberValue(item, "profitSharePercent").toFixed(4)}%</td>
+              <td>{categoryLabel(value(item, "fundingCategory"))}</td>
+              <td><StatusBadge tone={value(item, "status") === "active" ? "success" : "neutral"}>{value(item, "status")}</StatusBadge></td>
+            </tr>;
+          })}
         </table></div>
       </Panel>
 
@@ -744,18 +759,17 @@ export function AdminProfitCapitalWorkspace() {
                   const draft = paymentDrafts[itemId] ?? { amount: value(item, "outstandingAmount"), transactionId: "", reference: "" };
                   const linkedParticipant = executionParticipants.find((participant) => value(participant, "id") === value(item, "participantId"));
                   const profileId = value(linkedParticipant, "profileId");
-                  return <tr key={itemId}><td><strong>{value(item, "participantName")}</strong><small>{categoryLabel(value(item, "fundingCategory"))}{profileId ? " · SKIMA wallet linked" : " · No SKIMA wallet linked"}</small></td>
-                    <td>{numberValue(item, "sharePercent").toFixed(4)}%</td><td>{money(numberValue(item, "entitlementAmount"), currency)}</td>
-                    <td>{money(numberValue(item, "paidAmount"), currency)}</td><td>{money(numberValue(item, "outstandingAmount"), currency)}</td>
+                  return <tr key={itemId}>
+                    <td><strong>{value(item, "participantName")}</strong><small>{categoryLabel(value(item, "fundingCategory"))}{profileId ? " · SKIMA wallet linked" : " · Link a SKIMA profile to pay"}</small></td>
+                    <td>{numberValue(item, "sharePercent").toFixed(4)}%</td>
+                    <td>{money(numberValue(item, "entitlementAmount"), currency)}</td>
+                    <td>{money(numberValue(item, "paidAmount"), currency)}</td>
+                    <td>{money(numberValue(item, "outstandingAmount"), currency)}</td>
                     <td>{["paid", "cancelled"].includes(value(item, "status")) ? <StatusBadge tone="success">{value(item, "status")}</StatusBadge> :
                       <div className="skima-pc-payment-fields">
-                        {profileId ? <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || payParticipantToWallet.isPending}
-                          isLoading={payParticipantToWallet.isPending} onClick={() => payParticipantToWallet.mutate({ entitlementId: itemId, amount: Number(draft.amount) })}>Pay to SKIMA wallet</Button> : null}
-                        <input aria-label="External payment amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
-                        <input aria-label="Posted ledger transaction ID" value={draft.transactionId} onChange={(event) => updatePaymentDraft(itemId, "transactionId", event.currentTarget.value)} placeholder="Posted transaction UUID" />
-                        <input aria-label="Transfer reference" value={draft.reference} onChange={(event) => updatePaymentDraft(itemId, "reference", event.currentTarget.value)} placeholder="Transfer reference" />
-                        <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || draft.transactionId.trim().length < 20 || draft.reference.trim().length < 3 || recordParticipantPayment.isPending}
-                          isLoading={recordParticipantPayment.isPending} onClick={() => recordParticipantPayment.mutate({ id: itemId, amount: Number(draft.amount), transactionId: draft.transactionId.trim(), reference: draft.reference.trim() })}>Record external transfer</Button>
+                        <input aria-label="Profit payout amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
+                        <Button size="sm" disabled={!canManage || !approved || !profileId || !(Number(draft.amount) > 0) || payParticipantToWallet.isPending}
+                          isLoading={payParticipantToWallet.isPending} onClick={() => payParticipantToWallet.mutate({ entitlementId: itemId, amount: Number(draft.amount) })}>Pay to SKIMA wallet</Button>
                       </div>}</td>
                   </tr>;
                 })}</tbody>
@@ -769,17 +783,16 @@ export function AdminProfitCapitalWorkspace() {
                   const participantId = value(agreement, "participantId");
                   const linkedParticipant = executionParticipants.find((participant) => value(participant, "id") === participantId);
                   const profileId = value(linkedParticipant, "profileId");
-                  return <tr key={itemId}><td><strong>{value(item, "participantName")}</strong><small>{value(item, "vehicleDescription")}{profileId ? " · SKIMA wallet linked" : " · No SKIMA wallet linked"}</small></td>
-                    <td>{money(numberValue(item, "principalAmount"), currency)}</td><td>{money(numberValue(item, "paidAmount"), currency)}</td><td>{money(numberValue(item, "outstandingAmount"), currency)}</td>
+                  return <tr key={itemId}>
+                    <td><strong>{value(item, "participantName")}</strong><small>{value(item, "vehicleDescription")}{profileId ? " · SKIMA wallet linked" : " · Link a SKIMA profile to pay"}</small></td>
+                    <td>{money(numberValue(item, "principalAmount"), currency)}</td>
+                    <td>{money(numberValue(item, "paidAmount"), currency)}</td>
+                    <td>{money(numberValue(item, "outstandingAmount"), currency)}</td>
                     <td>{["paid", "cancelled"].includes(value(item, "status")) ? <StatusBadge tone="success">{value(item, "status")}</StatusBadge> :
                       <div className="skima-pc-payment-fields">
-                        {profileId ? <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || payVehicleToWallet.isPending}
-                          isLoading={payVehicleToWallet.isPending} onClick={() => payVehicleToWallet.mutate({ repaymentId: itemId, amount: Number(draft.amount) })}>Pay principal to SKIMA wallet</Button> : null}
-                        <input aria-label="Principal payment amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
-                        <input aria-label="Posted ledger transaction ID" value={draft.transactionId} onChange={(event) => updatePaymentDraft(itemId, "transactionId", event.currentTarget.value)} placeholder="Posted transaction UUID" />
-                        <input aria-label="Transfer reference" value={draft.reference} onChange={(event) => updatePaymentDraft(itemId, "reference", event.currentTarget.value)} placeholder="Transfer reference" />
-                        <Button size="sm" disabled={!canManage || !approved || !(Number(draft.amount) > 0) || draft.transactionId.trim().length < 20 || draft.reference.trim().length < 3 || recordVehiclePayment.isPending}
-                          isLoading={recordVehiclePayment.isPending} onClick={() => recordVehiclePayment.mutate({ id: itemId, amount: Number(draft.amount), transactionId: draft.transactionId.trim(), reference: draft.reference.trim() })}>Record external principal transfer</Button>
+                        <input aria-label="Vehicle principal payout amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
+                        <Button size="sm" disabled={!canManage || !approved || !profileId || !(Number(draft.amount) > 0) || payVehicleToWallet.isPending}
+                          isLoading={payVehicleToWallet.isPending} onClick={() => payVehicleToWallet.mutate({ repaymentId: itemId, amount: Number(draft.amount) })}>Pay principal to SKIMA wallet</Button>
                       </div>}</td>
                   </tr>;
                 })}</tbody>
