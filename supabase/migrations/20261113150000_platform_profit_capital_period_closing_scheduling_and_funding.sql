@@ -688,7 +688,6 @@ begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not (
        public.is_platform_super_admin()
-       or public.has_permission('platform.profit_capital.manage', null)
        or public.has_permission('platform.financial.manage', null)
      ) then
     raise exception using errcode = '42501', message = 'Finance approval is required to fund a profit distribution';
@@ -952,7 +951,6 @@ begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not (
        public.is_platform_super_admin()
-       or public.has_permission('platform.profit_capital.manage', null)
        or public.has_permission('platform.financial.manage', null)
      ) then
     raise exception using errcode = '42501', message = 'Finance permission is required to pay profit participation';
@@ -1072,7 +1070,6 @@ begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not (
        public.is_platform_super_admin()
-       or public.has_permission('platform.profit_capital.manage', null)
        or public.has_permission('platform.financial.manage', null)
      ) then
     raise exception using errcode = '42501', message = 'Finance permission is required to repay vehicle capital';
