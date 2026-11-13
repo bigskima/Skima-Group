@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, ShoppingCart, X } from "lucide-react-native";
@@ -49,6 +49,7 @@ export function StoreShopScreen(){
  const [search,setSearch]=useState("");const [category,setCategory]=useState("all");const [selectedProduct,setSelectedProduct]=useState<Product|null>(null);const [fulfillment,setFulfillment]=useState<"delivery"|"pickup">("delivery");const [checkoutStep,setCheckoutStep]=useState<"browse"|"basket"|"fulfillment"|"review">("browse");
  const [locationId,setLocationId]=useState("");const [note,setNote]=useState("");const [notice,setNotice]=useState("");const [checkoutKey,setCheckoutKey]=useState(()=>makeIdempotencyKey("store-checkout"));
  const [addressEditorOpen,setAddressEditorOpen]=useState(false);const [addressSearch,setAddressSearch]=useState("");const [debouncedAddressSearch,setDebouncedAddressSearch]=useState("");const [addressLabel,setAddressLabel]=useState("Home");const [addressInstructions,setAddressInstructions]=useState("");const [addressNotice,setAddressNotice]=useState("");const [addressResolving,setAddressResolving]=useState(false);const [addressSaving,setAddressSaving]=useState(false);const [makeAddressPreferred,setMakeAddressPreferred]=useState(true);
+ const addressSaveKey=useRef<string|null>(null);
  useEffect(()=>{const timer=setTimeout(()=>setDebouncedAddressSearch(addressSearch.trim()),350);return()=>clearTimeout(timer);},[addressSearch]);
  const addressAutocomplete=useQuery({
   queryKey:["skima-store","address-autocomplete",debouncedAddressSearch.toLowerCase()],
@@ -111,6 +112,8 @@ export function StoreShopScreen(){
    const formattedAddress=resolved.formattedAddress?.trim()||query;
    if(!Number.isFinite(resolved.location.latitude)||!Number.isFinite(resolved.location.longitude))throw new Error("The map service did not return a precise position. Add a street, area or landmark and try again.");
    setAddressResolving(false);setAddressSaving(true);
+   const saveIdempotencyKey=addressSaveKey.current??makeIdempotencyKey("store-location");
+   addressSaveKey.current=saveIdempotencyKey;
    const saved=await session.api.post("/lpg/locations",{
     label:addressLabel.trim()||"Saved address",
     formattedAddress,
@@ -124,7 +127,7 @@ export function StoreShopScreen(){
     capturedAt:new Date().toISOString(),
     source:"skima.store.mobile",
     metadata:{sourceApp:"store",addressEntryMode:"manual_search"},
-    idempotencyKey:makeIdempotencyKey("store-location"),
+    idempotencyKey:saveIdempotencyKey,
    },OrderSchema);
    const refreshedLocations=await locations.refetch();
    const savedRecord=record(saved);
@@ -144,6 +147,7 @@ export function StoreShopScreen(){
    }
    setCheckoutKey(makeIdempotencyKey("store-checkout"));
    setAddressNotice("Address saved and selected for this Store delivery.");
+   addressSaveKey.current=null;
    setAddressEditorOpen(false);setAddressSearch("");setDebouncedAddressSearch("");setAddressInstructions("");
   }catch(error){
    setAddressNotice(error instanceof Error?error.message:"We couldn't resolve or save that address. Try a more specific street or landmark.");
