@@ -1250,6 +1250,7 @@ declare
   transaction_record public.financial_transactions%rowtype;
   payment_id uuid;
   claimed_transaction_id uuid;
+  existing_payment public.platform_profit_participant_payments%rowtype;
 begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not (public.is_platform_super_admin() or public.has_permission('platform.profit_capital.manage', null)
@@ -1259,6 +1260,19 @@ begin
   if target_amount is null or target_amount <= 0 or nullif(btrim(target_external_reference), '') is null
      or nullif(btrim(target_idempotency_key), '') is null then
     raise exception using errcode = '22023', message = 'A positive payment amount, transfer reference and idempotency key are required';
+  end if;
+
+  select * into existing_payment
+  from public.platform_profit_participant_payments
+  where idempotency_key = target_idempotency_key;
+  if existing_payment.id is not null then
+    if existing_payment.entitlement_id <> target_entitlement_id
+       or existing_payment.amount <> target_amount
+       or existing_payment.financial_transaction_id <> target_financial_transaction_id
+       or existing_payment.external_reference <> btrim(target_external_reference) then
+      raise exception using errcode = '23505', message = 'Payment idempotency key was already used with different details';
+    end if;
+    return existing_payment.id;
   end if;
 
   select * into entitlement from public.platform_profit_participant_entitlements
@@ -1361,6 +1375,7 @@ declare
   payment_id uuid;
   new_repaid numeric(28,8);
   claimed_transaction_id uuid;
+  existing_payment public.platform_vehicle_capital_repayment_payments%rowtype;
 begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not (public.is_platform_super_admin() or public.has_permission('platform.profit_capital.manage', null)
@@ -1370,6 +1385,19 @@ begin
   if target_amount is null or target_amount <= 0 or nullif(btrim(target_external_reference), '') is null
      or nullif(btrim(target_idempotency_key), '') is null then
     raise exception using errcode = '22023', message = 'A positive principal payment, transfer reference and idempotency key are required';
+  end if;
+
+  select * into existing_payment
+  from public.platform_vehicle_capital_repayment_payments
+  where idempotency_key = target_idempotency_key;
+  if existing_payment.id is not null then
+    if existing_payment.repayment_id <> target_repayment_id
+       or existing_payment.amount <> target_amount
+       or existing_payment.financial_transaction_id <> target_financial_transaction_id
+       or existing_payment.external_reference <> btrim(target_external_reference) then
+      raise exception using errcode = '23505', message = 'Principal payment idempotency key was already used with different details';
+    end if;
+    return existing_payment.id;
   end if;
 
   select * into repayment from public.platform_vehicle_capital_repayments
