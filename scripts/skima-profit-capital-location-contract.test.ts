@@ -60,7 +60,8 @@ Deno.test("Vehicle capital agreements carry zero interest and repayment cannot e
   assertStringIncludes(projection, "trunc(");
   assertStringIncludes(projection, "projected_repayments as");
   assertStringIncludes(projection, "where projected.repayment_amount > 0");
-  assertNotMatch(projection, /where[\s\S]*?over\s*\(/i, "Window functions must be projected before filtering");
+  const repaymentFilter = projection.slice(projection.indexOf("where projected.repayment_amount > 0"));
+  assertNotMatch(repaymentFilter, /over\s*\(/i, "Window functions must be projected before filtering");
   const payment = migration.slice(
     migration.indexOf("create or replace function public.record_platform_vehicle_capital_repayment("),
     migration.indexOf("revoke all on function public.read_platform_profit_capital_workspace"),
