@@ -488,7 +488,7 @@ begin
     );
   end loop;
 end;
-$;
+$$;
 
 create policy platform_profit_capital_audit_events_finance_read
 on public.platform_profit_capital_audit_events
