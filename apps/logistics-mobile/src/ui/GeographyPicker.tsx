@@ -8,6 +8,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { AppField } from "./AppField";
+import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview";
 
 type Place = Record<string, unknown>;
 type PickerMode = "address" | "service_area";
@@ -131,7 +132,10 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
   const address = objectValue(prediction.addressComponents ?? prediction.address_components) ?? {};
   const state = asString(address, "state", "region");
   const locality = asString(address, "village", "town", "subLocality", "locality", "city", "district");
-  const lga = asString(address, "lga", "city_district");
+  const lga = asString(address, "lga", "state_district", "county", "city_district", "district");
+  const houseNumber = asString(address, "houseNumber", "house_number");
+  const street = asString(address, "street", "route", "road");
+  const streetLine = [houseNumber, street].filter(Boolean).join(" ");
   const country = asString(address, "country") ?? "Nigeria";
   const context = [locality, lga, state, country].filter(Boolean).join(" · ");
   return {
@@ -139,6 +143,9 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
     canonical_name: description,
     display_name: description,
     formatted_address: asString(prediction, "formattedAddress", "formatted_address") ?? description,
+    street_line: streetLine || street || null,
+    house_number: houseNumber,
+    street_name: street,
     parent_name: context || asString(geography, "canonical_name") || "Nigeria",
     country_code: "NG",
     address_components: address,
@@ -210,23 +217,48 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     staleTime: 60_000,
     retry: 1,
   });
+  // A street normally has no row in the canonical geography table. Resolve
+  // its LGA/city/state parent separately; never replace the street label with
+  // that broader parent or discard the provider's full address prediction.
+  const addressContextSearch = useMemo(() => {
+    const first = autocomplete.data?.predictions?.[0];
+    const address = objectValue(first?.addressComponents ?? first?.address_components) ?? {};
+    return asString(address, "lga", "state_district", "county", "city_district", "district", "municipality", "city", "town", "village", "state", "region") ?? "";
+  }, [autocomplete.data]);
+  const addressContextQuery = useQuery<Place[]>({
+    queryKey: ["skima-logistics", "address-parent-geography", addressContextSearch.toLowerCase()],
+    enabled: status === "authenticated" && mode === "address" && !selected && addressContextSearch.length >= 2,
+    queryFn: ({ signal }) => api.get(
+      "/runtime/logistics/geographies?countryCode=NG&limit=50&search=" + encodeURIComponent(addressContextSearch),
+      RecordArraySchema,
+      { signal },
+    ),
+    staleTime: 5 * 60_000,
+  });
+  const availableGeographies = useMemo(() => {
+    const byId = new Map<string, Place>();
+    for (const place of [...(query.data ?? []), ...(addressContextQuery.data ?? [])]) {
+      const id = asString(place, "id");
+      if (id) byId.set(id, place);
+    }
+    return [...byId.values()];
+  }, [query.data, addressContextQuery.data]);
 
   const addressPredictions = useMemo(() => {
-    const available = query.data ?? [];
     return (autocomplete.data?.predictions ?? [])
-      .map((item) => toAddressPlace(item, available))
+      .map((item) => toAddressPlace(item, availableGeographies))
       .filter((item): item is Place => item !== null);
-  }, [autocomplete.data, query.data]);
+  }, [autocomplete.data, availableGeographies]);
   const places = useMemo(() => mode === "service_area"
     ? (query.data ?? [])
     : uniquePlaces(query.data ?? [], addressPredictions), [mode, query.data, addressPredictions]);
   const selectedName = selected ? asString(selected, "canonical_name", "display_name") : null;
   const loading = query.isPending ||
-    (mode === "address" && debouncedSearch.length >= 3 && autocomplete.isPending);
-  const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error));
+    (mode === "address" && debouncedSearch.length >= 3 && (autocomplete.isPending || addressContextQuery.isPending));
+  const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error) || Boolean(addressContextQuery.error));
   const manualBase = useMemo(() => {
     const queryText = normalized(search);
-    const candidates = query.data ?? [];
+    const candidates = availableGeographies;
     const specificMatches = candidates.filter((item) => {
       const name = normalized(asString(item, "canonical_name"));
       const aliases = Array.isArray(item.aliases)
@@ -236,7 +268,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
         aliases.some((alias) => alias.length >= 3 && queryText.includes(alias));
     });
     return resolveMostSpecificGeography(specificMatches);
-  }, [query.data, search]);
+  }, [availableGeographies, search]);
   const [manualResolving, setManualResolving] = useState(false);
   const [manualResolutionMessage, setManualResolutionMessage] = useState<string | null>(null);
 
@@ -289,6 +321,62 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     }
   };
 
+  const updateFromMapPin = async (point: { latitude: number; longitude: number }) => {
+    if (!selected || manualResolving) return;
+    setManualResolving(true);
+    setManualResolutionMessage(null);
+    try {
+      const resolved = await api.post(
+        "/lpg/maps/reverse-geocode",
+        { location: point },
+        GeocodeSchema,
+      );
+      const address = resolved.addressComponents ?? {};
+      const parentSearch = asString(address, "lga", "state_district", "county", "city_district", "district", "municipality", "city", "town", "village", "state", "region");
+      if (!parentSearch) throw new Error("The selected pin could not be linked to a Nigerian service area.");
+      const parentResults = await api.get(
+        "/runtime/logistics/geographies?countryCode=NG&limit=50&search=" + encodeURIComponent(parentSearch),
+        RecordArraySchema,
+      );
+      const geography = nearestGeography({
+        description: resolved.formattedAddress ?? parentSearch,
+        addressComponents: address,
+        location: resolved.location,
+      }, [...availableGeographies, ...parentResults]);
+      const nextId = asString(geography, "id");
+      if (!nextId) throw new Error("Choose a map pin inside a recognized service area. The previous address has been kept.");
+      const display = resolved.formattedAddress ?? asString(geography, "canonical_name") ?? parentSearch;
+      onSelect({
+        ...selected,
+        id: nextId,
+        canonical_name: display,
+        display_name: display,
+        formatted_address: display,
+        address_components: address,
+        location: resolved.location,
+        place_id: resolved.placeId ?? null,
+        placeId: resolved.placeId ?? null,
+        location_source: "locationiq",
+        geography_source: "canonical_parent",
+        geography_name: asString(geography, "canonical_name"),
+        geography_hierarchy_path: asString(geography, "hierarchy_path"),
+        parent_name: [asString(address, "city", "town", "village"), asString(address, "lga", "county", "state_district"), asString(address, "state", "region"), "Nigeria"].filter(Boolean).join(" · "),
+        country_code: "NG",
+      });
+    } catch (cause) {
+      setManualResolutionMessage(cause instanceof Error ? cause.message : "The map pin could not be resolved. Your selected address remains unchanged.");
+    } finally {
+      setManualResolving(false);
+    }
+  };
+
+  const selectedLocation = objectValue(selected?.location);
+  const selectedCoordinate = selectedLocation &&
+      typeof selectedLocation.latitude === "number" &&
+      typeof selectedLocation.longitude === "number"
+    ? { latitude: selectedLocation.latitude, longitude: selectedLocation.longitude }
+    : null;
+
   return (
     <View style={styles.group}>
       <AppField
@@ -306,14 +394,25 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
         <View style={[styles.selected, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
           <View style={[styles.selectedIcon, { backgroundColor: palette.surface }]}><Check color={palette.success} size={15} /></View>
           <View style={styles.selectedCopy}>
-            <Text style={[styles.selectedTitle, { color: palette.ink }]} numberOfLines={2}>{selectedName}</Text>
+            <Text style={[styles.selectedTitle, { color: palette.ink }]} numberOfLines={3}>{selectedName}</Text>
             <Text style={[styles.selectedMeta, { color: palette.muted }]}>
               {asString(selected, "parent_name") ?? asString(selected, "country_code") ?? "NG"}
-              {asString(selected, "location_source") === "manual" ? " · Manual address" : asString(selected, "location_source") === "locationiq" ? " · Address result" : " · Service area"}
+              {asString(selected, "location_source") === "manual" ? " · Manual address" : asString(selected, "location_source") === "locationiq" ? " · Street address" : " · Service area"}
             </Text>
+            {asString(selected, "street_line") ? <Text style={[styles.selectedStreet, { color: palette.ink }]}>{asString(selected, "street_line")}</Text> : null}
+            {manualResolutionMessage ? <Text style={[styles.hint, { color: palette.warning }]}>{manualResolutionMessage}</Text> : null}
           </View>
           <Pressable accessibilityRole="button" onPress={() => onChange("")}><Text style={[styles.change, { color: palette.brand }]}>Change</Text></Pressable>
         </View>
+        {mode === "address" && selectedCoordinate ? (
+          <StreetMapPreview
+            title={label + " · street location"}
+            coordinate={selectedCoordinate}
+            onSelectPoint={updateFromMapPin}
+            interactive
+            height={190}
+          />
+        ) : null}
       ) : search.length < 2 ? (
         <View style={styles.hintRow}>
           <Search color={palette.muted} size={13} />
@@ -388,6 +487,7 @@ const styles = StyleSheet.create({
   selectedCopy: { flex: 1, gap: 2 },
   selectedTitle: { ...typography.bodyStrong, fontSize: 12 },
   selectedMeta: { ...typography.caption, fontSize: 9 },
+  selectedStreet: { ...typography.caption, fontSize: 10, fontWeight: "800" },
   change: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   hintRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 3 },
   hint: { ...typography.caption, fontSize: 10, lineHeight: 15 },
