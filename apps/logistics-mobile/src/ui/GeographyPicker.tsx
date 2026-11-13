@@ -135,7 +135,7 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
   const location = objectValue(prediction.location);
   const geography = nearestGeography(prediction, geographies);
   const id = asString(geography, "id");
-  if (!description || !id) return null;
+  if (!description) return null;
   const address = objectValue(prediction.addressComponents ?? prediction.address_components) ?? {};
   const state = asString(address, "state", "region");
   const locality = asString(address, "village", "town", "subLocality", "locality", "city", "district");
@@ -153,7 +153,7 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
   const country = asString(address, "country") ?? "Nigeria";
   const context = [locality, lga, state, country].filter(Boolean).join(" · ");
   return {
-    id,
+    id: id ?? "",
     canonical_name: description,
     display_name: description,
     formatted_address: asString(prediction, "formattedAddress", "formatted_address") ?? description,
@@ -166,7 +166,7 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
     location: location,
     place_id: asString(prediction, "placeId", "place_id"),
     location_source: "locationiq",
-    geography_source: "canonical_parent",
+    geography_source: id ? "canonical_parent" : "pending_parent",
     geography_name: asString(geography, "geography_name", "canonical_name"),
     geography_hierarchy_path: asString(geography, "hierarchy_path"),
   };
