@@ -268,6 +268,12 @@ Deno.test("Street search retains full provider address while resolving an LGA pa
   assertStringIncludes(logisticsPicker, "street_line: streetLine || street || null");
   assertStringIncludes(logisticsPicker, 'asString(address, "route", "road", "street")');
   assertStringIncludes(logisticsPicker, "normalizedStreet.startsWith(normalizedHouseNumber + \" \")");
+  assertStringIncludes(logisticsPicker, "if (!description) return null;");
+  assertStringIncludes(logisticsPicker, 'id: id ?? ""');
+  assertStringIncludes(logisticsPicker, "pendingStreet");
+  assertStringIncludes(logisticsPicker, "Street address found — confirm its SKIMA service area");
+  assertStringIncludes(logisticsPicker, "street-parent-search");
+  assertStringIncludes(logisticsPicker, "chooseStreetParent");
   assertStringIncludes(logisticsPicker, "location: location");
   assertStringIncludes(logisticsPicker, "coordinates: place.location");
 });
