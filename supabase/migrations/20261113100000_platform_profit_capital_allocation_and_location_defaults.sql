@@ -432,6 +432,13 @@ $$;
 revoke all on table public.platform_profit_capital_transaction_claims
   from public, anon, authenticated;
 
+-- The unique transaction-claim ledger is internal-only. Declare an explicit
+-- deny-all authenticated policy to satisfy the platform RLS foundation rule.
+create policy platform_profit_capital_transaction_claims_private
+on public.platform_profit_capital_transaction_claims
+for select to authenticated
+using (false);
+
 create policy platform_profit_allocation_templates_finance_read
 on public.platform_profit_allocation_templates
 for select to authenticated
