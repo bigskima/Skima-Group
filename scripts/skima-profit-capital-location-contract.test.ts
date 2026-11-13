@@ -111,8 +111,9 @@ Deno.test("Profit and capital database operations are permission-gated and read 
   assertStringIncludes(adminWorkspace, "save_platform_profit_participant");
   assertStringIncludes(adminWorkspace, "save_platform_vehicle_capital_agreement");
   assertStringIncludes(adminWorkspace, "create_platform_profit_distribution");
-  assertStringIncludes(adminWorkspace, "record_platform_profit_participant_payment");
-  assertStringIncludes(adminWorkspace, "record_platform_vehicle_capital_repayment");
+  assertStringIncludes(adminWorkspace, "pay_platform_profit_participant_entitlement_to_wallet");
+  assertStringIncludes(adminWorkspace, "pay_platform_vehicle_capital_repayment_to_wallet");
+  assertStringIncludes(adminWorkspace, "link_platform_profit_participant_profile");
   assertStringIncludes(moneyRouter, 'props.route === "/money/profit-capital"');
   assertStringIncludes(moneyNavigation, 'href: "/money/profit-capital"');
 });
@@ -222,6 +223,14 @@ Deno.test("Funding and payouts move value using balanced posted ledger transfers
   assertStringIncludes(vehiclePay, "distribution.execution_status <> 'funded'");
   assertStringIncludes(vehiclePay, "'interestRatePercent', 0");
   assertStringIncludes(vehiclePay, "public.record_platform_vehicle_capital_repayment(");
+  const payoutGuard = executionMigration.slice(
+    executionMigration.indexOf("create or replace function public.require_funded_platform_profit_capital_payment()"),
+    executionMigration.indexOf("drop trigger if exists platform_profit_participant_payment_requires_funding"),
+  );
+  assertStringIncludes(payoutGuard, "transaction_record.source <> 'platform.profit_capital.payout'");
+  assertStringIncludes(payoutGuard, "transaction_record.subject_id <> expected_subject_id");
+  assertStringIncludes(payoutGuard, "debit_entry.wallet_id = source_category_wallet_id");
+  assertStringIncludes(payoutGuard, "beneficiary_wallet.owner_entity_id = target_profile_id");
   assertStringIncludes(executionMigration, "platform_profit_category_accounts");
 });
 
