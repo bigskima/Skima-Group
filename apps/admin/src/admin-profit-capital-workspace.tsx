@@ -134,6 +134,9 @@ export function AdminProfitCapitalWorkspace() {
   const [scheduleEnd, setScheduleEnd] = useState(todayLocal());
   const [scheduleNextRunAt, setScheduleNextRunAt] = useState(todayLocal() + "T09:00");
   const paymentAttempts = useRef<Record<string, { fingerprint: string; key: string }>>({});
+  const closeAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const scheduleAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const fundingAttempts = useRef<Record<string, { fingerprint: string; key: string }>>({});
   const [agreementParticipant, setAgreementParticipant] = useState("");
   const [vehicleDescription, setVehicleDescription] = useState("");
   const [registrationNumber, setRegistrationNumber] = useState("");
@@ -226,21 +229,28 @@ export function AdminProfitCapitalWorkspace() {
   });
 
   const savePeriodClose = useMutation({
-    mutationFn: () => runRpc("save_platform_profit_period_close", {
-      target_currency_code: currency,
-      target_period_start: closeStart,
-      target_period_end: closeEnd,
-      target_operating_expenses: Number(operatingExpenses),
-      target_refund_chargeback_reserve: Number(refundReserve),
-      target_tax_and_statutory_reserve: Number(taxReserve),
-      target_other_reserves: Number(otherReserve),
-      target_excluded_customer_collections: Number(excludedCustomerFunds),
-      target_excluded_supplier_pass_through: Number(excludedSupplierFunds),
-      target_excluded_escrow_and_unsettled_funds: Number(excludedEscrowFunds),
-      target_reconciliation_reference: closeReference.trim(),
-      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.period-close", currency + ":" + closeStart + ":" + closeEnd + ":" + closeReference.trim()),
-      target_notes: closeNotes.trim() || null,
-    }),
+    mutationFn: () => {
+      const payload = {
+        target_currency_code: currency,
+        target_period_start: closeStart,
+        target_period_end: closeEnd,
+        target_operating_expenses: Number(operatingExpenses),
+        target_refund_chargeback_reserve: Number(refundReserve),
+        target_tax_and_statutory_reserve: Number(taxReserve),
+        target_other_reserves: Number(otherReserve),
+        target_excluded_customer_collections: Number(excludedCustomerFunds),
+        target_excluded_supplier_pass_through: Number(excludedSupplierFunds),
+        target_excluded_escrow_and_unsettled_funds: Number(excludedEscrowFunds),
+        target_reconciliation_reference: closeReference.trim(),
+        target_notes: closeNotes.trim() || null,
+      };
+      const fingerprint = JSON.stringify(payload);
+      const key = closeAttempt.current?.fingerprint === fingerprint
+        ? closeAttempt.current.key
+        : createClientIdempotencyKey("admin.profit-capital.period-close", currency + ":" + closeStart + ":" + closeEnd + ":" + closeReference.trim());
+      closeAttempt.current = { fingerprint, key };
+      return runRpc("save_platform_profit_period_close", { ...payload, target_idempotency_key: key });
+    },
     onSuccess: async () => {
       setNotice({ text: "Period close saved as a draft using posted SKIMA platform-revenue ledger entries. A different Finance Admin must approve it.", tone: "success" });
       await refresh();
@@ -258,7 +268,7 @@ export function AdminProfitCapitalWorkspace() {
   const createSchedule = useMutation({
     mutationFn: () => {
       if (!activeTemplate) throw new Error("Activate an allocation template before creating a schedule.");
-      return runRpc("save_platform_profit_distribution_schedule", {
+      const payload = {
         target_display_name: scheduleName.trim(),
         target_currency_code: currency,
         target_template_id: value(activeTemplate, "id"),
@@ -266,9 +276,14 @@ export function AdminProfitCapitalWorkspace() {
         target_period_start: scheduleStart,
         target_period_end: scheduleEnd,
         target_next_run_at: new Date(scheduleNextRunAt).toISOString(),
-        target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.schedule", currency + ":" + scheduleName.trim() + ":" + scheduleStart + ":" + scheduleEnd),
         target_notes: "Scheduled calculation only. Every period still requires a separately approved Finance close.",
-      });
+      };
+      const fingerprint = JSON.stringify(payload);
+      const key = scheduleAttempt.current?.fingerprint === fingerprint
+        ? scheduleAttempt.current.key
+        : createClientIdempotencyKey("admin.profit-capital.schedule", scheduleName.trim() + ":" + currency + ":" + scheduleFrequency + ":" + scheduleStart + ":" + scheduleEnd);
+      scheduleAttempt.current = { fingerprint, key };
+      return runRpc("save_platform_profit_distribution_schedule", { ...payload, target_idempotency_key: key });
     },
     onSuccess: async () => {
       setNotice({ text: "Recurring schedule saved. The runtime worker will create draft runs only after a matching approved period close exists.", tone: "success" });
@@ -285,11 +300,23 @@ export function AdminProfitCapitalWorkspace() {
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Schedule status could not be updated.", tone: "danger" }),
   });
   const fundDistribution = useMutation({
-    mutationFn: (id: string) => runRpc("fund_platform_profit_distribution", {
-      target_distribution_id: id,
-      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.funding", id),
-    }),
-    onSuccess: async () => { setNotice({ text: "Distribution funded from the SKIMA platform-revenue wallet into the six separate category wallets.", tone: "success" }); await refresh(); },
+    mutationFn: (id: string) => {
+      const fingerprint = id;
+      const existing = fundingAttempts.current[id];
+      const key = existing?.fingerprint === fingerprint
+        ? existing.key
+        : createClientIdempotencyKey("admin.profit-capital.funding", id);
+      fundingAttempts.current[id] = { fingerprint, key };
+      return runRpc("fund_platform_profit_distribution", {
+        target_distribution_id: id,
+        target_idempotency_key: key,
+      });
+    },
+    onSuccess: async (_transactionId, id) => {
+      delete fundingAttempts.current[id];
+      setNotice({ text: "Distribution funded from the SKIMA platform-revenue wallet into the six separate category wallets.", tone: "success" });
+      await refresh();
+    },
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Distribution funding failed.", tone: "danger" }),
   });
   const payParticipantToWallet = useMutation({
