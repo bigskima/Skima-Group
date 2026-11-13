@@ -25,6 +25,7 @@ export interface StreetMapPreviewProps {
   initialZoom?: number;
   title?: string;
   interactive?: boolean;
+  tileUrlTemplate?: string;
 }
 
 const TILE_SIZE = 256;
@@ -80,6 +81,7 @@ export function StreetMapPreview({
   initialZoom = 15,
   title = "Map preview",
   interactive = Boolean(onSelectPoint),
+  tileUrlTemplate = TILE_TEMPLATE,
 }: StreetMapPreviewProps) {
   const initialPoint = validPoint(coordinate) ? coordinate : DEFAULT_CENTER;
   const [center, setCenter] = useState<StreetMapCoordinate>(initialPoint);
@@ -113,7 +115,7 @@ export function StreetMapPreview({
       if (y < 0 || y >= tileCount) continue;
       for (let x = firstX; x <= lastX; x += 1) {
         const wrappedX = ((x % tileCount) + tileCount) % tileCount;
-        const url = TILE_TEMPLATE
+        const url = tileUrlTemplate
           .replace("{z}", String(zoom))
           .replace("{x}", String(wrappedX))
           .replace("{y}", String(y));
@@ -216,7 +218,7 @@ export function StreetMapPreview({
               headers: { "User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)" },
             }}
             contentFit="cover"
-            cachePolicy="memory-disk"
+            cachePolicy="disk"
             onError={() => setFailedTiles((current) => current.includes(tile.key) ? current : [...current, tile.key])}
             style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]}
           />
