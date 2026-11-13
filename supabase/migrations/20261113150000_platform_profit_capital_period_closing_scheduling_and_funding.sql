@@ -471,7 +471,7 @@ set search_path = public, pg_temp
 as $$
 declare
   currency text := upper(btrim(target_currency_code));
-  account public.platform_profit_category_accounts%rowtype;
+  account_record public.platform_profit_category_accounts%rowtype;
   wallet_id_value uuid;
   created_wallet boolean := false;
   wallet_source text := 'platform.profit_capital';
@@ -491,27 +491,37 @@ begin
   ) then
     raise exception using errcode = '22023', message = 'Unsupported profit allocation category';
   end if;
-  if not exists (select 1 from public.currency_definitions where code = currency and status = 'enabled') then
+  if not exists (
+    select 1 from public.currency_definitions
+    where code = currency and status = 'enabled'
+  ) then
     raise exception using errcode = '22023', message = 'Choose an enabled currency';
   end if;
 
-  perform pg_advisory_xact_lock(hashtextextended('profit_category_wallet:' || currency || ':' || target_category_key, 0));
+  perform pg_advisory_xact_lock(
+    hashtextextended('profit_category_wallet:' || currency || ':' || target_category_key, 0)
+  );
 
   insert into public.platform_profit_category_accounts(currency_code, category_key)
   values (currency, target_category_key)
   on conflict (currency_code, category_key) do nothing;
 
-  select * into account
-  from public.platform_profit_category_accounts
-  where currency_code = currency and category_key = target_category_key
+  select * into account_record
+  from public.platform_profit_category_accounts account_row
+  where account_row.currency_code = currency
+    and account_row.category_key = target_category_key
   for update;
 
-  if account.wallet_id is not null then
-    select id into wallet_id
-    from public.wallet_accounts
-    where id = account.wallet_id and status = 'active';
-    if wallet_id is not null then return wallet_id_value; end if;
-    raise exception using errcode = '55000', message = 'The profit category wallet is not active. Contact a Super Admin.';
+  if account_record.wallet_id is not null then
+    select wallet.id into wallet_id_value
+    from public.wallet_accounts wallet
+    where wallet.id = account_record.wallet_id
+      and wallet.status = 'active';
+    if wallet_id_value is not null then
+      return wallet_id_value;
+    end if;
+    raise exception using errcode = '55000',
+      message = 'The profit category wallet is not active. Contact a Super Admin.';
   end if;
 
   wallet_key := 'profit-category:' || lower(currency) || ':' || target_category_key;
@@ -520,7 +530,7 @@ begin
     metadata, created_by, source, idempotency_key
   )
   values (
-    'generic', 'module', account.id, currency, 'active',
+    'generic', 'module', account_record.id, currency, 'active',
     jsonb_build_object(
       'wallet_purpose', 'platform_profit_' || target_category_key,
       'display_name', replace(initcap(target_category_key), '_', ' ') || ' · ' || currency,
@@ -531,16 +541,17 @@ begin
     auth.uid(), wallet_source, wallet_key
   )
   on conflict do nothing
-  returning id into wallet_id;
+  returning id into wallet_id_value;
 
   if wallet_id_value is null then
-    select id into wallet_id_value
-    from public.wallet_accounts
-    where wallet_type = 'generic'
-      and owner_entity_type = 'module'
-      and owner_entity_id = account.id
-      and currency_code = currency
-      and status = 'active';
+    select wallet.id into wallet_id_value
+    from public.wallet_accounts wallet
+    where wallet.wallet_type = 'generic'
+      and wallet.owner_entity_type = 'module'
+      and wallet.owner_entity_id = account_record.id
+      and wallet.currency_code = currency
+      and wallet.status = 'active'
+    limit 1;
   else
     created_wallet := true;
   end if;
@@ -549,9 +560,9 @@ begin
     raise exception using errcode = '55000', message = 'Could not create the SKIMA profit category account';
   end if;
 
-  update public.platform_profit_category_accounts account_record
+  update public.platform_profit_category_accounts account_row
   set wallet_id = wallet_id_value
-  where account_record.id = account.id;
+  where account_row.id = account_record.id;
 
   if created_wallet then
     insert into public.wallet_account_events(
@@ -567,7 +578,7 @@ begin
 
   return wallet_id_value;
 end;
-$;
+$$;
 
 create or replace function public.create_platform_profit_distribution_from_close(
   target_template_id uuid,
@@ -979,7 +990,6 @@ begin
   end if;
 
   select allocation.category_wallet_id into v_category_wallet_id
-  from public.platform_profit_distribution_allocations
   from public.platform_profit_distribution_allocations allocation
   where allocation.distribution_id = distribution.id
     and allocation.category_key = entitlement.funding_category;
@@ -1107,7 +1117,6 @@ begin
   end if;
 
   select allocation.category_wallet_id into v_category_wallet_id
-  from public.platform_profit_distribution_allocations
   from public.platform_profit_distribution_allocations allocation
   where allocation.distribution_id = distribution.id
     and allocation.category_key = 'vehicle_repayment';
