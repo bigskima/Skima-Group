@@ -198,6 +198,8 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   const { palette } = useAppTheme();
   const { api, status } = useSession();
   const search = value.trim();
+  const [pendingStreet, setPendingStreet] = useState<Place | null>(null);
+  const [parentSearchText, setParentSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedSearch(search), 260);
@@ -257,6 +259,16 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     enabled: status === "authenticated" && mode === "address" && !selected && addressContextSearch.length >= 2,
     queryFn: ({ signal }) => api.get(
       "/runtime/logistics/geographies?countryCode=NG&limit=50&search=" + encodeURIComponent(addressContextSearch),
+      RecordArraySchema,
+      { signal },
+    ),
+    staleTime: 5 * 60_000,
+  });
+  const parentChoicesQuery = useQuery<Place[]>({
+    queryKey: ["skima-logistics", "street-parent-search", parentSearchText.trim().toLowerCase()],
+    enabled: status === "authenticated" && mode === "address" && Boolean(pendingStreet) && parentSearchText.trim().length >= 2,
+    queryFn: ({ signal }) => api.get(
+      "/runtime/logistics/geographies?countryCode=NG&limit=50&search=" + encodeURIComponent(parentSearchText.trim()),
       RecordArraySchema,
       { signal },
     ),
@@ -404,12 +416,44 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     ? { latitude: selectedLocation.latitude, longitude: selectedLocation.longitude }
     : null;
 
+  const pendingStreetLocation = objectValue(pendingStreet?.location);
+  const pendingStreetCoordinate = pendingStreetLocation &&
+      typeof pendingStreetLocation.latitude === "number" &&
+      typeof pendingStreetLocation.longitude === "number"
+    ? { latitude: pendingStreetLocation.latitude, longitude: pendingStreetLocation.longitude }
+    : null;
+  const parentOptions = parentSearchText.trim().length >= 2
+    ? (parentChoicesQuery.data ?? [])
+    : availableGeographies;
+
+  const chooseStreetParent = (parent: Place) => {
+    const parentId = asString(parent, "id");
+    if (!pendingStreet || !parentId) return;
+    const parentName = asString(parent, "canonical_name") ?? "Selected service area";
+    onSelect({
+      ...pendingStreet,
+      id: parentId,
+      geography_source: "canonical_parent",
+      geography_name: parentName,
+      geography_hierarchy_path: asString(parent, "hierarchy_path"),
+      parent_name: parentName + " · Nigeria",
+      country_code: "NG",
+    });
+    setPendingStreet(null);
+    setParentSearchText("");
+    setManualResolutionMessage(null);
+  };
+
   return (
     <View style={styles.group}>
       <AppField
         label={label}
         value={selectedName ?? value}
-        onChangeText={onChange}
+        onChangeText={(nextValue) => {
+          setPendingStreet(null);
+          setParentSearchText("");
+          onChange(nextValue);
+        }}
         onSubmitEditing={() => undefined}
         placeholder={mode === "service_area" ? "Search state, LGA or service area" : "Search town, street, landmark or house address"}
         autoCorrect={false}
@@ -457,10 +501,19 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
           {places.slice(0, 8).map((place, index) => {
             const id = asString(place, "id");
             const name = asString(place, "canonical_name", "description") ?? "Location";
-            const parent = asString(place, "hierarchy_path", "parent_name", "state_name", "lga_name") ?? "Nigeria";
+            const parent = asString(place, "hierarchy_path", "parent_name", "state_name", "lga_name") ?? (id ? "Nigeria" : "Service area confirmation needed");
             const source = asString(place, "location_source");
+            const needsParent = mode === "address" && !id && Boolean(objectValue(place.location));
             return (
-              <Pressable key={id ? `${id}:${name}` : `${name}:${index}`} accessibilityRole="button" onPress={() => onSelect(place)}
+              <Pressable key={id ? `${id}:${name}` : `${name}:${index}`} accessibilityRole="button" onPress={() => {
+                  if (needsParent) {
+                    setPendingStreet(place);
+                    setParentSearchText("");
+                    setManualResolutionMessage(null);
+                  } else if (id) {
+                    onSelect(place);
+                  }
+                }}
                 style={({ pressed }) => [styles.resultRow, pressed && { backgroundColor: palette.brandSofter }]}>
                 <View style={[styles.resultIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={15} /></View>
                 <View style={styles.resultCopy}>
@@ -474,6 +527,42 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
             );
           })}
         </View>
+        {pendingStreet ? (
+          <View style={[styles.parentPicker, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            <Text style={[styles.manualInlineTitle, { color: palette.ink }]}>Street address found — confirm its SKIMA service area</Text>
+            <Text style={[styles.hint, { color: palette.muted }]}>{asString(pendingStreet, "formatted_address", "canonical_name") ?? "Street address"} is preserved as the delivery address. Choose the correct active service area separately.</Text>
+            {pendingStreetCoordinate ? <StreetMapPreview title="Street address location" coordinate={pendingStreetCoordinate} height={170} /> : null}
+            <AppField
+              label="Search LGA, town or service area"
+              value={parentSearchText}
+              onChangeText={setParentSearchText}
+              placeholder="e.g. Onitsha North, Awka South"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {parentChoicesQuery.isFetching ? <Text style={[styles.hint, { color: palette.muted }]}>Finding matching service areas…</Text> : null}
+            {parentOptions.length ? (
+              <View style={[styles.results, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                {parentOptions.slice(0, 8).map((parent, parentIndex) => {
+                  const parentId = asString(parent, "id");
+                  const parentName = asString(parent, "canonical_name") ?? "Service area";
+                  if (!parentId) return null;
+                  return (
+                    <Pressable key={parentId + ":" + parentIndex} accessibilityRole="button" onPress={() => chooseStreetParent(parent)}
+                      style={({ pressed }) => [styles.resultRow, pressed && { backgroundColor: palette.brandSofter }]}>
+                      <View style={[styles.resultIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={15} /></View>
+                      <View style={styles.resultCopy}>
+                        <Text style={[styles.resultTitle, { color: palette.ink }]} numberOfLines={2}>{parentName}</Text>
+                        <Text style={[styles.resultMeta, { color: palette.muted }]} numberOfLines={2}>{asString(parent, "hierarchy_path") ?? "Nigeria service area"}</Text>
+                      </View>
+                      <Check color={palette.borderStrong} size={15} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : <Text style={[styles.hint, { color: palette.muted }]}>Search by the recipient’s LGA or town. The street address will not be replaced by this service-area selection.</Text>}
+          </View>
+        ) : null}
         {mode === "address" && manualBase && search.length >= 3 ? (
           <Pressable accessibilityRole="button" disabled={manualResolving} onPress={() => void useManualAddress()}
             style={[styles.manualInline, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
