@@ -42,6 +42,13 @@ export function StoreShopScreen(){
  const balances=useStoreRecords(["store","balances"],"/runtime/wallet-balances",true,20000);
  const locations=useStoreRecords(["store","locations"],"/lpg/locations",true,60000);
  const orders=useStoreRecords(["store","orders"],"/runtime/storefront/orders",true,15000);
+ const userId=session.session?.user.id??"";
+ const moduleId=asString(store.storeModule,"id");
+ const cartKey="skima:store:cart:v1:"+userId+":"+(moduleId??"unconfigured");
+ const [cart,setCart]=useState<CartLine[]>([]);const [cartReady,setCartReady]=useState(false);const [loadedKey,setLoadedKey]=useState("");
+ const [search,setSearch]=useState("");const [category,setCategory]=useState("all");const [selectedProduct,setSelectedProduct]=useState<Product|null>(null);const [fulfillment,setFulfillment]=useState<"delivery"|"pickup">("delivery");const [checkoutStep,setCheckoutStep]=useState<"browse"|"basket"|"fulfillment"|"review">("browse");
+ const [locationId,setLocationId]=useState("");const [note,setNote]=useState("");const [notice,setNotice]=useState("");const [checkoutKey,setCheckoutKey]=useState(()=>makeIdempotencyKey("store-checkout"));
+ const [addressEditorOpen,setAddressEditorOpen]=useState(false);const [addressSearch,setAddressSearch]=useState("");const [debouncedAddressSearch,setDebouncedAddressSearch]=useState("");const [addressLabel,setAddressLabel]=useState("Home");const [addressInstructions,setAddressInstructions]=useState("");const [addressNotice,setAddressNotice]=useState("");const [addressResolving,setAddressResolving]=useState(false);const [addressSaving,setAddressSaving]=useState(false);const [makeAddressPreferred,setMakeAddressPreferred]=useState(true);
  useEffect(()=>{const timer=setTimeout(()=>setDebouncedAddressSearch(addressSearch.trim()),350);return()=>clearTimeout(timer);},[addressSearch]);
  const addressAutocomplete=useQuery({
   queryKey:["skima-store","address-autocomplete",debouncedAddressSearch.toLowerCase()],
@@ -50,13 +57,7 @@ export function StoreShopScreen(){
   queryFn:()=>session.api.post("/lpg/maps/autocomplete",{input:debouncedAddressSearch+", Nigeria"},AddressAutocompleteSchema),
   staleTime:60_000,
  });
- const userId=session.session?.user.id??"";
- const moduleId=asString(store.storeModule,"id");
- const cartKey="skima:store:cart:v1:"+userId+":"+(moduleId??"unconfigured");
- const [cart,setCart]=useState<CartLine[]>([]);const [cartReady,setCartReady]=useState(false);const [loadedKey,setLoadedKey]=useState("");
- const [search,setSearch]=useState("");const [category,setCategory]=useState("all");const [selectedProduct,setSelectedProduct]=useState<Product|null>(null);const [fulfillment,setFulfillment]=useState<"delivery"|"pickup">("delivery");const [checkoutStep,setCheckoutStep]=useState<"browse"|"basket"|"fulfillment"|"review">("browse");
- const [locationId,setLocationId]=useState("");const [note,setNote]=useState("");const [notice,setNotice]=useState("");const [checkoutKey,setCheckoutKey]=useState(()=>makeIdempotencyKey("store-checkout"));
- const [addressEditorOpen,setAddressEditorOpen]=useState(false);const [addressSearch,setAddressSearch]=useState("");const [debouncedAddressSearch,setDebouncedAddressSearch]=useState("");const [addressLabel,setAddressLabel]=useState("Home");const [addressInstructions,setAddressInstructions]=useState("");const [addressNotice,setAddressNotice]=useState("");const [addressResolving,setAddressResolving]=useState(false);const [addressSaving,setAddressSaving]=useState(false);const [makeAddressPreferred,setMakeAddressPreferred]=useState(true);
+
  useEffect(()=>{let active=true;setCartReady(false);void AsyncStorage.getItem(cartKey).then(saved=>{if(!active)return;try{const parsed:unknown=saved?JSON.parse(saved):[];setCart(Array.isArray(parsed)?parsed.filter(isCartLine):[]);}catch{setCart([]);}}).catch(()=>{if(active)setCart([]);}).finally(()=>{if(active){setLoadedKey(cartKey);setCartReady(true);}});return()=>{active=false;};},[cartKey]);
  useEffect(()=>{if(cartReady&&loadedKey===cartKey)void AsyncStorage.setItem(cartKey,JSON.stringify(cart)).catch(()=>undefined);},[cart,cartReady,loadedKey,cartKey]);
  const settings=store.activeSettings;const currency=asString(settings,"currency_code")??"NGN";
@@ -125,11 +126,11 @@ export function StoreShopScreen(){
     metadata:{sourceApp:"store",addressEntryMode:"manual_search"},
     idempotencyKey:makeIdempotencyKey("store-location"),
    },OrderSchema);
-   await locations.refetch();
+   const refreshedLocations=await locations.refetch();
    const savedRecord=record(saved);
    let savedId=asString(savedRecord,"id","locationId","location_id")??(typeof saved==="string"?saved:"");
    if(!savedId){
-    const refreshed=locations.data??[];
+    const refreshed=refreshedLocations.data??[];
     const match=refreshed.find(item=>asString(item,"formatted_address")===formattedAddress);
     savedId=asString(match,"id")??"";
    }
