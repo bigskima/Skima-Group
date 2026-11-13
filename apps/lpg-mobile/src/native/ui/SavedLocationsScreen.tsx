@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useSession } from "../session/SessionProvider";
-import { displaySubtitle, displayTitle, recordId } from "../api/records";
+import { displayLocationAddress, displaySubtitle, displayTitle, recordId } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AiContextAction } from "./AiContextAction";
@@ -112,7 +112,7 @@ export function SavedLocationsScreen() {
             {visibleRecords.map((item, index) => {
               const id = recordId(item);
               const title = displayTitle(item) || "Saved place";
-              const address = displaySubtitle(item) ?? "Saved pickup and return point";
+              const address = displayLocationAddress(item) ?? displaySubtitle(item) ?? "Saved pickup and return point";
               const isPreferred = item.is_default === true;
               return (
                 <View
