@@ -726,9 +726,9 @@ begin
     raise exception using errcode = '55000', message = 'SKIMA platform revenue wallet is not provisioned for this currency';
   end if;
 
-  select coalesce(balance, 0) into available_revenue
-  from public.wallet_balances
-  where wallet_id = revenue_wallet_id;
+  select coalesce(balance.balance, 0) into available_revenue
+  from public.wallet_balances balance
+  where balance.wallet_id = revenue_wallet_id;
 
   if available_revenue < distribution.distributable_profit then
     raise exception using errcode = '55000',
@@ -997,9 +997,9 @@ begin
     raise exception using errcode = '55000', message = 'The participant funding category has not been funded';
   end if;
 
-  select coalesce(balance, 0) into available_balance
-  from public.wallet_balances
-  where wallet_id = v_category_wallet_id;
+  select coalesce(balance.balance, 0) into available_balance
+  from public.wallet_balances balance
+  where balance.wallet_id = v_category_wallet_id;
   if available_balance < target_amount then
     raise exception using errcode = '55000', message = 'The allocated category wallet does not have enough available funds';
   end if;
@@ -1240,6 +1240,17 @@ begin
         order by period_end desc, created_at desc
         limit 100
       ) closing
+    ), '[]'::jsonb),
+    'participants', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', participant.id,
+        'displayName', participant.display_name,
+        'participantType', participant.participant_type,
+        'profileId', participant.profile_id,
+        'status', participant.status
+      ) order by participant.display_name)
+      from public.platform_profit_participants participant
+      where participant.currency_code = currency
     ), '[]'::jsonb),
     'schedules', coalesce((
       select jsonb_agg(jsonb_build_object(
