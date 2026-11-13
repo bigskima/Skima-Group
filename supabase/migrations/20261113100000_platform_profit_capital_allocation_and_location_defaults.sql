@@ -38,16 +38,20 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  if new.status = 'active'
+  if tg_op = 'INSERT'
+     and new.status = 'active'
      and not exists (
        select 1
        from public.lpg_customer_locations current_default
        where current_default.owner_user_id = new.owner_user_id
          and current_default.is_default = true
          and current_default.status = 'active'
-         and current_default.id is distinct from new.id
      ) then
     new.is_default := true;
+  end if;
+
+  if new.status <> 'active' then
+    new.is_default := false;
   end if;
 
   if new.is_default then
@@ -70,6 +74,51 @@ before insert or update of is_default, status, owner_user_id
 on public.lpg_customer_locations
 for each row
 execute function public.ensure_first_lpg_customer_location_default();
+
+create or replace function public.maintain_lpg_customer_location_default_after_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  fallback_id uuid;
+begin
+  if new.status = 'active' and not exists (
+    select 1 from public.lpg_customer_locations candidate
+    where candidate.owner_user_id = new.owner_user_id
+      and candidate.status = 'active'
+      and candidate.is_default = true
+  ) then
+    update public.lpg_customer_locations
+    set is_default = true, updated_at = timezone('utc', now())
+    where id = new.id;
+  elsif old.is_default = true and new.status <> 'active' then
+    select id into fallback_id
+    from public.lpg_customer_locations candidate
+    where candidate.owner_user_id = new.owner_user_id
+      and candidate.status = 'active'
+      and candidate.id <> new.id
+    order by candidate.created_at, candidate.id
+    limit 1;
+    if fallback_id is not null then
+      update public.lpg_customer_locations
+      set is_default = true, updated_at = timezone('utc', now())
+      where id = fallback_id;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists lpg_customer_location_default_fallback
+  on public.lpg_customer_locations;
+create trigger lpg_customer_location_default_fallback
+after update of status
+on public.lpg_customer_locations
+for each row
+when (old.status is distinct from new.status)
+execute function public.maintain_lpg_customer_location_default_after_status_change();
 
 create or replace function public.set_lpg_customer_location_default(
   target_location_id uuid
@@ -118,6 +167,8 @@ end;
 $$;
 
 revoke all on function public.ensure_first_lpg_customer_location_default()
+  from public, anon, authenticated, service_role;
+revoke all on function public.maintain_lpg_customer_location_default_after_status_change()
   from public, anon, authenticated, service_role;
 revoke all on function public.set_lpg_customer_location_default(uuid)
   from public, anon;
@@ -1008,21 +1059,26 @@ begin
   from public.platform_profit_allocation_template_lines line
   where line.template_id = template.id;
 
-  select target_distributable_profit - coalesce(sum(allocated_amount), 0)
+  select target_distributable_profit - coalesce(sum(allocation.allocated_amount), 0)
   into rounding_delta
-  from public.platform_profit_distribution_allocations
+  from public.platform_profit_distribution_allocations allocation
   where allocation.distribution_id = v_distribution_id;
 
-  update public.platform_profit_distribution_allocations
-  set allocated_amount = allocated_amount + rounding_delta
-  where distribution_id = distribution_id
-    and category_key = 'investment_savings';
+  update public.platform_profit_distribution_allocations allocation
+  set allocated_amount = allocation.allocated_amount + rounding_delta
+  where allocation.id = (
+    select candidate.id
+    from public.platform_profit_distribution_allocations candidate
+    where candidate.distribution_id = v_distribution_id
+    order by candidate.allocated_amount desc, candidate.category_key
+    limit 1
+  );
 
   insert into public.platform_profit_participant_entitlements(
     distribution_id, participant_id, funding_category,
     profit_basis_amount, share_percent, entitlement_amount
   )
-  select distribution_id,
+  select v_distribution_id,
          participant.id,
          participant.funding_category,
          target_distributable_profit,
@@ -1031,7 +1087,8 @@ begin
   from public.platform_profit_participants participant
   where participant.currency_code = currency
     and participant.status = 'active'
-    and participant.profit_share_percent > 0;
+    and participant.profit_share_percent > 0
+    and round(target_distributable_profit * participant.profit_share_percent / 100, decimals) > 0;
 
   if exists (
     select 1
@@ -1063,7 +1120,7 @@ begin
   insert into public.platform_vehicle_capital_repayments(
     distribution_id, agreement_id, principal_amount
   )
-  select distribution_id,
+  select v_distribution_id,
          agreement.id,
          round(least(
            agreement.principal_amount - agreement.principal_repaid,
@@ -1074,7 +1131,12 @@ begin
   where agreement.currency_code = currency
     and agreement.status = 'active'
     and agreement.principal_amount > agreement.principal_repaid
-    and vehicle_pool > 0;
+    and vehicle_pool > 0
+    and round(least(
+      agreement.principal_amount - agreement.principal_repaid,
+      vehicle_pool * (agreement.principal_amount - agreement.principal_repaid) /
+        nullif(sum(agreement.principal_amount - agreement.principal_repaid) over (), 0)
+    ), decimals) > 0;
 
   update public.platform_profit_distribution_allocations allocation
   set committed_amount = committed_amount + coalesce((
