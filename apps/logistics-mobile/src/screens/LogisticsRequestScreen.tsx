@@ -44,7 +44,7 @@ function displayPlaceAddress(place: Place | null) {
   const streetLine = street && number && !street.toLowerCase().startsWith(number.toLowerCase() + " ")
     ? number + " " + street
     : street;
-  if (streetLine && !(formatted ?? "").toLowerCase().includes(street.toLowerCase())) {
+  if (streetLine && street && !(formatted ?? "").toLowerCase().includes(street.toLowerCase())) {
     return [streetLine, formatted].filter(Boolean).join(", ");
   }
   return formatted ?? streetLine;
