@@ -71,11 +71,11 @@ function categoryLabel(key: string): string {
 }
 function Field(props: {
   label: string; value: string; onChange: (value: string) => void; type?: string;
-  placeholder?: string; min?: string; max?: string; step?: string; required?: boolean;
+  placeholder?: string; min?: string; max?: string; step?: string; required?: boolean; disabled?: boolean;
 }) {
   return <label className="skima-pc-field"><span>{props.label}</span><input
     type={props.type ?? "text"} value={props.value} onChange={(event) => props.onChange(event.currentTarget.value)}
-    placeholder={props.placeholder} min={props.min} max={props.max} step={props.step} required={props.required}
+    placeholder={props.placeholder} min={props.min} max={props.max} step={props.step} required={props.required} disabled={props.disabled}
   /></label>;
 }
 function SelectField(props: {
@@ -86,7 +86,7 @@ function SelectField(props: {
     {props.options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
   </select></label>;
 }
-function Notice(props: { children: string; tone?: "success" | "warning" | "danger" }) {
+function Notice(props: { children: ReactNode; tone?: "success" | "warning" | "danger" }) {
   return <div className={"skima-pc-notice skima-pc-notice--" + (props.tone ?? "warning")} role="status">{props.children}</div>;
 }
 function Panel(props: { title: string; description: string; children: ReactNode }) {
@@ -484,10 +484,16 @@ export function AdminProfitCapitalWorkspace() {
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Distribution approval failed.", tone: "danger" }),
   });
   const updatePaymentDraft = (id: string, field: "amount", next: string) => {
-    setPaymentDrafts((current) => ({
-      ...current,
-      [id]: { amount: "", transactionId: "", reference: "", ...current[id], [field]: next },
-    }));
+    setPaymentDrafts((current) => {
+      const previous = current[id];
+      const draft: { amount: string; transactionId: string; reference: string } = {
+        amount: previous?.amount ?? "",
+        transactionId: previous?.transactionId ?? "",
+        reference: previous?.reference ?? "",
+      };
+      draft[field] = next;
+      return { ...current, [id]: draft };
+    });
   };
   const templateValid = CATEGORIES.every((category) =>
     percentages[category.key].trim() !== "" && Number.isFinite(Number(percentages[category.key]))
