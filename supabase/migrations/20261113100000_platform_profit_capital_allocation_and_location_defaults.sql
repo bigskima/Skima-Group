@@ -834,6 +834,7 @@ set search_path = public, pg_temp
 as $$
 declare
   participant_id uuid;
+  existing_participant public.platform_profit_participants%rowtype;
   currency text := upper(btrim(target_currency_code));
   existing_type text;
 begin
@@ -863,6 +864,25 @@ begin
   end if;
 
   if target_participant_id is null then
+    select * into existing_participant
+    from public.platform_profit_participants
+    where idempotency_key = target_idempotency_key
+    for update;
+    if existing_participant.id is not null then
+      if existing_participant.display_name <> btrim(target_display_name)
+         or existing_participant.participant_type <> target_participant_type
+         or coalesce(existing_participant.contact_email, '') <> coalesce(nullif(btrim(target_contact_email), ''), '')
+         or coalesce(existing_participant.contact_phone, '') <> coalesce(nullif(btrim(target_contact_phone), ''), '')
+         or existing_participant.currency_code <> currency
+         or existing_participant.profit_share_percent <> target_profit_share_percent
+         or existing_participant.funding_category <> target_funding_category
+         or existing_participant.status <> target_status
+         or coalesce(existing_participant.notes, '') <> coalesce(nullif(btrim(target_notes), ''), '') then
+        raise exception using errcode = '23505', message = 'Participant idempotency key was already used with different details';
+      end if;
+      return existing_participant.id;
+    end if;
+
     insert into public.platform_profit_participants(
       display_name, participant_type, contact_email, contact_phone, currency_code,
       profit_share_percent, funding_category, status, notes, idempotency_key
@@ -937,6 +957,7 @@ as $$
 declare
   agreement_id uuid;
   participant public.platform_profit_participants%rowtype;
+  existing_agreement public.platform_vehicle_capital_agreements%rowtype;
   existing_repaid numeric(28,8) := 0;
   currency text := upper(btrim(target_currency_code));
 begin
@@ -951,6 +972,26 @@ begin
      or target_status not in ('active', 'paused', 'closed')
      or nullif(btrim(target_idempotency_key), '') is null then
     raise exception using errcode = '22023', message = 'Vehicle details, positive principal, agreement reference and idempotency key are required';
+  end if;
+
+  if target_agreement_id is null then
+    select * into existing_agreement
+    from public.platform_vehicle_capital_agreements
+    where idempotency_key = target_idempotency_key
+    for update;
+    if existing_agreement.id is not null then
+      if existing_agreement.participant_id <> target_participant_id
+         or existing_agreement.currency_code <> currency
+         or existing_agreement.vehicle_description <> btrim(target_vehicle_description)
+         or coalesce(existing_agreement.registration_number, '') <> coalesce(nullif(btrim(target_registration_number), ''), '')
+         or existing_agreement.agreement_reference <> btrim(target_agreement_reference)
+         or existing_agreement.principal_amount <> target_principal_amount
+         or existing_agreement.status <> target_status
+         or coalesce(existing_agreement.notes, '') <> coalesce(nullif(btrim(target_notes), ''), '') then
+        raise exception using errcode = '23505', message = 'Vehicle agreement idempotency key was already used with different details';
+      end if;
+      return existing_agreement.id;
+    end if;
   end if;
 
   select * into participant from public.platform_profit_participants
