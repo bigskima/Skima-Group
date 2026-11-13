@@ -45,6 +45,7 @@ Deno.test("Profit participation is contractual and is bounded by each approved f
     migration.indexOf("create or replace function public.approve_platform_profit_distribution("),
   );
   assertStringIncludes(distribution, "round(target_distributable_profit * participant.profit_share_percent / 100, decimals)");
+  assertStringIncludes(distribution, "nullif(btrim(target_notes), '') is null");
   assertStringIncludes(distribution, "Active profit participation percentages exceed 100%");
   assertStringIncludes(distribution, "Profit participation exceeds the available amount in its configured funding category");
 });
@@ -69,6 +70,9 @@ Deno.test("Vehicle capital agreements carry zero interest and repayment cannot e
   assertStringIncludes(payment, "transaction_record.status <> 'posted'");
   assertStringIncludes(payment, "transaction_record.currency_code <> distribution.currency_code");
   assertStringIncludes(payment, "transaction_record.total_amount <> target_amount");
+  assertStringIncludes(payment, "platform_profit_capital_transaction_claims");
+  assertStringIncludes(payment, "on conflict (financial_transaction_id) do nothing");
+  assertStringIncludes(payment, "where financial_transaction_id = target_financial_transaction_id");
   assertStringIncludes(payment, "target_amount > agreement.principal_amount - agreement.principal_repaid");
   assertStringIncludes(payment, "status = case when new_repaid >= principal_amount then 'fully_repaid' else status end");
   assertStringIncludes(payment, "remainingPrincipal");
