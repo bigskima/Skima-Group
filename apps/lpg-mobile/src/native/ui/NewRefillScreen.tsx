@@ -8,6 +8,7 @@ import { useGatewayMutation } from "../api/gateway";
 import { isSkimaInternalFulfillmentId } from "../api/lpgFulfillment";
 import {
   ActionResponseSchema,
+  displayLocationAddress,
   displayTitle,
   firstNumber,
   firstString,
@@ -1020,12 +1021,12 @@ export function NewRefillScreen() {
                   <View style={styles.reviewLocation}>
                     <Text style={[styles.reviewLocationLabel, { color: palette.muted }]}>PICKUP</Text>
                     <Text style={[styles.reviewLine, { color: palette.ink }]}>{displayTitle(selectedPickupLocation ?? {})}</Text>
-                    <Text style={[styles.reviewLocationAddress, { color: palette.muted }]}>{firstString(selectedPickupLocation, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"]) ?? "Street address not recorded"}</Text>
+                    <Text style={[styles.reviewLocationAddress, { color: palette.muted }]}>{displayLocationAddress(selectedPickupLocation) ?? "Street address not recorded"}</Text>
                   </View>
                   <View style={styles.reviewLocation}>
                     <Text style={[styles.reviewLocationLabel, { color: palette.muted }]}>RETURN / DELIVERY</Text>
                     <Text style={[styles.reviewLine, { color: palette.ink }]}>{displayTitle(selectedDeliveryLocation ?? {})}</Text>
-                    <Text style={[styles.reviewLocationAddress, { color: palette.muted }]}>{firstString(selectedDeliveryLocation, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"]) ?? "Street address not recorded"}</Text>
+                    <Text style={[styles.reviewLocationAddress, { color: palette.muted }]}>{displayLocationAddress(selectedDeliveryLocation) ?? "Street address not recorded"}</Text>
                   </View>
                 </View>
                 <Text style={[styles.reviewHint, { color: palette.muted }]}>Next, Matty’s pricing safeguards prepare a quote. No payment is taken until you confirm the quote.</Text>
@@ -1101,9 +1102,9 @@ function SelectionSection({
               >
                 <View style={styles.recordChoiceCopy}>
                   <Text numberOfLines={1} style={[styles.recordChoiceText, { color: palette.ink }]}>{displayTitle(item)}</Text>
-                  {firstString(item, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"]) ? (
+                  {displayLocationAddress(item) ? (
                     <Text numberOfLines={2} style={[styles.recordChoiceAddress, { color: palette.muted }]}>
-                      {firstString(item, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"])}
+                      {displayLocationAddress(item)}
                     </Text>
                   ) : null}
                 </View>
