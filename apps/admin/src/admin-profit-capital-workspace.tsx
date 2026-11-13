@@ -19,6 +19,14 @@ const WorkspaceSchema = z.object({
   distributions: z.array(RecordSchema).default([]),
 });
 type Workspace = z.infer<typeof WorkspaceSchema>;
+const ExecutionSchema = z.object({
+  currencyCode: z.string().default("NGN"),
+  participants: z.array(RecordSchema).default([]),
+  periodClosings: z.array(RecordSchema).default([]),
+  schedules: z.array(RecordSchema).default([]),
+  categoryAccounts: z.array(RecordSchema).default([]),
+});
+type ExecutionWorkspace = z.infer<typeof ExecutionSchema>;
 
 const CATEGORIES: readonly { key: CategoryKey; label: string; description: string }[] = [
   { key: "platform_expenses", label: "Platform expenses", description: "General company operating costs" },
@@ -108,6 +116,24 @@ export function AdminProfitCapitalWorkspace() {
   const [participantPercent, setParticipantPercent] = useState("0.1");
   const [fundingCategory, setFundingCategory] = useState<CategoryKey>("skima_savings");
   const [participantNotes, setParticipantNotes] = useState("");
+  const [participantProfileId, setParticipantProfileId] = useState("");
+  const [closeStart, setCloseStart] = useState(todayLocal());
+  const [closeEnd, setCloseEnd] = useState(todayLocal());
+  const [operatingExpenses, setOperatingExpenses] = useState("0");
+  const [refundReserve, setRefundReserve] = useState("0");
+  const [taxReserve, setTaxReserve] = useState("0");
+  const [otherReserve, setOtherReserve] = useState("0");
+  const [excludedCustomerFunds, setExcludedCustomerFunds] = useState("0");
+  const [excludedSupplierFunds, setExcludedSupplierFunds] = useState("0");
+  const [excludedEscrowFunds, setExcludedEscrowFunds] = useState("0");
+  const [closeReference, setCloseReference] = useState("");
+  const [closeNotes, setCloseNotes] = useState("");
+  const [scheduleName, setScheduleName] = useState("SKIMA profit distribution");
+  const [scheduleFrequency, setScheduleFrequency] = useState("monthly");
+  const [scheduleStart, setScheduleStart] = useState(todayLocal());
+  const [scheduleEnd, setScheduleEnd] = useState(todayLocal());
+  const [scheduleNextRunAt, setScheduleNextRunAt] = useState(todayLocal() + "T09:00");
+  const paymentAttempts = useRef<Record<string, { fingerprint: string; key: string }>>({});
   const [agreementParticipant, setAgreementParticipant] = useState("");
   const [vehicleDescription, setVehicleDescription] = useState("");
   const [registrationNumber, setRegistrationNumber] = useState("");
@@ -134,7 +160,20 @@ export function AdminProfitCapitalWorkspace() {
       return WorkspaceSchema.parse(data);
     },
   });
+  const executionQuery = useQuery({
+    queryKey: ["platform-profit-capital-execution-workspace", currency],
+    enabled: status === "authenticated" && canRead,
+    retry: false,
+    queryFn: async (): Promise<ExecutionWorkspace> => {
+      const { data, error } = await rpc.rpc("read_platform_profit_capital_execution_workspace", {
+        target_currency_code: currency,
+      });
+      if (error) throw new Error(error.message);
+      return ExecutionSchema.parse(data);
+    },
+  });
   const workspace = workspaceQuery.data;
+  const execution = executionQuery.data;
   const templates = workspace?.templates ?? [];
   const participants = workspace?.participants ?? [];
   const agreements = workspace?.vehicleAgreements ?? [];
@@ -147,9 +186,14 @@ export function AdminProfitCapitalWorkspace() {
   const allocationTotal = CATEGORIES.reduce((sum, category) => sum + (Number(percentages[category.key]) || 0), 0);
   const distributionDrafts = distributions.filter((item) => value(item, "status") === "draft");
   const providerOptions = participants.filter((item) => ["vehicle_provider", "both"].includes(value(item, "participantType")) && value(item, "status") !== "closed");
+  const executionParticipants = execution?.participants ?? [];
+  const periodClosings = execution?.periodClosings ?? [];
+  const schedules = execution?.schedules ?? [];
+  const categoryAccounts = execution?.categoryAccounts ?? [];
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["platform-profit-capital-workspace"] });
+    await queryClient.invalidateQueries({ queryKey: ["platform-profit-capital-execution-workspace"] });
     await queryClient.invalidateQueries({ queryKey: ["platform-financial-analytics"] });
   };
   const runRpc = async (name: string, args: Record<string, unknown>): Promise<string> => {
@@ -183,7 +227,122 @@ export function AdminProfitCapitalWorkspace() {
     onSuccess: async () => { setNotice({ text: "Allocation template activated for " + currency + ".", tone: "success" }); await refresh(); },
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Template activation failed.", tone: "danger" }),
   });
-  const saveParticipant = useMutation({
+
+  const savePeriodClose = useMutation({
+    mutationFn: () => runRpc("save_platform_profit_period_close", {
+      target_currency_code: currency,
+      target_period_start: closeStart,
+      target_period_end: closeEnd,
+      target_operating_expenses: Number(operatingExpenses),
+      target_refund_chargeback_reserve: Number(refundReserve),
+      target_tax_and_statutory_reserve: Number(taxReserve),
+      target_other_reserves: Number(otherReserve),
+      target_excluded_customer_collections: Number(excludedCustomerFunds),
+      target_excluded_supplier_pass_through: Number(excludedSupplierFunds),
+      target_excluded_escrow_and_unsettled_funds: Number(excludedEscrowFunds),
+      target_reconciliation_reference: closeReference.trim(),
+      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.period-close", currency + ":" + closeStart + ":" + closeEnd + ":" + closeReference.trim()),
+      target_notes: closeNotes.trim() || null,
+    }),
+    onSuccess: async () => {
+      setNotice({ text: "Period close saved as a draft using posted SKIMA platform-revenue ledger entries. A different Finance Admin must approve it.", tone: "success" });
+      await refresh();
+    },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Period close could not be saved.", tone: "danger" }),
+  });
+  const approvePeriodClose = useMutation({
+    mutationFn: (id: string) => runRpc("approve_platform_profit_period_close", { target_close_id: id }),
+    onSuccess: async () => {
+      setNotice({ text: "Period close approved. A distribution can now be created from this reconciled close.", tone: "success" });
+      await refresh();
+    },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Period close approval failed.", tone: "danger" }),
+  });
+  const createSchedule = useMutation({
+    mutationFn: () => {
+      if (!activeTemplate) throw new Error("Activate an allocation template before creating a schedule.");
+      return runRpc("save_platform_profit_distribution_schedule", {
+        target_display_name: scheduleName.trim(),
+        target_currency_code: currency,
+        target_template_id: value(activeTemplate, "id"),
+        target_frequency: scheduleFrequency,
+        target_period_start: scheduleStart,
+        target_period_end: scheduleEnd,
+        target_next_run_at: new Date(scheduleNextRunAt).toISOString(),
+        target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.schedule", currency + ":" + scheduleName.trim() + ":" + scheduleStart + ":" + scheduleEnd),
+        target_notes: "Scheduled calculation only. Every period still requires a separately approved Finance close.",
+      });
+    },
+    onSuccess: async () => {
+      setNotice({ text: "Recurring schedule saved. The runtime worker will create draft runs only after a matching approved period close exists.", tone: "success" });
+      await refresh();
+    },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "The recurring schedule could not be saved.", tone: "danger" }),
+  });
+  const setScheduleStatus = useMutation({
+    mutationFn: (input: { id: string; status: string }) => runRpc("set_platform_profit_distribution_schedule_status", {
+      target_schedule_id: input.id,
+      target_status: input.status,
+    }),
+    onSuccess: async () => { setNotice({ text: "Recurring schedule status updated.", tone: "success" }); await refresh(); },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Schedule status could not be updated.", tone: "danger" }),
+  });
+  const fundDistribution = useMutation({
+    mutationFn: (id: string) => runRpc("fund_platform_profit_distribution", {
+      target_distribution_id: id,
+      target_idempotency_key: createClientIdempotencyKey("admin.profit-capital.funding", id),
+    }),
+    onSuccess: async () => { setNotice({ text: "Distribution funded from the SKIMA platform-revenue wallet into the six separate category wallets.", tone: "success" }); await refresh(); },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Distribution funding failed.", tone: "danger" }),
+  });
+  const payParticipantToWallet = useMutation({
+    mutationFn: async (input: { entitlementId: string; amount: number }) => {
+      const fingerprint = input.entitlementId + ":" + String(input.amount);
+      const existing = paymentAttempts.current[input.entitlementId];
+      const key = existing?.fingerprint === fingerprint
+        ? existing.key
+        : createClientIdempotencyKey("admin.profit-capital.participant-wallet-payout", fingerprint);
+      paymentAttempts.current[input.entitlementId] = { fingerprint, key };
+      const { data, error } = await rpc.rpc("pay_platform_profit_participant_entitlement_to_wallet", {
+        target_entitlement_id: input.entitlementId,
+        target_amount: input.amount,
+        target_idempotency_key: key,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    onSuccess: async (_data, input) => {
+      delete paymentAttempts.current[input.entitlementId];
+      setNotice({ text: "Profit participation paid to the linked SKIMA wallet through a posted ledger transfer.", tone: "success" });
+      await refresh();
+    },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Wallet payout failed.", tone: "danger" }),
+  });
+  const payVehicleToWallet = useMutation({
+    mutationFn: async (input: { repaymentId: string; amount: number }) => {
+      const fingerprint = input.repaymentId + ":" + String(input.amount);
+      const existing = paymentAttempts.current[input.repaymentId];
+      const key = existing?.fingerprint === fingerprint
+        ? existing.key
+        : createClientIdempotencyKey("admin.profit-capital.vehicle-wallet-payout", fingerprint);
+      paymentAttempts.current[input.repaymentId] = { fingerprint, key };
+      const { data, error } = await rpc.rpc("pay_platform_vehicle_capital_repayment_to_wallet", {
+        target_repayment_id: input.repaymentId,
+        target_amount: input.amount,
+        target_idempotency_key: key,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    onSuccess: async (_data, input) => {
+      delete paymentAttempts.current[input.repaymentId];
+      setNotice({ text: "Interest-free vehicle principal repaid to the linked SKIMA wallet through a posted ledger transfer.", tone: "success" });
+      await refresh();
+    },
+    onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Vehicle capital wallet payout failed.", tone: "danger" }),
+  });
+
+    const saveParticipant = useMutation({
     mutationFn: () => {
       const payload = {
         target_participant_id: null,
@@ -202,11 +361,19 @@ export function AdminProfitCapitalWorkspace() {
         ? participantAttempt.current.key
         : createClientIdempotencyKey("admin.profit-capital.participant", participantName.trim() + ":" + currency);
       participantAttempt.current = { fingerprint, key };
-      return runRpc("save_platform_profit_participant", { ...payload, target_idempotency_key: key });
+      return runRpc("save_platform_profit_participant", { ...payload, target_idempotency_key: key }).then(async (participantId) => {
+        if (participantProfileId.trim()) {
+          await runRpc("link_platform_profit_participant_profile", {
+            target_participant_id: participantId,
+            target_profile_id: participantProfileId.trim(),
+          });
+        }
+        return participantId;
+      });
     },
     onSuccess: async () => {
       participantAttempt.current = null;
-      setParticipantName(""); setParticipantEmail(""); setParticipantPhone(""); setParticipantNotes("");
+      setParticipantName(""); setParticipantEmail(""); setParticipantPhone(""); setParticipantProfileId(""); setParticipantNotes("");
       setNotice({ text: "Participant saved. This is contractual profit participation, not an issued shareholding.", tone: "success" });
       await refresh();
     },
@@ -309,6 +476,13 @@ export function AdminProfitCapitalWorkspace() {
     && Number.isFinite(Number(distributableProfit)) && Number(distributableProfit) > 0
     && Boolean(distributionStart && distributionEnd && distributionEnd >= distributionStart)
     && distributionNotes.trim().length >= 3;
+  const canSaveClose = canManage
+    && Boolean(closeStart && closeEnd && closeEnd >= closeStart && closeReference.trim().length >= 3)
+    && [operatingExpenses, refundReserve, taxReserve, otherReserve, excludedCustomerFunds, excludedSupplierFunds, excludedEscrowFunds]
+      .every((v) => Number.isFinite(Number(v)) && Number(v) >= 0);
+  const canSaveSchedule = canManage && Boolean(activeTemplate && scheduleName.trim().length >= 3
+    && scheduleStart && scheduleEnd && scheduleEnd >= scheduleStart && scheduleNextRunAt)
+    && new Date(scheduleNextRunAt).toString() !== "Invalid Date";
 
   if (status === "loading") {
     return <div className="skima-profit-capital"><LoadingState label="Loading profit and capital access…" /></div>;
@@ -316,11 +490,12 @@ export function AdminProfitCapitalWorkspace() {
   if (!canRead) {
     return <div className="skima-profit-capital"><PageHeader eyebrow="Money · Capital" title="Profit & capital" description="Manage SKIMA profit allocations, participation and vehicle principal repayment." /><ErrorState title="Finance access required" message="This workspace is restricted to Admins with finance read or profit-capital access." /></div>;
   }
-  if (workspaceQuery.isPending) {
+  if (workspaceQuery.isPending || executionQuery.isPending) {
     return <div className="skima-profit-capital"><LoadingState label="Loading profit and capital records…" /></div>;
   }
-  if (workspaceQuery.error || !workspace) {
-    return <div className="skima-profit-capital"><PageHeader eyebrow="Money · Capital" title="Profit & capital" description="Manage SKIMA profit allocations, participation and vehicle principal repayment." /><ErrorState title="Profit and capital data unavailable" message={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : "The workspace could not be loaded."} onRetry={() => void workspaceQuery.refetch()} /></div>;
+  if (workspaceQuery.error || executionQuery.error || !workspace || !execution) {
+    const error = workspaceQuery.error ?? executionQuery.error;
+    return <div className="skima-profit-capital"><PageHeader eyebrow="Money · Capital" title="Profit & capital" description="Manage SKIMA profit allocations, participation and vehicle principal repayment." /><ErrorState title="Profit and capital data unavailable" message={error instanceof Error ? error.message : "The workspace could not be loaded."} onRetry={() => { void workspaceQuery.refetch(); void executionQuery.refetch(); }} /></div>;
   }
 
   return (
