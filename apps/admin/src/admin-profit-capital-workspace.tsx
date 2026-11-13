@@ -119,6 +119,7 @@ export function AdminProfitCapitalWorkspace() {
   const [distributableProfit, setDistributableProfit] = useState("");
   const [distributionNotes, setDistributionNotes] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { amount: string; transactionId: string; reference: string }>>({});
+  const templateAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const participantAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const agreementAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const distributionAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -159,12 +160,22 @@ export function AdminProfitCapitalWorkspace() {
   };
 
   const saveTemplate = useMutation({
-    mutationFn: () => runRpc("save_platform_profit_allocation_template", {
-      target_template_id: null, target_display_name: templateName.trim(), target_currency_code: currency,
-      target_notes: templateNotes.trim() || null,
-      target_lines: CATEGORIES.map((category) => ({ categoryKey: category.key, allocationPercent: Number(percentages[category.key]) })),
-    }),
-    onSuccess: async () => { setNotice({ text: "Template saved as a draft. Activate it after checking all six percentages.", tone: "success" }); await refresh(); },
+    mutationFn: () => {
+      const payload = {
+        target_template_id: null,
+        target_display_name: templateName.trim(),
+        target_currency_code: currency,
+        target_notes: templateNotes.trim() || null,
+        target_lines: CATEGORIES.map((category) => ({ categoryKey: category.key, allocationPercent: Number(percentages[category.key]) })),
+      };
+      const fingerprint = JSON.stringify(payload);
+      const key = templateAttempt.current?.fingerprint === fingerprint
+        ? templateAttempt.current.key
+        : createClientIdempotencyKey("admin.profit-capital.template", templateName.trim() + ":" + currency);
+      templateAttempt.current = { fingerprint, key };
+      return runRpc("save_platform_profit_allocation_template", { ...payload, target_idempotency_key: key });
+    },
+    onSuccess: async () => { templateAttempt.current = null; setNotice({ text: "Template saved as a draft. Activate it after checking all six percentages.", tone: "success" }); await refresh(); },
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Template save failed.", tone: "danger" }),
   });
   const activateTemplate = useMutation({
