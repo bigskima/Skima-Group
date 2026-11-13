@@ -17,6 +17,13 @@ const AutocompleteSchema = z.object({
   provider: z.string().optional(),
   providerAttribution: z.string().optional(),
 });
+const GeocodeSchema = z.object({
+  addressComponents: z.record(z.string(), z.unknown()).nullable().optional(),
+  formattedAddress: z.string().nullable().optional(),
+  location: z.object({ latitude: z.number(), longitude: z.number() }),
+  placeId: z.string().nullable().optional(),
+  provider: z.string(),
+}).passthrough();
 
 function objectValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -230,21 +237,56 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     });
     return resolveMostSpecificGeography(specificMatches);
   }, [query.data, search]);
-  const useManualAddress = () => {
+  const [manualResolving, setManualResolving] = useState(false);
+  const [manualResolutionMessage, setManualResolutionMessage] = useState<string | null>(null);
+
+  const useManualAddress = async () => {
     const id = asString(manualBase, "id");
-    if (!id || !search) return;
-    onSelect({
-      id,
-      canonical_name: search,
-      display_name: search,
-      formatted_address: search,
-      parent_name: asString(manualBase, "canonical_name") ?? "Nigeria",
-      country_code: "NG",
-      location_source: "manual",
-      geography_source: "canonical_parent",
-      geography_name: asString(manualBase, "geography_name", "canonical_name"),
-      geography_hierarchy_path: asString(manualBase, "hierarchy_path"),
-    });
+    if (!id || !search || manualResolving) return;
+    setManualResolving(true);
+    setManualResolutionMessage(null);
+    try {
+      const resolved = await api.post(
+        "/lpg/maps/geocode",
+        { address: lookupText },
+        GeocodeSchema,
+      );
+      onSelect({
+        id,
+        canonical_name: search,
+        display_name: search,
+        formatted_address: resolved.formattedAddress ?? search,
+        address_components: resolved.addressComponents ?? {},
+        location: resolved.location,
+        place_id: resolved.placeId ?? null,
+        placeId: resolved.placeId ?? null,
+        location_source: "locationiq",
+        geography_source: "canonical_parent",
+        geography_name: asString(manualBase, "geography_name", "canonical_name"),
+        geography_hierarchy_path: asString(manualBase, "hierarchy_path"),
+        parent_name: asString(manualBase, "canonical_name") ?? "Nigeria",
+        country_code: "NG",
+      });
+    } catch {
+      onSelect({
+        id,
+        canonical_name: search,
+        display_name: search,
+        formatted_address: search,
+        address_components: {},
+        location: null,
+        place_id: null,
+        location_source: "manual",
+        geography_source: "canonical_parent",
+        geography_name: asString(manualBase, "geography_name", "canonical_name"),
+        geography_hierarchy_path: asString(manualBase, "hierarchy_path"),
+        parent_name: asString(manualBase, "canonical_name") ?? "Nigeria",
+        country_code: "NG",
+      });
+      setManualResolutionMessage("This address was kept as entered, but a precise map position was not returned. Add a more specific street or landmark if the driver needs a pin-level destination.");
+    } finally {
+      setManualResolving(false);
+    }
   };
 
   return (
@@ -307,11 +349,11 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
           })}
         </View>
         {mode === "address" && manualBase && search.length >= 3 ? (
-          <Pressable accessibilityRole="button" onPress={useManualAddress}
+          <Pressable accessibilityRole="button" disabled={manualResolving} onPress={() => void useManualAddress()}
             style={[styles.manualInline, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
-            <Text style={[styles.manualInlineTitle, { color: palette.brand }]}>Use typed address instead</Text>
+            <Text style={[styles.manualInlineTitle, { color: palette.brand }]}>{manualResolving ? "Resolving typed address…" : "Use typed address instead"}</Text>
             <Text style={[styles.hint, { color: palette.muted }]} numberOfLines={2}>
-              “{search}” will be saved as entered and associated with {asString(manualBase, "canonical_name")}.
+              Search the full street address and retain its coordinates when the map service can resolve it. Parent area: {asString(manualBase, "canonical_name")}.
             </Text>
           </Pressable>
         ) : null}
@@ -324,11 +366,12 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
               : "We couldn’t tie this address to a service area yet. Choose a state, LGA or town from the results so providers receive the correct region."}
           </Text>
           {mode === "address" && manualBase && search.length >= 3 ? (
-            <Pressable accessibilityRole="button" onPress={useManualAddress} style={[styles.manualButton, { borderColor: palette.borderStrong }]}>
-              <Text style={[styles.manualTitle, { color: palette.brand }]}>Use “{search}” as a manual address</Text>
-              <Text style={[styles.hint, { color: palette.muted }]}>It will be associated with {asString(manualBase, "canonical_name")}; add the street, nearby bus stop or house number in the address.</Text>
+            <Pressable accessibilityRole="button" disabled={manualResolving} onPress={() => void useManualAddress()} style={[styles.manualButton, { borderColor: palette.borderStrong }]}>
+              <Text style={[styles.manualTitle, { color: palette.brand }]}>{manualResolving ? "Resolving typed address…" : "Use “" + search + "” as a manual address"}</Text>
+              <Text style={[styles.hint, { color: palette.muted }]}>The street address will be geocoded where possible and linked to {asString(manualBase, "canonical_name")}.</Text>
             </Pressable>
           ) : null}
+          {manualResolutionMessage ? <Text style={[styles.hint, { color: palette.warning }]}>{manualResolutionMessage}</Text> : null}
         </View>
       )}
       {mode === "address" && !selected && autocomplete.data?.providerAttribution ? (
