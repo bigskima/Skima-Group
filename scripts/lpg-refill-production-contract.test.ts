@@ -1127,6 +1127,27 @@ Deno.test("Admin fulfillment availability saves and confirms the effective netwo
 });
 
 
+Deno.test("Refill driver and order read models preserve structured street-level address evidence", async () => {
+  const [migration, records, driverQueue, driverDetail, customerOrder] = await Promise.all([
+    read("supabase/migrations/20261114100000_lpg_refill_street_address_read_models.sql"),
+    read("apps/lpg-mobile/src/native/api/records.ts"),
+    read("apps/lpg-mobile/src/native/ui/JobListScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+  ]);
+
+  assertIncludes(migration, "public.read_lpg_jobs(text,integer)");
+  assertIncludes(migration, "public.read_lpg_job_details(uuid)");
+  assertIncludes(migration, "'pickupLocation'");
+  assertIncludes(migration, "'deliveryLocation'");
+  assertIncludes(migration, "'addressComponents'");
+  assertIncludes(records, "function displayLocationAddress");
+  assertIncludes(records, "isLikelyStreetName(componentName)");
+  assertIncludes(driverQueue, "displayLocationAddress(location)");
+  assertIncludes(driverDetail, "displayLocationAddress(contactLocation)");
+  assertIncludes(customerOrder, "displayLocationAddress(delivery)");
+});
+
 Deno.test("Refill customer address search preserves and displays street-level address details", async () => {
   const [locations, addressSave, locationGateway, refillOrder, stationLocations] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/LocationsScreen.tsx"),
