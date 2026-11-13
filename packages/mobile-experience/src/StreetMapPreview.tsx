@@ -1,4 +1,4 @@
-import { Image } from "expo-image";
+import { Image } from "react-native";
 import { Crosshair, Minus, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -221,8 +221,7 @@ export function StreetMapPreview({
               uri: tile.url,
               headers: { "User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)" },
             }}
-            contentFit="cover"
-            cachePolicy="disk"
+            resizeMode="cover"
             onError={() => setFailedTiles((current) => current.includes(tile.key) ? current : [...current, tile.key])}
             style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]}
           />
