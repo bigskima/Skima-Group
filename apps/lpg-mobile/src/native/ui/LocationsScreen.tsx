@@ -489,9 +489,25 @@ function hasAddress(address: OperationalAddress) {
 }
 
 function compactAddress(location: OperationalLocation) {
-  const parts = [location.address.district, location.address.city, location.address.region]
-    .filter((value): value is string => Boolean(value));
-  return Array.from(new Set(parts)).join(", ") || location.formattedAddress;
+  // Keep the street/house-number line visible in the main selected-location
+  // summary. The previous summary intentionally started at district/city,
+  // which made successful street autocomplete look as though it stopped there.
+  const parts = [
+    location.address.street,
+    location.address.neighbourhood,
+    location.address.district,
+    location.address.city ?? location.address.town ?? location.address.village,
+    location.address.lga,
+    location.address.region ?? location.address.state,
+    location.address.country,
+  ].filter((value): value is string => Boolean(value));
+  const seen = new Set<string>();
+  return parts.filter((part) => {
+    const key = part.trim().toLocaleLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).join(", ") || location.formattedAddress;
 }
 
 function distinctName(address: OperationalAddress) {
