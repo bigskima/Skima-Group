@@ -33,6 +33,8 @@ Deno.test("Profit allocation templates require all six configured buckets to tot
   }
   assertStringIncludes(template, "row_count <> 6 or total_percent <> 100");
   assertStringIncludes(template, "Each allocation category can appear only once");
+  assertStringIncludes(template, "target_idempotency_key text");
+  assertStringIncludes(template, "existing_template.idempotency_key");
   assertStringIncludes(migration, "create unique index if not exists platform_profit_allocation_one_active_per_currency");
 });
 
