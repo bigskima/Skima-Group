@@ -40,6 +40,7 @@ const screenRoutes: Readonly<Record<string, string>> = {
   revenue: "/money/revenue",
   finance: "/money/balances",
   "money-analytics": "/money/analytics",
+  "profit-capital": "/money/profit-capital",
   "delivery-pricing": "/money/pricing/delivery",
   "driver-pricing": "/money/pricing/drivers",
   "logistics-fees": "/money/pricing/logistics",
@@ -209,6 +210,7 @@ const moneyScreenLabels: Readonly<Record<string, string>> = {
   "/money/revenue": "Revenue",
   "/money/balances": "Balances & deposits",
   "/money/analytics": "Financial analytics",
+  "/money/profit-capital": "Profit & capital",
   "/money/withdrawals": "Withdrawals",
   "/money/settlements": "Settlements & escrow",
   "/money/pricing": "Pricing",
@@ -476,6 +478,7 @@ function buildMoneyWorkspaceNavigation(items: readonly NavigationItem[]): readon
   if (finance) {
     navigation.push(
       { ...finance, key: "money-analytics", label: "Financial analytics", href: "/money/analytics" },
+      { ...finance, key: "profit-capital", label: "Profit & capital", href: "/money/profit-capital" },
       { ...finance, key: "money-balances", label: "Balances & deposits", href: "/money/balances" },
       { ...finance, key: "money-withdrawals", label: "Withdrawals", href: "/money/withdrawals" },
       { ...finance, key: "money-settlements", label: "Settlements & escrow", href: "/money/settlements" },
