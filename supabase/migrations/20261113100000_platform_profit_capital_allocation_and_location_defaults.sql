@@ -420,8 +420,7 @@ begin
     'platform_profit_participant_entitlements',
     'platform_vehicle_capital_repayments',
     'platform_profit_participant_payments',
-    'platform_vehicle_capital_repayment_payments',
-    'platform_profit_capital_audit_events'
+    'platform_vehicle_capital_repayment_payments'
   ]
   loop
     execute format('revoke all on table public.%I from public, anon, authenticated', table_name);
@@ -489,7 +488,18 @@ begin
     );
   end loop;
 end;
-$$;
+$;
+
+create policy platform_profit_capital_audit_events_finance_read
+on public.platform_profit_capital_audit_events
+for select to authenticated
+using (
+  public.is_platform_super_admin()
+  or public.has_permission('platform.profit_capital.read', null)
+  or public.has_permission('platform.profit_capital.manage', null)
+  or public.has_permission('platform.financial.read', null)
+  or public.has_permission('platform.financial.manage', null)
+);
 
 create or replace function public.read_platform_profit_capital_workspace(
   target_currency_code text default 'NGN'
