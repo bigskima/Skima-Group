@@ -424,7 +424,7 @@ begin
     execute format('grant select on table public.%I to authenticated', table_name);
   end loop;
 end;
-$;
+$$;
 
 revoke all on table public.platform_profit_capital_transaction_claims
   from public, anon, authenticated;
