@@ -619,11 +619,14 @@ function requestKindLabel(value: string | null) {
 
 function locationSummary(item: Record<string, unknown>) {
   return uniqueParts([
-    firstString(item, ["city"]),
-    firstString(item, ["lga"]),
-    firstString(item, ["state"]),
+    firstString(item, ["street", "road", "street_name"]),
+    firstString(item, ["neighbourhood", "neighborhood", "sublocality"]),
+    firstString(item, ["district", "locality"]),
+    firstString(item, ["city", "town", "village"]),
+    firstString(item, ["lga", "county"]),
+    firstString(item, ["state", "region"]),
     firstString(item, ["country"]),
-  ]).join(", ") || "Structured address needs completion";
+  ]).join(", ") || firstString(item, ["formattedAddress", "formatted_address"]) || "Structured address needs completion";
 }
 
 function coordinateSummary(item: Record<string, unknown>) {
@@ -634,8 +637,11 @@ function coordinateSummary(item: Record<string, unknown>) {
 
 function compactAddress(location: OperationalLocation) {
   return uniqueParts([
+    location.address.street,
+    location.address.neighbourhood,
+    location.address.district,
     location.address.city ?? location.address.town ?? location.address.village,
-    location.address.lga ?? location.address.district,
+    location.address.lga,
     location.address.state ?? location.address.region,
     location.address.country,
   ]).join(", ") || location.formattedAddress;
