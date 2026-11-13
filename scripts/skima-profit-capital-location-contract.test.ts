@@ -130,6 +130,7 @@ Deno.test("Saved customer locations expose one persistent preferred address acro
   assertStringIncludes(storeScreen, 'session.api.post("/lpg/maps/autocomplete"');
   assertStringIncludes(storeScreen, 'session.api.post("/lpg/maps/geocode"');
   assertStringIncludes(storeScreen, 'session.api.post("/lpg/locations"');
+  assertStringIncludes(storeScreen, 'captureSource:"GEOCODED"');
   assertStringIncludes(storeScreen, "Set as my preferred saved address");
   assertStringIncludes(storeScreen, "addressSaveKey");
 });
