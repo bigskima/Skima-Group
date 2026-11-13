@@ -74,6 +74,24 @@ function resolveByAddressComponents(geographies: readonly Place[], candidates: r
 
 function nearestGeography(prediction: Place, geographies: readonly Place[]) {
   const address = objectValue(prediction.addressComponents ?? prediction.address_components) ?? {};
+  // Resolve the service-area parent independently from the street. Try the
+  // most specific administrative components one at a time: a city name such
+  // as "Onitsha" can be shared by North/South LGAs, while county/state_district
+  // may identify the correct LGA and must still get a chance to resolve.
+  const lgaCandidates = [
+    asString(address, "lga"),
+    asString(address, "state_district"),
+    asString(address, "county"),
+    asString(address, "city_district"),
+    asString(address, "district"),
+    asString(address, "municipality"),
+    asString(address, "suburb"),
+  ].filter((value): value is string => Boolean(value));
+  for (const candidate of lgaCandidates) {
+    const resolved = resolveByAddressComponents(geographies, [candidate]);
+    if (resolved) return resolved;
+  }
+
   const localityCandidates = [
     asString(address, "village"),
     asString(address, "town"),
@@ -81,31 +99,20 @@ function nearestGeography(prediction: Place, geographies: readonly Place[]) {
     asString(address, "locality"),
     asString(address, "city"),
     asString(address, "name"),
-    asString(address, "district"),
-    asString(address, "county"),
-    asString(address, "municipality"),
-    asString(address, "lga"),
   ].filter((value): value is string => Boolean(value));
-  const lgaCandidates = [
-    asString(address, "lga"),
-    asString(address, "district"),
-    asString(address, "city_district"),
-    asString(address, "state_district"),
-    asString(address, "county"),
-    asString(address, "municipality"),
-    asString(address, "suburb"),
-  ].filter((value): value is string => Boolean(value));
+  for (const candidate of localityCandidates) {
+    const resolved = resolveByAddressComponents(geographies, [candidate]);
+    if (resolved) return resolved;
+  }
+
   const stateCandidates = [
     asString(address, "state"),
     asString(address, "region"),
   ].filter((value): value is string => Boolean(value));
-
-  const specificMatches = geographies.filter((item) => geographyMatches(item, localityCandidates));
-  if (specificMatches.length) return resolveMostSpecificGeography(specificMatches);
-  const lgaMatches = geographies.filter((item) => geographyMatches(item, lgaCandidates));
-  if (lgaMatches.length) return resolveMostSpecificGeography(lgaMatches);
-  const state = resolveByAddressComponents(geographies, stateCandidates, false);
-  if (state) return state;
+  for (const candidate of stateCandidates) {
+    const resolved = resolveByAddressComponents(geographies, [candidate], false);
+    if (resolved) return resolved;
+  }
 
   const description = asString(prediction, "description", "formattedAddress", "formatted_address");
   if (description) {
@@ -223,7 +230,20 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   const addressContextSearch = useMemo(() => {
     const first = autocomplete.data?.predictions?.[0];
     const address = objectValue(first?.addressComponents ?? first?.address_components) ?? {};
-    return asString(address, "lga", "state_district", "county", "city_district", "district", "municipality", "city", "town", "village", "state", "region") ?? "";
+    const candidates = [
+      asString(address, "lga"),
+      asString(address, "state_district"),
+      asString(address, "county"),
+      asString(address, "city_district"),
+      asString(address, "district"),
+      asString(address, "municipality"),
+      asString(address, "suburb"),
+      asString(address, "city"),
+      asString(address, "town"),
+      asString(address, "village"),
+      asString(address, "state", "region"),
+    ].filter((candidate): candidate is string => Boolean(candidate));
+    return [...new Set(candidates)].join(" ");
   }, [autocomplete.data]);
   const addressContextQuery = useQuery<Place[]>({
     queryKey: ["skima-logistics", "address-parent-geography", addressContextSearch.toLowerCase()],
