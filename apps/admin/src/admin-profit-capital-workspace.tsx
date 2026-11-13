@@ -140,10 +140,7 @@ export function AdminProfitCapitalWorkspace() {
   const [agreementReference, setAgreementReference] = useState("");
   const [principalAmount, setPrincipalAmount] = useState("");
   const [agreementNotes, setAgreementNotes] = useState("");
-  const [distributionStart, setDistributionStart] = useState(todayLocal());
-  const [distributionEnd, setDistributionEnd] = useState(todayLocal());
-  const [distributableProfit, setDistributableProfit] = useState("");
-  const [distributionNotes, setDistributionNotes] = useState("");
+  const [selectedPeriodCloseId, setSelectedPeriodCloseId] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { amount: string; transactionId: string; reference: string }>>({});
   const templateAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const participantAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -409,26 +406,29 @@ export function AdminProfitCapitalWorkspace() {
   });
   const createDistribution = useMutation({
     mutationFn: () => {
+      const closeRecord = periodClosings.find((item) => value(item, "id") === selectedPeriodCloseId);
       if (!activeTemplate) throw new Error("Activate an allocation template before creating a distribution.");
-      const payload = {
-        target_template_id: value(activeTemplate, "id"),
-        target_currency_code: currency,
-        target_period_start: distributionStart,
-        target_period_end: distributionEnd,
-        target_distributable_profit: Number(distributableProfit),
-        target_notes: distributionNotes.trim() || null,
-      };
-      const fingerprint = JSON.stringify(payload);
+      if (!closeRecord || value(closeRecord, "status") !== "approved") {
+        throw new Error("Choose a Finance-approved period close before creating a distribution.");
+      }
+      if (!(numberValue(closeRecord, "distributableProfit") > 0)) {
+        throw new Error("This approved close has no positive distributable profit.");
+      }
+      const fingerprint = selectedPeriodCloseId + ":" + value(activeTemplate, "id");
       const key = distributionAttempt.current?.fingerprint === fingerprint
         ? distributionAttempt.current.key
-        : createClientIdempotencyKey("admin.profit-capital.distribution", currency + ":" + distributionStart + ":" + distributionEnd);
+        : createClientIdempotencyKey("admin.profit-capital.distribution-from-close", fingerprint);
       distributionAttempt.current = { fingerprint, key };
-      return runRpc("create_platform_profit_distribution", { ...payload, target_idempotency_key: key });
+      return runRpc("create_platform_profit_distribution_from_close", {
+        target_template_id: value(activeTemplate, "id"),
+        target_close_id: selectedPeriodCloseId,
+        target_idempotency_key: key,
+      });
     },
     onSuccess: async () => {
       distributionAttempt.current = null;
-      setDistributableProfit(""); setDistributionNotes("");
-      setNotice({ text: "Draft distribution calculated. Review the allocation and payables before approval.", tone: "success" });
+      setSelectedPeriodCloseId("");
+      setNotice({ text: "Draft distribution calculated from the approved period close. Review all six categories and payable items before approval.", tone: "success" });
       await refresh();
     },
     onError: (error) => setNotice({ text: error instanceof Error ? error.message : "Distribution calculation failed.", tone: "danger" }),
@@ -472,10 +472,10 @@ export function AdminProfitCapitalWorkspace() {
     && (participantType === "vehicle_provider" || Number(participantPercent) > 0);
   const canSaveAgreement = canManage && Boolean(agreementParticipant && vehicleDescription.trim() && agreementReference.trim())
     && Number.isFinite(Number(principalAmount)) && Number(principalAmount) > 0;
-  const canCreateDistribution = canManage && Boolean(activeTemplate)
-    && Number.isFinite(Number(distributableProfit)) && Number(distributableProfit) > 0
-    && Boolean(distributionStart && distributionEnd && distributionEnd >= distributionStart)
-    && distributionNotes.trim().length >= 3;
+  const selectedClose = periodClosings.find((item) => value(item, "id") === selectedPeriodCloseId) ?? null;
+  const canCreateDistribution = canManage && Boolean(activeTemplate && selectedClose)
+    && value(selectedClose, "status") === "approved"
+    && numberValue(selectedClose, "distributableProfit") > 0;
   const canSaveClose = canManage
     && Boolean(closeStart && closeEnd && closeEnd >= closeStart && closeReference.trim().length >= 3)
     && [operatingExpenses, refundReserve, taxReserve, otherReserve, excludedCustomerFunds, excludedSupplierFunds, excludedEscrowFunds]
@@ -547,6 +547,7 @@ export function AdminProfitCapitalWorkspace() {
           ]} />
           <Field label="Profit participation (%)" value={participantPercent} onChange={setParticipantPercent} type="number" min="0" max="100" step="0.0001" />
           <SelectField label="Pay from allocation category" value={fundingCategory} onChange={(next) => setFundingCategory(next as CategoryKey)} options={CATEGORIES.map((item) => ({ label: item.label, value: item.key }))} />
+          <Field label="Linked SKIMA profile UUID (optional)" value={participantProfileId} onChange={setParticipantProfileId} placeholder="Enables automatic internal wallet payout" />
           <Field label="Email (optional)" value={participantEmail} onChange={setParticipantEmail} type="email" placeholder="beneficiary@example.com" />
           <Field label="Phone (optional)" value={participantPhone} onChange={setParticipantPhone} placeholder="Phone number" />
           <Field label="Agreement note" value={participantNotes} onChange={setParticipantNotes} placeholder="Signed agreement reference / terms" />
@@ -586,15 +587,20 @@ export function AdminProfitCapitalWorkspace() {
         </table></div>
       </Panel>
 
-      <Panel title="Calculate a profit distribution" description="Enter only a Finance-approved, reconciled distributable-profit figure. Customer collections, supplier funds, escrow and other liabilities must be excluded.">
+      <Panel title="Create a distribution from an approved close" description="The distributable amount comes from the approved period close, not a manually typed figure. Customer collections, supplier funds, escrow and other liabilities are excluded from the revenue base.">
         <div className="skima-pc-form-grid">
-          <Field label="Period starts" value={distributionStart} onChange={setDistributionStart} type="date" />
-          <Field label="Period ends" value={distributionEnd} onChange={setDistributionEnd} type="date" min={distributionStart} />
-          <Field label={"Approved distributable profit (" + currency + ")"} value={distributableProfit} onChange={setDistributableProfit} type="number" min="0.01" step="0.01" />
-          <Field label="Reconciliation reference (required)" value={distributionNotes} onChange={setDistributionNotes} placeholder="Approved P&L close or finance report reference" required />
+          <SelectField label="Finance-approved period close" value={selectedPeriodCloseId} onChange={setSelectedPeriodCloseId} options={[
+            { label: "Choose an approved period close", value: "" },
+            ...periodClosings.filter((item) => value(item, "status") === "approved" && numberValue(item, "distributableProfit") > 0).map((item) => ({
+              label: dateLabel(value(item, "periodStart")) + " – " + dateLabel(value(item, "periodEnd")) + " · " + money(numberValue(item, "distributableProfit"), currency),
+              value: value(item, "id"),
+            })),
+          ]} />
+          <Field label="Allocation template" value={activeTemplate ? value(activeTemplate, "displayName") : "No active template"} onChange={() => undefined} disabled />
         </div>
-        {activeTemplate ? <Notice tone="success">Active template: {value(activeTemplate, "displayName")} · {records(activeTemplate.lines).length} allocation categories</Notice> : <Notice tone="warning">No active template exists for {currency}. Save and activate one before calculating profit.</Notice>}
-        <div className="skima-pc-actions"><Button disabled={!canCreateDistribution || createDistribution.isPending} isLoading={createDistribution.isPending} onClick={() => createDistribution.mutate()}>Calculate draft distribution</Button>{distributionDrafts.length ? <span className="skima-muted">{distributionDrafts.length} draft(s) await review.</span> : null}</div>
+        {selectedClose ? <Notice tone="success">Approved distributable profit: {money(numberValue(selectedClose, "distributableProfit"), currency)} · Reconciliation: {value(selectedClose, "reconciliationReference")}</Notice> : <Notice tone="warning">Select an approved period close with positive distributable profit. Draft and unapproved closes cannot be distributed.</Notice>}
+        {!activeTemplate ? <Notice tone="warning">Activate an allocation template for {currency} before creating the distribution.</Notice> : null}
+        <div className="skima-pc-actions"><Button disabled={!canCreateDistribution || createDistribution.isPending} isLoading={createDistribution.isPending} onClick={() => createDistribution.mutate()}>Calculate draft from approved close</Button>{distributionDrafts.length ? <span className="skima-muted">{distributionDrafts.length} draft(s) await review.</span> : null}</div>
       </Panel>
 
       <Panel title="Distribution history and payment records" description="Review the saved allocation snapshot, participant entitlements and vehicle principal repayments. Approval does not itself send money. A payment is recorded only after a matching posted ledger transfer exists.">
