@@ -201,7 +201,7 @@ Deno.test("Funding and payouts move value using balanced posted ledger transfers
     executionMigration.indexOf("create or replace function public.fund_platform_profit_distribution("),
     executionMigration.indexOf("create or replace function public.ensure_platform_profit_beneficiary_wallet("),
   );
-  assertStringIncludes(funding, "public.platform_revenue");
+  assertStringIncludes(funding, "wallet_type = 'platform_revenue'");
   assertStringIncludes(funding, "public.ensure_platform_profit_category_wallet");
   assertStringIncludes(funding, "public.post_financial_transaction(");
   assertStringIncludes(funding, "'direction', 'debit'");
@@ -230,7 +230,7 @@ Deno.test("Admin exposes close approval, recurring schedules, category funding a
   assertStringIncludes(adminWorkspace, "save_platform_profit_period_close");
   assertStringIncludes(adminWorkspace, "approve_platform_profit_period_close");
   assertStringIncludes(adminWorkspace, "save_platform_profit_distribution_schedule");
-  assertStringIncludes(adminWorkspace, "process_due_platform_profit_distribution_schedules");
+  assertStringIncludes(runtimeWorker, "process_due_platform_profit_distribution_schedules");
   assertStringIncludes(adminWorkspace, "create_platform_profit_distribution_from_close");
   assertStringIncludes(adminWorkspace, "fund_platform_profit_distribution");
   assertStringIncludes(adminWorkspace, "pay_platform_profit_participant_entitlement_to_wallet");
