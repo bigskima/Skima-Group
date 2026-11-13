@@ -826,3 +826,15 @@ Deno.test("Companies opt in to offline fulfilment and customers can only select 
   requireText(detail, "SKIMA collects only your booking fee", "offline fulfilment does not collect the provider delivery price from the customer wallet");
   requireText(offlineFulfilmentPaymentMigration, "accepts_offline_customer_payment boolean not null default false", "provider offline acceptance is opt-in by default");
 });
+
+Deno.test("Logistics customers can save searched street addresses and choose a preferred shared location", async () => {
+  const request = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsRequestScreen.tsx");
+  const picker = await Deno.readTextFile("apps/logistics-mobile/src/ui/GeographyPicker.tsx");
+  requireText(request, 'session.api.post("/lpg/locations"', "selected Logistics addresses are saved through the shared customer-location endpoint");
+  requireText(request, 'source: "skima.logistics.mobile"', "saved Logistics addresses retain their source application");
+  requireText(request, "Save these pickup and destination addresses to My saved locations", "customers can save both route endpoints for future use");
+  requireText(request, 'set_lpg_customer_location_default', "a saved address can be made preferred");
+  requireText(request, "displayPlaceAddress(place)", "street-level address is retained in the selected route label");
+  requireText(picker, '"/lpg/maps/geocode"', "manually typed address is geocoded before selection");
+  requireText(picker, '"/lpg/maps/reverse-geocode"', "map-pin address is reverse-geocoded before selection");
+});
