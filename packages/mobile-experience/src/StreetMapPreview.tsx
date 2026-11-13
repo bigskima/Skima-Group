@@ -51,6 +51,10 @@ function validPoint(point: StreetMapCoordinate | null | undefined): point is Str
   );
 }
 
+function validMapPoint(point: StreetMapPoint | null | undefined): point is StreetMapPoint {
+  return validPoint(point);
+}
+
 function project(point: StreetMapCoordinate, zoom: number) {
   const scale = TILE_SIZE * 2 ** zoom;
   const latitude = Math.max(-85.05112878, Math.min(85.05112878, point.latitude));
@@ -128,7 +132,7 @@ export function StreetMapPreview({
         });
       }
     }
-    const markers = points.filter(validPoint).map((point) => {
+    const markers = points.filter(validMapPoint).map((point) => {
       const pixel = project(point, zoom);
       return { ...point, left: pixel.x - leftWorld, top: pixel.y - topWorld };
     });
