@@ -36,8 +36,12 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $
 begin
+  perform pg_advisory_xact_lock(
+    hashtextextended('lpg_customer_location_default:' || new.owner_user_id::text, 0)
+  );
+
   if tg_op = 'INSERT'
      and new.status = 'active'
      and not exists (
