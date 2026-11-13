@@ -235,7 +235,8 @@ export function StreetMapPreview({
           </View>
         ) : null}
         {interactive ? <View pointerEvents="none" style={styles.hint}><Text style={styles.hintText}>Drag to move · Tap to place pin</Text></View> : null}
-        {failedTiles.length > 0 && failedTiles.length >= canvas.tiles.length ? (
+        {canvas.tiles.filter((tile) => failedTiles.includes(tile.key)).length > 0
+          && canvas.tiles.every((tile) => failedTiles.includes(tile.key)) ? (
           <View pointerEvents="none" style={styles.tileError}>
             <Text style={styles.tileErrorText}>Map tiles could not load. Check your internet connection; you can still enter the full address.</Text>
           </View>
