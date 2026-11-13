@@ -62,6 +62,7 @@ Deno.test("Profit participation is contractual and is bounded by each approved f
   assertStringIncludes(distribution, "nullif(btrim(target_notes), '') is null");
   assertStringIncludes(distribution, "Active profit participation percentages exceed 100%");
   assertStringIncludes(distribution, "Profit participation exceeds the available amount in its configured funding category");
+  assertStringIncludes(distribution, "greatest(0, allocation.allocated_amount - allocation.committed_amount)");
 });
 
 Deno.test("Vehicle capital agreements carry zero interest and repayment cannot exceed unpaid principal", () => {
