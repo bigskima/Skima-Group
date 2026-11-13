@@ -1409,27 +1409,112 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  distribution_id uuid;
-  execution_status_value text;
+  target_distribution_id uuid;
+  target_category_key text;
+  target_profile_id uuid;
+  source_category_wallet_id uuid;
+  transaction_record public.financial_transactions%rowtype;
+  expected_subject_type text;
+  expected_subject_id uuid;
 begin
   if tg_table_name = 'platform_profit_participant_payments' then
-    select entitlement.distribution_id into distribution_id
+    select entitlement.distribution_id,
+           entitlement.funding_category,
+           participant.profile_id
+    into target_distribution_id, target_category_key, target_profile_id
     from public.platform_profit_participant_entitlements entitlement
+    join public.platform_profit_participants participant
+      on participant.id = entitlement.participant_id
     where entitlement.id = new.entitlement_id;
+    expected_subject_type := 'platform_profit_entitlement';
+    expected_subject_id := new.entitlement_id;
   else
-    select repayment.distribution_id into distribution_id
+    select repayment.distribution_id,
+           'vehicle_repayment',
+           participant.profile_id
+    into target_distribution_id, target_category_key, target_profile_id
     from public.platform_vehicle_capital_repayments repayment
+    join public.platform_vehicle_capital_agreements agreement
+      on agreement.id = repayment.agreement_id
+    join public.platform_profit_participants participant
+      on participant.id = agreement.participant_id
     where repayment.id = new.repayment_id;
+    expected_subject_type := 'platform_vehicle_capital_repayment';
+    expected_subject_id := new.repayment_id;
   end if;
 
-  select distribution.execution_status into execution_status_value
-  from public.platform_profit_distributions distribution
-  where distribution.id = distribution_id;
-
-  if coalesce(execution_status_value, '') <> 'funded' then
+  if target_distribution_id is null or target_profile_id is null then
     raise exception using errcode = '23514',
-      message = 'Fund the approved distribution from SKIMA platform revenue before recording beneficiary payments';
+      message = 'A linked SKIMA profile and valid profit-capital obligation are required before payout';
   end if;
+
+  if not exists (
+    select 1
+    from public.platform_profit_distributions distribution
+    where distribution.id = target_distribution_id
+      and distribution.execution_status = 'funded'
+      and distribution.funding_transaction_id is not null
+  ) then
+    raise exception using errcode = '23514',
+      message = 'Fund the approved distribution from SKIMA platform revenue before paying a beneficiary';
+  end if;
+
+  select allocation.category_wallet_id into source_category_wallet_id
+  from public.platform_profit_distribution_allocations allocation
+  where allocation.distribution_id = target_distribution_id
+    and allocation.category_key = target_category_key;
+
+  if source_category_wallet_id is null then
+    raise exception using errcode = '23514',
+      message = 'The approved profit category has no funded ledger wallet';
+  end if;
+
+  select * into transaction_record
+  from public.financial_transactions transaction_row
+  where transaction_row.id = new.financial_transaction_id;
+
+  if transaction_record.id is null
+     or transaction_record.status <> 'posted'
+     or transaction_record.transaction_type <> 'transfer'
+     or transaction_record.source <> 'platform.profit_capital.payout'
+     or transaction_record.subject_type <> expected_subject_type
+     or transaction_record.subject_id <> expected_subject_id
+     or transaction_record.currency_code <> new.currency_code
+     or transaction_record.total_amount <> new.amount then
+    raise exception using errcode = '23514',
+      message = 'Payout transaction must be a posted, exact-value SKIMA profit-capital transfer linked to this specific obligation';
+  end if;
+
+  if not exists (
+    select 1
+    from public.wallet_ledger_entries debit_entry
+    where debit_entry.transaction_id = new.financial_transaction_id
+      and debit_entry.wallet_id = source_category_wallet_id
+      and debit_entry.direction = 'debit'
+      and debit_entry.amount = new.amount
+  ) then
+    raise exception using errcode = '23514',
+      message = 'Payout transaction does not debit the correct funded profit category wallet';
+  end if;
+
+  if not exists (
+    select 1
+    from public.wallet_ledger_entries credit_entry
+    join public.wallet_accounts beneficiary_wallet
+      on beneficiary_wallet.id = credit_entry.wallet_id
+    where credit_entry.transaction_id = new.financial_transaction_id
+      and credit_entry.direction = 'credit'
+      and credit_entry.amount = new.amount
+      and beneficiary_wallet.wallet_type = 'customer'
+      and beneficiary_wallet.owner_entity_type = 'user'
+      and beneficiary_wallet.owner_entity_id = target_profile_id
+      and beneficiary_wallet.currency_code = new.currency_code
+      and beneficiary_wallet.status = 'active'
+  ) then
+    raise exception using errcode = '23514',
+      message = 'Payout transaction does not credit the linked participant SKIMA wallet';
+  end if;
+
   return new;
 end;
 $$;
