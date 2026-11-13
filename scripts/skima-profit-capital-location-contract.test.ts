@@ -10,6 +10,10 @@ const executionMigration = await Deno.readTextFile(
 const runtimeWorker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
 const streetMap = await Deno.readTextFile("packages/mobile-experience/src/StreetMapPreview.tsx");
 const refillLocations = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/LocationsScreen.tsx");
+const nativeOperationalMap = await Deno.readTextFile("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
+const webOperationalMap = await Deno.readTextFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
+const rendererConfiguration = await Deno.readTextFile("apps/lpg-mobile/src/native/domains/maps/useMapsRendererConfiguration.ts");
+const mapsRuntime = await Deno.readTextFile("apps/lpg-mobile/src/native/domains/maps/index.ts");
 const stationLocations = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationLocationScreens.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const adminWorkspace = await Deno.readTextFile("apps/admin/src/admin-profit-capital-workspace.tsx");
@@ -262,6 +266,8 @@ Deno.test("Street search retains full provider address while resolving an LGA pa
   assertStringIncludes(logisticsPicker, "canonical_name: description");
   assertStringIncludes(logisticsPicker, "formatted_address:");
   assertStringIncludes(logisticsPicker, "street_line: streetLine || street || null");
+  assertStringIncludes(logisticsPicker, 'asString(address, "route", "road", "street")');
+  assertStringIncludes(logisticsPicker, "normalizedStreet.startsWith(normalizedHouseNumber + \" \")");
   assertStringIncludes(logisticsPicker, "location: location");
   assertStringIncludes(logisticsPicker, "coordinates: place.location");
 });
@@ -276,4 +282,12 @@ Deno.test("Keyless map preview renders OSM tiles in all customer address workflo
   assertStringIncludes(refillLocations, "<StreetMapPreview");
   assertStringIncludes(stationLocations, "<StreetMapPreview");
   assertStringIncludes(storeScreen, "<StreetMapPreview");
+  assertStringIncludes(nativeOperationalMap, "keylessRasterStyle(mapRenderer.tileTemplate, mapRenderer.attribution)");
+  assertStringIncludes(nativeOperationalMap, "skima-osm-native-user-agent");
+  assertStringIncludes(webOperationalMap, '"User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)"');
+  assertStringIncludes(webOperationalMap, 'cachePolicy="disk"');
+  assertStringIncludes(rendererConfiguration, "isUsablePublicTileTemplate(configuration.tile_url_template)");
+  assertStringIncludes(rendererConfiguration, "return query.data ?? fallback");
+  assertStringIncludes(mapsRuntime, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertStringIncludes(mapsRuntime, "function selectKeylessRaster");
 });
