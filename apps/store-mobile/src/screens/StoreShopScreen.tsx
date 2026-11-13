@@ -219,6 +219,7 @@ export function StoreShopScreen(){
          <Text style={{color:palette.ink,fontSize:10,fontWeight:"700"}}>{description}</Text>
         </Pressable>;
        })}
+       {addressAutocomplete.data?.providerAttribution?<Text style={{color:palette.muted,fontSize:8}}>{addressAutocomplete.data.providerAttribution}</Text>:null}
        <TextInput value={addressInstructions} onChangeText={setAddressInstructions} placeholder="Gate, floor or delivery instructions (optional)" placeholderTextColor={palette.muted} multiline style={[styles.note,{color:palette.ink,borderColor:palette.border,minHeight:52,textAlignVertical:"top"}]}/>
        <View style={{flexDirection:"row",alignItems:"center",gap:8}}>
         <Pressable accessibilityRole="checkbox" accessibilityState={{checked:makeAddressPreferred}} onPress={()=>setMakeAddressPreferred(value=>!value)} style={{width:20,height:20,borderWidth:1,borderRadius:5,borderColor:makeAddressPreferred?palette.brand:palette.border,backgroundColor:makeAddressPreferred?palette.brand:"transparent",alignItems:"center",justifyContent:"center"}}>
@@ -227,9 +228,10 @@ export function StoreShopScreen(){
         <Text style={{color:palette.muted,fontSize:10,flex:1}} onPress={()=>setMakeAddressPreferred(value=>!value)}>Set as my preferred saved address</Text>
        </View>
        <ActionButton label={addressResolving?"Finding address…":addressSaving?"Saving address…":"Find and save typed address"} disabled={addressResolving||addressSaving||addressSearch.trim().length<5||addressLabel.trim().length<2} loading={addressResolving||addressSaving} onPress={()=>void saveStoreAddress(addressSearch)}/>
-       {addressNotice?<Notice text={addressNotice} tone={addressNotice.startsWith("Address saved")?"success":"warning"}/>:null}
+       {addressNotice&&!addressNotice.startsWith("Address saved and selected")?<Notice text={addressNotice} tone="warning"/>:null}
        {addressAutocomplete.error?<Text style={{color:palette.warning,fontSize:10}}>Address suggestions are unavailable. You can still submit the full address to the geocoder above.</Text>:null}
       </View>:null}
+      {addressNotice&&!addressEditorOpen?<Notice text={addressNotice} tone={addressNotice.startsWith("Address saved and selected")?"success":"warning"}/>:null}
       {!addresses.length?<Notice text="No saved delivery address is available. Add one here or choose pickup." tone="warning"/>:null}
      </View>:<Notice text="Pickup selected. Your order will use the Store pickup location."/>}
     <View style={{gap:6}}><Text style={{color:palette.ink,fontSize:11,fontWeight:"900"}}>Order note <Text style={{color:palette.muted,fontWeight:"500"}}>(optional)</Text></Text><TextInput value={note} editable={!checkout.isPending} onChangeText={value=>{setCheckoutKey(makeIdempotencyKey("store-checkout"));setNote(value);}} placeholder="Add delivery instructions or a note" placeholderTextColor={palette.muted} multiline style={[styles.note,{borderColor:palette.border,color:palette.ink,minHeight:76,textAlignVertical:"top"}]}/></View>
