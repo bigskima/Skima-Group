@@ -103,6 +103,7 @@ export function AdminProfitCapitalWorkspace() {
     "platform.profit_capital.read", "platform.profit_capital.manage", "platform.financial.read", "platform.financial.manage",
   ].includes(permission));
   const canManage = isSuperAdmin || permissions.includes("platform.profit_capital.manage") || permissions.includes("platform.financial.manage");
+  const canPostCapitalFunds = isSuperAdmin || permissions.includes("platform.financial.manage");
 
   const [currency, setCurrency] = useState("NGN");
   const [notice, setNotice] = useState<{ text: string; tone: "success" | "warning" | "danger" } | null>(null);
@@ -529,6 +530,7 @@ export function AdminProfitCapitalWorkspace() {
         description="Configure company profit allocations, profit-only participation and interest-free vehicle capital repayment."
         actions={<Button variant="outline" onClick={() => void workspaceQuery.refetch()}>Refresh</Button>} />
       {!canManage ? <Notice tone="warning">Read-only access. A Finance Admin with management permission must create and approve records.</Notice> : null}
+      {canManage && !canPostCapitalFunds ? <Notice tone="warning">You can manage allocations and approvals, but funding and wallet payouts require the separate Finance ledger-posting permission. Ask a Finance Admin to execute those steps.</Notice> : null}
       {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       <div className="skima-pc-currency"><Field label="Currency" value={currency} onChange={(next) => setCurrency(next.toUpperCase())} placeholder="NGN" /></div>
       <div className="skima-grid skima-grid--compact">
@@ -562,12 +564,12 @@ export function AdminProfitCapitalWorkspace() {
         </table></div>
       </Panel>
 
-      <Panel title="Financial period close & reconciliation" description="Net revenue is captured from posted SKIMA platform-revenue ledger entries only. Enter reconciled operating expenses and reserves; customer collections, supplier pass-through and escrow are recorded only as exclusions and are never added to the profit base.">
+      <Panel title="Financial period close & reconciliation" description="Net revenue is captured from posted SKIMA platform-revenue ledger entries only. Enter only additional operating expenses not already recorded as debits from that wallet, plus required reserves. Customer collections, supplier pass-through and escrow are excluded from the profit base.">
         <Notice tone="warning">The net platform-revenue figure is a ledger movement, not a bank-statement profit calculation. Reconcile the period and attach a finance report reference before approval. The creator cannot approve their own close unless they are Super Admin.</Notice>
         <div className="skima-pc-form-grid">
           <Field label="Period starts" value={closeStart} onChange={setCloseStart} type="date" />
           <Field label="Period ends" value={closeEnd} onChange={setCloseEnd} type="date" min={closeStart} />
-          <Field label="Operating expenses" value={operatingExpenses} onChange={setOperatingExpenses} type="number" min="0" step="0.01" />
+          <Field label="Additional operating expenses not already debited from revenue wallet" value={operatingExpenses} onChange={setOperatingExpenses} type="number" min="0" step="0.01" />
           <Field label="Refund & chargeback reserve" value={refundReserve} onChange={setRefundReserve} type="number" min="0" step="0.01" />
           <Field label="Tax & statutory reserve" value={taxReserve} onChange={setTaxReserve} type="number" min="0" step="0.01" />
           <Field label="Other approved reserves" value={otherReserve} onChange={setOtherReserve} type="number" min="0" step="0.01" />
@@ -588,7 +590,7 @@ export function AdminProfitCapitalWorkspace() {
             <td>{money(numberValue(close, "operatingExpenses") + numberValue(close, "refundChargebackReserve") + numberValue(close, "taxAndStatutoryReserve") + numberValue(close, "otherReserves"), currency)}</td>
             <td><strong>{money(numberValue(close, "distributableProfit"), currency)}</strong></td>
             <td><small>{value(close, "reconciliationReference")}</small></td>
-            <td><div className="skima-pc-status-actions"><StatusBadge tone={value(close, "status") === "approved" ? "success" : value(close, "status") === "rejected" ? "danger" : "neutral"}>{value(close, "status")}</StatusBadge>
+            <td><div className="skima-pc-status-actions"><StatusBadge tone={value(close, "status") === "approved" ? "success" : value(close, "status") === "rejected" ? "warning" : "neutral"}>{value(close, "status")}</StatusBadge>
               {value(close, "status") === "draft" ? <Button size="sm" disabled={!canManage || approvePeriodClose.isPending} isLoading={approvePeriodClose.isPending} onClick={() => approvePeriodClose.mutate(value(close, "id"))}>Approve</Button> : null}</div>
             </td>
           </tr>)}</tbody>
@@ -744,7 +746,8 @@ export function AdminProfitCapitalWorkspace() {
                   <StatusBadge tone={distributionStatus === "completed" ? "success" : distributionStatus === "approved" ? "warning" : "neutral"}>{distributionStatus}</StatusBadge>
                   <StatusBadge tone={funded ? "success" : "neutral"}>{funded ? "funded" : "unfunded"}</StatusBadge>
                   {distributionStatus === "draft" ? <Button size="sm" disabled={!canManage || approveDistribution.isPending} isLoading={approveDistribution.isPending} onClick={() => approveDistribution.mutate(id)}>Approve run</Button> : null}
-                  {distributionStatus === "approved" && !funded ? <Button size="sm" disabled={!canManage || fundDistribution.isPending} isLoading={fundDistribution.isPending} onClick={() => fundDistribution.mutate(id)}>Fund six category wallets</Button> : null}
+                  {distributionStatus === "approved" && !funded && value(distribution, "periodCloseId") ? <Button size="sm" disabled={!canPostCapitalFunds || fundDistribution.isPending} isLoading={fundDistribution.isPending} onClick={() => fundDistribution.mutate(id)}>Fund six category wallets</Button> : null}
+                  {distributionStatus === "approved" && !funded && !value(distribution, "periodCloseId") ? <span className="skima-muted">Legacy run · create a new run from an approved period close to fund</span> : null}
                 </div>
                 {funded ? <small>Funding ledger transaction: {value(distribution, "fundingTransactionId")}</small> : null}
               </div>
@@ -768,7 +771,7 @@ export function AdminProfitCapitalWorkspace() {
                     <td>{["paid", "cancelled"].includes(value(item, "status")) ? <StatusBadge tone="success">{value(item, "status")}</StatusBadge> :
                       <div className="skima-pc-payment-fields">
                         <input aria-label="Profit payout amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
-                        <Button size="sm" disabled={!canManage || !approved || !profileId || !(Number(draft.amount) > 0) || payParticipantToWallet.isPending}
+                        <Button size="sm" disabled={!canPostCapitalFunds || !approved || !profileId || !(Number(draft.amount) > 0) || payParticipantToWallet.isPending}
                           isLoading={payParticipantToWallet.isPending} onClick={() => payParticipantToWallet.mutate({ entitlementId: itemId, amount: Number(draft.amount) })}>Pay to SKIMA wallet</Button>
                       </div>}</td>
                   </tr>;
@@ -791,7 +794,7 @@ export function AdminProfitCapitalWorkspace() {
                     <td>{["paid", "cancelled"].includes(value(item, "status")) ? <StatusBadge tone="success">{value(item, "status")}</StatusBadge> :
                       <div className="skima-pc-payment-fields">
                         <input aria-label="Vehicle principal payout amount" type="number" min="0.01" max={numberValue(item, "outstandingAmount")} step="0.01" value={draft.amount} onChange={(event) => updatePaymentDraft(itemId, "amount", event.currentTarget.value)} />
-                        <Button size="sm" disabled={!canManage || !approved || !profileId || !(Number(draft.amount) > 0) || payVehicleToWallet.isPending}
+                        <Button size="sm" disabled={!canPostCapitalFunds || !approved || !profileId || !(Number(draft.amount) > 0) || payVehicleToWallet.isPending}
                           isLoading={payVehicleToWallet.isPending} onClick={() => payVehicleToWallet.mutate({ repaymentId: itemId, amount: Number(draft.amount) })}>Pay principal to SKIMA wallet</Button>
                       </div>}</td>
                   </tr>;
