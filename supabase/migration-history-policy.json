@@ -174,6 +174,7 @@
     "20261112100000_platform_availability_controls_geography_read.sql",
     "20261112143000_fleet_partner_fuel_affiliate_completion.sql",
     "20261112164500_fuel_affiliate_trigger_acl_hardening.sql",
-    "20261112164700_fuel_affiliate_trigger_handlers_acl_hardening.sql"
+    "20261112164700_fuel_affiliate_trigger_handlers_acl_hardening.sql",
+    "20261113100000_platform_profit_capital_allocation_and_location_defaults.sql"
   ]
 }
