@@ -178,6 +178,7 @@ grant execute on function public.set_lpg_customer_location_default(uuid)
 create table if not exists public.platform_profit_allocation_templates (
   id uuid primary key default gen_random_uuid(),
   display_name text not null check (char_length(btrim(display_name)) between 3 and 100),
+  idempotency_key text not null unique,
   currency_code text not null references public.currency_definitions(code) on delete restrict,
   status text not null default 'draft' check (status in ('draft', 'active', 'archived')),
   notes text,
@@ -648,6 +649,7 @@ create or replace function public.save_platform_profit_allocation_template(
   target_display_name text,
   target_currency_code text,
   target_lines jsonb,
+  target_idempotency_key text,
   target_notes text default null
 )
 returns uuid
@@ -657,6 +659,7 @@ set search_path = public, pg_temp
 as $$
 declare
   v_template_id uuid;
+  existing_template public.platform_profit_allocation_templates%rowtype;
   currency text := upper(btrim(target_currency_code));
   row_item jsonb;
   row_count integer := 0;
@@ -675,8 +678,10 @@ begin
        or public.has_permission('platform.financial.manage', null)) then
     raise exception using errcode = '42501', message = 'Profit and capital finance management permission is required';
   end if;
-  if nullif(btrim(target_display_name), '') is null or jsonb_typeof(target_lines) <> 'array' then
-    raise exception using errcode = '22023', message = 'Template name and six allocation lines are required';
+  if nullif(btrim(target_display_name), '') is null
+     or nullif(btrim(target_idempotency_key), '') is null
+     or jsonb_typeof(target_lines) <> 'array' then
+    raise exception using errcode = '22023', message = 'Template name, six allocation lines and idempotency key are required';
   end if;
   if not exists (select 1 from public.currency_definitions where code = currency and status = 'enabled') then
     raise exception using errcode = '22023', message = 'Choose an enabled platform currency';
@@ -707,8 +712,24 @@ begin
   end if;
 
   if target_template_id is null then
-    insert into public.platform_profit_allocation_templates(display_name, currency_code, notes)
-    values (btrim(target_display_name), currency, nullif(btrim(target_notes), ''))
+    select * into existing_template
+    from public.platform_profit_allocation_templates
+    where idempotency_key = target_idempotency_key;
+    if existing_template.id is not null then
+      if existing_template.display_name <> btrim(target_display_name)
+         or existing_template.currency_code <> currency
+         or coalesce(existing_template.notes, '') <> coalesce(nullif(btrim(target_notes), ''), '') then
+        raise exception using errcode = '23505', message = 'Template idempotency key was already used with different details';
+      end if;
+      return existing_template.id;
+    end if;
+
+    insert into public.platform_profit_allocation_templates(
+      display_name, currency_code, notes, idempotency_key
+    )
+    values (
+      btrim(target_display_name), currency, nullif(btrim(target_notes), ''), target_idempotency_key
+    )
     returning id into v_template_id;
   else
     update public.platform_profit_allocation_templates
@@ -1504,7 +1525,7 @@ end;
 $$;
 
 revoke all on function public.read_platform_profit_capital_workspace(text) from public, anon;
-revoke all on function public.save_platform_profit_allocation_template(uuid,text,text,jsonb,text) from public, anon;
+revoke all on function public.save_platform_profit_allocation_template(uuid,text,text,jsonb,text,text) from public, anon;
 revoke all on function public.activate_platform_profit_allocation_template(uuid) from public, anon;
 revoke all on function public.save_platform_profit_participant(uuid,text,text,text,text,text,numeric,text,text,text,text) from public, anon;
 revoke all on function public.save_platform_vehicle_capital_agreement(uuid,uuid,text,text,text,text,numeric,text,text,text) from public, anon;
@@ -1514,7 +1535,7 @@ revoke all on function public.record_platform_profit_participant_payment(uuid,nu
 revoke all on function public.record_platform_vehicle_capital_repayment(uuid,numeric,uuid,text,text) from public, anon;
 
 grant execute on function public.read_platform_profit_capital_workspace(text) to authenticated, service_role;
-grant execute on function public.save_platform_profit_allocation_template(uuid,text,text,jsonb,text) to authenticated, service_role;
+grant execute on function public.save_platform_profit_allocation_template(uuid,text,text,jsonb,text,text) to authenticated, service_role;
 grant execute on function public.activate_platform_profit_allocation_template(uuid) to authenticated, service_role;
 grant execute on function public.save_platform_profit_participant(uuid,text,text,text,text,text,numeric,text,text,text,text) to authenticated, service_role;
 grant execute on function public.save_platform_vehicle_capital_agreement(uuid,uuid,text,text,text,text,numeric,text,text,text) to authenticated, service_role;
