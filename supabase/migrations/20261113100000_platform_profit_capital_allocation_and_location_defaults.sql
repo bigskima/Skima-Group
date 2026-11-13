@@ -1282,6 +1282,13 @@ begin
     raise exception using errcode = '23514', message = 'Only a draft profit distribution can be approved';
   end if;
 
+  if distribution.created_by = auth.uid()
+     and coalesce(auth.role(), '') <> 'service_role'
+     and not public.is_platform_super_admin() then
+    raise exception using errcode = '42501',
+      message = 'A different Finance Admin must approve the profit distribution that you prepared';
+  end if;
+
   update public.platform_profit_distributions
   set status = 'approved',
       approved_by = auth.uid(),
