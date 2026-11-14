@@ -1,6 +1,7 @@
 import NetInfo from "@react-native-community/netinfo";
 import {
   QueryClient,
+  QueryClientProvider,
   focusManager,
   onlineManager,
 } from "@tanstack/react-query";
@@ -61,7 +62,9 @@ function AppProvidersContent({ children }: PropsWithChildren) {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <PersistQueryClientProvider
+          {/* Keep app query hooks on the same React Query context as their direct import. */}
+          <QueryClientProvider client={client}>
+            <PersistQueryClientProvider
             client={client}
             persistOptions={{
               persister,
@@ -80,7 +83,8 @@ function AppProvidersContent({ children }: PropsWithChildren) {
                 <StartupBrandingGate>{children}</StartupBrandingGate>
               </InAppGuideProvider>
             </SessionProvider>
-          </PersistQueryClientProvider>
+            </PersistQueryClientProvider>
+          </QueryClientProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
