@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { Button, ErrorState, LoadingState, MetricTile, PageHeader, StatusBadge } from "@skima/ui";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
+import { AdminWorkspaceIntro, AdminWorkspaceSections } from "./admin-workspace-sections";
 import { useSessionState } from "./session";
 import "./features/money/profit-capital-workspace.css";
 
@@ -106,6 +107,7 @@ export function AdminProfitCapitalWorkspace() {
   const canPostCapitalFunds = isSuperAdmin || permissions.includes("platform.financial.manage");
 
   const [currency, setCurrency] = useState("NGN");
+  const [activeSection, setActiveSection] = useState<"allocation" | "period" | "people" | "distribution">("allocation");
   const [notice, setNotice] = useState<{ text: string; tone: "success" | "warning" | "danger" } | null>(null);
   const [templateName, setTemplateName] = useState("SKIMA operating profit allocation");
   const [templateNotes, setTemplateNotes] = useState("");
@@ -546,7 +548,29 @@ export function AdminProfitCapitalWorkspace() {
         <MetricTile label="Vehicle principal outstanding" value={money(outstandingPrincipal, currency)} />
       </div>
 
-      <Panel title="Profit allocation templates" description="Create reusable templates. All six categories must total exactly 100% before activation.">
+      
+      <div className="skima-pc-guide">
+        <AdminWorkspaceIntro
+          kicker="Guided finance setup"
+          title="Choose the task you want to complete"
+          description="Work through one area at a time. Your saved records and approval controls remain separate, so you do not have to search through every finance form on one long page."
+        />
+      </div>
+      <AdminWorkspaceSections
+        label="Profit and capital tasks"
+        activeKey={activeSection}
+        onChange={(key) => setActiveSection(key as "allocation" | "period" | "people" | "distribution")}
+        sections={[
+          { key: "allocation", label: "1. Profit allocation", description: "Set the percentage split and review category balances" },
+          { key: "period", label: "2. Close a period", description: "Reconcile revenue, expenses and reserves" },
+          { key: "people", label: "3. Beneficiaries & vehicles", description: "Manage profit participants and vehicle agreements" },
+          { key: "distribution", label: "4. Distribute & pay", description: "Create distributions and review payments" },
+        ]}
+      />
+      <div className="skima-pc-section-body" role="tabpanel" aria-label="Selected profit and capital task">
+        {activeSection === "allocation" ? (
+          <div className="skima-pc-section-stack">
+            <Panel title="Profit allocation templates" description="Create reusable templates. All six categories must total exactly 100% before activation.">
         <div className="skima-pc-form-grid">
           <Field label="Template name" value={templateName} onChange={setTemplateName} placeholder="Operating profit allocation" />
           <Field label="Notes" value={templateNotes} onChange={setTemplateNotes} placeholder="When this allocation applies" />
@@ -572,21 +596,63 @@ export function AdminProfitCapitalWorkspace() {
           </tr>)}</tbody>
         </table></div>
       </Panel>
-
-      <Panel title="Financial period close & reconciliation" description="Net revenue is captured from posted SKIMA platform-revenue ledger entries only. Enter only additional operating expenses not already recorded as debits from that wallet, plus required reserves. Customer collections, supplier pass-through and escrow are excluded from the profit base.">
+            <Panel title="Segregated profit category wallets" description="These are distinct internal ledger accounts funded from the platform-revenue wallet after an approved distribution. Customer balances, escrow and supplier float are not used.">
+        <div className="skima-pc-table-wrap"><table className="skima-pc-table">
+          <thead><tr><th>Allocation category</th><th>Wallet</th><th>Available balance</th><th>Currency</th></tr></thead>
+          <tbody>{CATEGORIES.map((category) => {
+            const account = categoryAccounts.find((item) => value(item, "categoryKey") === category.key);
+            return <tr key={category.key}>
+              <td><strong>{category.label}</strong></td>
+              <td><small>{value(account, "walletId") ? value(account, "walletId") : "Created during first funded distribution"}</small></td>
+              <td>{money(numberValue(account, "balance"), currency)}</td>
+              <td>{value(account, "currencyCode", currency)}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>
+        <Notice tone="warning">Category wallets are internal accounting balances. Beneficiary payouts transfer into a linked SKIMA customer wallet through a posted ledger transaction. A beneficiary can use the existing verified wallet-withdrawal flow to withdraw to an approved bank account; this screen does not claim that an external bank transfer has already happened.</Notice>
+      </Panel>
+          </div>
+        ) : null}
+        {activeSection === "period" ? (
+          <div className="skima-pc-section-stack">
+            <Panel title="Financial period close & reconciliation" description="Record the dates you are closing, reconcile posted SKIMA revenue, then enter any additional costs and reserves. Customer collections, supplier funds and escrow stay outside the profit calculation.">
         <Notice tone="warning">The net platform-revenue figure is a ledger movement, not a bank-statement profit calculation. Reconcile the period and attach a finance report reference before approval. The creator cannot approve their own close unless they are Super Admin.</Notice>
-        <div className="skima-pc-form-grid">
-          <Field label="Period starts" value={closeStart} onChange={setCloseStart} type="date" />
-          <Field label="Period ends" value={closeEnd} onChange={setCloseEnd} type="date" min={closeStart} />
-          <Field label="Additional operating expenses not already debited from revenue wallet" value={operatingExpenses} onChange={setOperatingExpenses} type="number" min="0" step="0.01" />
-          <Field label="Refund & chargeback reserve" value={refundReserve} onChange={setRefundReserve} type="number" min="0" step="0.01" />
-          <Field label="Tax & statutory reserve" value={taxReserve} onChange={setTaxReserve} type="number" min="0" step="0.01" />
-          <Field label="Other approved reserves" value={otherReserve} onChange={setOtherReserve} type="number" min="0" step="0.01" />
-          <Field label="Customer collections excluded (reference only)" value={excludedCustomerFunds} onChange={setExcludedCustomerFunds} type="number" min="0" step="0.01" />
-          <Field label="Supplier pass-through excluded (reference only)" value={excludedSupplierFunds} onChange={setExcludedSupplierFunds} type="number" min="0" step="0.01" />
-          <Field label="Escrow & unsettled funds excluded (reference only)" value={excludedEscrowFunds} onChange={setExcludedEscrowFunds} type="number" min="0" step="0.01" />
-          <Field label="Finance reconciliation reference (required)" value={closeReference} onChange={setCloseReference} placeholder="Approved P&L, settlement report or ledger close ID" required />
-          <Field label="Close notes (optional)" value={closeNotes} onChange={setCloseNotes} placeholder="Period-end notes" />
+        <div className="skima-pc-field-groups">
+          <section className="skima-pc-field-group">
+            <h3>Reporting period</h3>
+            <p>Choose the dates covered by this finance close.</p>
+            <div className="skima-pc-form-grid">
+              <Field label="Period starts" value={closeStart} onChange={setCloseStart} type="date" />
+              <Field label="Period ends" value={closeEnd} onChange={setCloseEnd} type="date" min={closeStart} />
+            </div>
+          </section>
+          <section className="skima-pc-field-group">
+            <h3>Costs and reserves</h3>
+            <p>Enter only costs not already posted as debits from SKIMA's platform-revenue wallet.</p>
+            <div className="skima-pc-form-grid">
+              <Field label="Additional operating expenses" value={operatingExpenses} onChange={setOperatingExpenses} type="number" min="0" step="0.01" />
+              <Field label="Refund and chargeback reserve" value={refundReserve} onChange={setRefundReserve} type="number" min="0" step="0.01" />
+              <Field label="Tax and statutory reserve" value={taxReserve} onChange={setTaxReserve} type="number" min="0" step="0.01" />
+              <Field label="Other approved reserves" value={otherReserve} onChange={setOtherReserve} type="number" min="0" step="0.01" />
+            </div>
+          </section>
+          <section className="skima-pc-field-group">
+            <h3>Funds excluded from profit</h3>
+            <p>These amounts are recorded for reconciliation only. They are not available for distribution.</p>
+            <div className="skima-pc-form-grid">
+              <Field label="Customer collections excluded" value={excludedCustomerFunds} onChange={setExcludedCustomerFunds} type="number" min="0" step="0.01" />
+              <Field label="Supplier pass-through excluded" value={excludedSupplierFunds} onChange={setExcludedSupplierFunds} type="number" min="0" step="0.01" />
+              <Field label="Escrow and unsettled funds excluded" value={excludedEscrowFunds} onChange={setExcludedEscrowFunds} type="number" min="0" step="0.01" />
+            </div>
+          </section>
+          <section className="skima-pc-field-group">
+            <h3>Reconciliation evidence</h3>
+            <p>Add the finance report or ledger reference that supports this period close.</p>
+            <div className="skima-pc-form-grid">
+              <Field label="Finance reconciliation reference" value={closeReference} onChange={setCloseReference} placeholder="P&L report or ledger close reference" required />
+              <Field label="Additional notes (optional)" value={closeNotes} onChange={setCloseNotes} placeholder="Notes for the approving Finance Admin" />
+            </div>
+          </section>
         </div>
         <div className="skima-pc-actions">
           <Button disabled={!canSaveClose || savePeriodClose.isPending} isLoading={savePeriodClose.isPending} onClick={() => savePeriodClose.mutate()}>Capture draft period close</Button>
@@ -606,8 +672,7 @@ export function AdminProfitCapitalWorkspace() {
           </tr>)}</tbody>
         </table></div>
       </Panel>
-
-      <Panel title="Recurring distribution schedule" description="Schedules prepare a draft distribution when the matching period close has been separately approved. They never auto-approve or automatically pay a participant.">
+            <Panel title="Recurring distribution schedule" description="Choose how often SKIMA should prepare a draft distribution. Finance must still reconcile and approve each matching period before any money is allocated.">
         <Notice tone="warning">A schedule cannot turn an unclosed accounting period into profit. Finance must approve each matching period close first; the worker then creates a reviewable draft for Finance.</Notice>
         <div className="skima-pc-form-grid">
           <Field label="Schedule name" value={scheduleName} onChange={setScheduleName} placeholder="Monthly SKIMA operating profit" />
@@ -638,37 +703,36 @@ export function AdminProfitCapitalWorkspace() {
           </tr>)}</tbody>
         </table></div>
       </Panel>
-
-      <Panel title="Segregated profit category wallets" description="These are distinct internal ledger accounts funded from the platform-revenue wallet after an approved distribution. Customer balances, escrow and supplier float are not used.">
-        <div className="skima-pc-table-wrap"><table className="skima-pc-table">
-          <thead><tr><th>Allocation category</th><th>Wallet</th><th>Available balance</th><th>Currency</th></tr></thead>
-          <tbody>{CATEGORIES.map((category) => {
-            const account = categoryAccounts.find((item) => value(item, "categoryKey") === category.key);
-            return <tr key={category.key}>
-              <td><strong>{category.label}</strong></td>
-              <td><small>{value(account, "walletId") ? value(account, "walletId") : "Created during first funded distribution"}</small></td>
-              <td>{money(numberValue(account, "balance"), currency)}</td>
-              <td>{value(account, "currencyCode", currency)}</td>
-            </tr>;
-          })}</tbody>
-        </table></div>
-        <Notice tone="warning">Category wallets are internal accounting balances. Beneficiary payouts transfer into a linked SKIMA customer wallet through a posted ledger transaction. A beneficiary can use the existing verified wallet-withdrawal flow to withdraw to an approved bank account; this screen does not claim that an external bank transfer has already happened.</Notice>
-      </Panel>
-
-      <Panel title="Profit participation register" description="These are contractual profit entitlements, not legal shares. The percentage is calculated from each approved distributable-profit amount.">
-        <div className="skima-pc-form-grid">
-          <Field label="Beneficiary name" value={participantName} onChange={setParticipantName} placeholder="Person or legal entity" />
-          <SelectField label="Arrangement" value={participantType} onChange={setParticipantType} options={[
-            { label: "Profit participation only", value: "profit_only" },
-            { label: "Vehicle provider only", value: "vehicle_provider" },
-            { label: "Vehicle provider + profit participation", value: "both" },
-          ]} />
-          <Field label="Profit participation (%)" value={participantPercent} onChange={setParticipantPercent} type="number" min="0" max="100" step="0.0001" />
-          <SelectField label="Pay from allocation category" value={fundingCategory} onChange={(next) => setFundingCategory(next as CategoryKey)} options={CATEGORIES.map((item) => ({ label: item.label, value: item.key }))} />
-          <Field label="Linked SKIMA profile UUID (optional)" value={participantProfileId} onChange={setParticipantProfileId} placeholder="Enables automatic internal wallet payout" />
-          <Field label="Email (optional)" value={participantEmail} onChange={setParticipantEmail} type="email" placeholder="beneficiary@example.com" />
-          <Field label="Phone (optional)" value={participantPhone} onChange={setParticipantPhone} placeholder="Phone number" />
-          <Field label="Agreement note" value={participantNotes} onChange={setParticipantNotes} placeholder="Signed agreement reference / terms" />
+          </div>
+        ) : null}
+        {activeSection === "people" ? (
+          <div className="skima-pc-section-stack">
+            <Panel title="Profit participation register" description="Register a person or business that is entitled to a percentage of distributable profit. This is a contractual profit arrangement, not company ownership or voting shares.">
+        <div className="skima-pc-field-groups">
+          <section className="skima-pc-field-group">
+            <h3>Beneficiary and entitlement</h3>
+            <p>Choose the arrangement and the percentage this beneficiary is entitled to receive from distributable profit.</p>
+            <div className="skima-pc-form-grid">
+              <Field label="Beneficiary name" value={participantName} onChange={setParticipantName} placeholder="Person or registered business" />
+              <SelectField label="Arrangement" value={participantType} onChange={setParticipantType} options={[
+                { label: "Profit participation only", value: "profit_only" },
+                { label: "Vehicle provider only", value: "vehicle_provider" },
+                { label: "Vehicle provider and profit participation", value: "both" },
+              ]} />
+              <Field label="Profit participation (%)" value={participantPercent} onChange={setParticipantPercent} type="number" min="0" max="100" step="0.0001" />
+              <SelectField label="Pay from allocation category" value={fundingCategory} onChange={(next) => setFundingCategory(next as CategoryKey)} options={CATEGORIES.map((item) => ({ label: item.label, value: item.key }))} />
+            </div>
+          </section>
+          <section className="skima-pc-field-group">
+            <h3>Contact and payment destination</h3>
+            <p>Link a SKIMA profile to enable internal wallet payouts. Contact details and agreement notes are optional.</p>
+            <div className="skima-pc-form-grid">
+              <Field label="Linked SKIMA profile UUID (optional)" value={participantProfileId} onChange={setParticipantProfileId} placeholder="Paste the beneficiary's SKIMA profile UUID" />
+              <Field label="Email (optional)" value={participantEmail} onChange={setParticipantEmail} type="email" placeholder="beneficiary@example.com" />
+              <Field label="Phone (optional)" value={participantPhone} onChange={setParticipantPhone} placeholder="Phone number" />
+              <Field label="Agreement note (optional)" value={participantNotes} onChange={setParticipantNotes} placeholder="Signed agreement reference" />
+            </div>
+          </section>
         </div>
         <div className="skima-pc-actions"><Button disabled={!canSaveParticipant || saveParticipant.isPending} isLoading={saveParticipant.isPending} onClick={() => saveParticipant.mutate()}>Add participant</Button></div>
         <div className="skima-pc-table-wrap"><table className="skima-pc-table">
@@ -697,18 +761,29 @@ export function AdminProfitCapitalWorkspace() {
           })}</tbody>
         </table></div>
       </Panel>
-
-      <Panel title="Vehicle capital agreements" description="Register the verified vehicle purchase principal and the provider. Repayment is capped at original principal with no interest.">
-        <div className="skima-pc-form-grid">
-          <SelectField label="Vehicle capital provider" value={agreementParticipant} onChange={setAgreementParticipant} options={[
-            { label: "Choose provider", value: "" },
-            ...providerOptions.map((item) => ({ label: value(item, "displayName"), value: value(item, "id") })),
-          ]} />
-          <Field label="Vehicle description" value={vehicleDescription} onChange={setVehicleDescription} placeholder="Toyota Sienna delivery van" />
-          <Field label="Registration number (optional)" value={registrationNumber} onChange={setRegistrationNumber} placeholder="Vehicle registration" />
-          <Field label="Agreement reference" value={agreementReference} onChange={setAgreementReference} placeholder="SKIMA-VEH-2026-001" />
-          <Field label={"Original principal (" + currency + ")"} value={principalAmount} onChange={setPrincipalAmount} type="number" min="0.01" step="0.01" />
-          <Field label="Agreement notes" value={agreementNotes} onChange={setAgreementNotes} placeholder="Purchase invoice / handover reference" />
+            <Panel title="Vehicle capital agreements" description="Record who provided the vehicle capital and the verified purchase principal. Repayments are interest-free and cannot exceed the original principal.">
+        <div className="skima-pc-field-groups">
+          <section className="skima-pc-field-group">
+            <h3>Provider and vehicle</h3>
+            <p>Select the approved capital provider and identify the vehicle covered by the agreement.</p>
+            <div className="skima-pc-form-grid">
+              <SelectField label="Vehicle capital provider" value={agreementParticipant} onChange={setAgreementParticipant} options={[
+                { label: "Choose provider", value: "" },
+                ...providerOptions.map((item) => ({ label: value(item, "displayName"), value: value(item, "id") })),
+              ]} />
+              <Field label="Vehicle description" value={vehicleDescription} onChange={setVehicleDescription} placeholder="Vehicle make and model" />
+              <Field label="Registration number (optional)" value={registrationNumber} onChange={setRegistrationNumber} placeholder="Vehicle registration" />
+              <Field label="Agreement reference" value={agreementReference} onChange={setAgreementReference} placeholder="Signed agreement or invoice reference" />
+            </div>
+          </section>
+          <section className="skima-pc-field-group">
+            <h3>Principal and supporting notes</h3>
+            <p>Enter the verified purchase principal. Interest is fixed at 0% and the maximum repayment is the original principal.</p>
+            <div className="skima-pc-form-grid">
+              <Field label={"Original principal (" + currency + ")"} value={principalAmount} onChange={setPrincipalAmount} type="number" min="0.01" step="0.01" />
+              <Field label="Agreement notes (optional)" value={agreementNotes} onChange={setAgreementNotes} placeholder="Purchase invoice or handover reference" />
+            </div>
+          </section>
         </div>
         <div className="skima-pc-actions"><Button disabled={!canSaveAgreement || saveAgreement.isPending} isLoading={saveAgreement.isPending} onClick={() => saveAgreement.mutate()}>Save vehicle agreement</Button><span className="skima-muted">Interest rate: 0% · Payback cap: original principal</span></div>
         <div className="skima-pc-table-wrap"><table className="skima-pc-table">
@@ -721,8 +796,11 @@ export function AdminProfitCapitalWorkspace() {
           </tr>)}</tbody>
         </table></div>
       </Panel>
-
-      <Panel title="Create a distribution from an approved close" description="The distributable amount comes from the approved period close, not a manually typed figure. Customer collections, supplier funds, escrow and other liabilities are excluded from the revenue base.">
+          </div>
+        ) : null}
+        {activeSection === "distribution" ? (
+          <div className="skima-pc-section-stack">
+            <Panel title="Create a distribution from an approved close" description="Choose an approved reporting period. SKIMA calculates the available profit using that close and the active allocation template; you cannot type an arbitrary payout total.">
         <div className="skima-pc-form-grid">
           <SelectField label="Finance-approved period close" value={selectedPeriodCloseId} onChange={setSelectedPeriodCloseId} options={[
             { label: "Choose an approved period close", value: "" },
@@ -737,8 +815,7 @@ export function AdminProfitCapitalWorkspace() {
         {!activeTemplate ? <Notice tone="warning">Activate an allocation template for {currency} before creating the distribution.</Notice> : null}
         <div className="skima-pc-actions"><Button disabled={!canCreateDistribution || createDistribution.isPending} isLoading={createDistribution.isPending} onClick={() => createDistribution.mutate()}>Calculate draft from approved close</Button>{distributionDrafts.length ? <span className="skima-muted">{distributionDrafts.length} draft(s) await review.</span> : null}</div>
       </Panel>
-
-      <Panel title="Distribution history and payment records" description="Review the saved allocation snapshot, participant entitlements and vehicle principal repayments. Approval does not itself send money. A payment is recorded only after a matching posted ledger transfer exists.">
+            <Panel title="Distribution history and payment records" description="Review each distribution, its category allocations, beneficiary amounts and repayments. Approval alone does not move money; a payout is recorded only after the ledger transfer is posted.">
         <div className="skima-pc-distributions">
           {distributions.length === 0 ? <div className="skima-pc-empty">No distribution runs created yet.</div> : distributions.map((distribution) => {
             const id = value(distribution, "id");
@@ -814,6 +891,9 @@ export function AdminProfitCapitalWorkspace() {
           })}
         </div>
       </Panel>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

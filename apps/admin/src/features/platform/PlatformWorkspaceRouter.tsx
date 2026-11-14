@@ -45,8 +45,8 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
         },
         {
           key: "configuration",
-          title: "Configuration",
-          description: "Manage business lines and external event destinations through focused V2 configuration tasks.",
+          title: "Settings & customization",
+          description: "Change SKIMA appearance, customer-facing content, service availability, fees and connected services through guided settings—without editing code.",
           href: "/platform/configuration",
           icon: Settings2,
           meta: "Platform setup",
