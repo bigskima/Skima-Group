@@ -1125,3 +1125,67 @@ Deno.test("Admin fulfillment availability saves and confirms the effective netwo
   assertIncludes(stationManagedGate, "= ''internal_only'' then");
   assertIncludes(stationManagedGate, "read_lpg_station_managed_eligible_stations_for_amount");
 });
+
+
+Deno.test("Refill driver and order read models preserve structured street-level address evidence", async () => {
+  const [migration, records, driverQueue, driverDetail, customerOrder] = await Promise.all([
+    read("supabase/migrations/20261114100000_lpg_refill_street_address_read_models.sql"),
+    read("apps/lpg-mobile/src/native/api/records.ts"),
+    read("apps/lpg-mobile/src/native/ui/JobListScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+  ]);
+
+  assertIncludes(migration, "public.read_lpg_jobs(text,integer)");
+  assertIncludes(migration, "public.read_lpg_job_details(uuid)");
+  assertIncludes(migration, "'pickupLocation'");
+  assertIncludes(migration, "'deliveryLocation'");
+  assertIncludes(migration, "'addressComponents'");
+  assertIncludes(records, "function displayLocationAddress");
+  assertIncludes(records, "isLikelyStreetName(componentName)");
+  assertIncludes(driverQueue, "displayLocationAddress(location)");
+  assertIncludes(driverDetail, "displayLocationAddress(contactLocation)");
+  assertIncludes(customerOrder, "displayLocationAddress(delivery)");
+});
+
+Deno.test("Refill customer address search preserves and displays street-level address details", async () => {
+  const [locations, addressSave, locationGateway, refillOrder, stationLocations] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/LocationsScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/locationSave.ts"),
+    read("apps/lpg-mobile/src/native/domains/maps/gateway.ts"),
+    read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationLocationScreens.tsx"),
+  ]);
+
+  assertIncludes(locations, 'input: query,');
+  assertIncludes(locations, "result.predictions");
+  assertIncludes(locations, "readString(prediction.description)");
+  assertIncludes(locations, "AddressSchema.safeParse(prediction.addressComponents)");
+  assertIncludes(locations, "function compactAddress(location: OperationalLocation)");
+  assertIncludes(locations, "location.address.street");
+  assertIncludes(locations, "Street / road");
+  assertIncludes(locations, "<StreetMapPreview");
+
+  assertIncludes(locationGateway, "street: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "route: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "houseNumber: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "lga: z.string().nullable().optional()");
+  assertIncludes(locationGateway, "function operationalAddress(value: AddressPayload");
+  assertIncludes(locationGateway, "street: streetNumber && route");
+  assertIncludes(locationGateway, "street: primary.street ?? fallback.street");
+
+  assertIncludes(addressSave, "address: OperationalAddress");
+  assertIncludes(addressSave, "metadata: {");
+  assertIncludes(addressSave, "addressComponents: OperationalAddress");
+  assertIncludes(addressSave, "street: clean(address?.street)");
+
+  assertIncludes(refillOrder, "recordChoiceAddress");
+  assertIncludes(refillOrder, "formatted_address");
+  assertIncludes(refillOrder, "reviewLocationAddress");
+  assertIncludes(refillOrder, "PICKUP");
+  assertIncludes(refillOrder, "RETURN / DELIVERY");
+
+  assertIncludes(stationLocations, "location.address.street");
+  assertIncludes(stationLocations, 'firstString(item, ["street", "road", "street_name"])');
+  assertIncludes(stationLocations, "<StreetMapPreview");
+});

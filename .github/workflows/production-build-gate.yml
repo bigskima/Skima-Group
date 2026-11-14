@@ -90,6 +90,10 @@ jobs:
         run: npm run ai-runtime:contract
       - name: Verify LPG refill production contracts
         run: npm run lpg-refill:contract
+      - name: Verify LocationIQ street and map normalization contracts
+        run: npm run location-maps:contract
+      - name: Verify SKIMA profit-capital and cross-app address contracts
+        run: npm run profit-capital:contract
       - name: Verify supplier fund and cash-cycle accounting contracts
         run: npm run supplier-funds:contract
       - name: Verify independent driver vehicle onboarding contracts

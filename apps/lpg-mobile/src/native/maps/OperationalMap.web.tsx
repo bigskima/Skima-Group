@@ -155,7 +155,7 @@ export function OperationalMap({
         style={[styles.map, { height: fullscreen ? canvasHeight : height, borderColor: palette.border, borderRadius: fullscreen ? 0 : radii.lg }]}
       >
         {layout.tiles.map((tile) => (
-          <Image key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`} pointerEvents="none" source={tile.url} contentFit="cover"
+          <Image key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`} pointerEvents="none" source={{ uri: tile.url, headers: { "User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)" } }} contentFit="cover" cachePolicy="disk"
             style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]} transition={60} />
         ))}
         {layout.segments.map((segment, index) => (

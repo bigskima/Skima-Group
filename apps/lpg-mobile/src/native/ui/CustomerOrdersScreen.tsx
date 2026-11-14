@@ -8,6 +8,7 @@ import { isSkimaInternalFulfillmentChannel } from "../api/lpgFulfillment";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
 import {
+  displayLocationAddress,
   displayReference,
   displayStatus,
   firstNumber,
@@ -437,7 +438,7 @@ export function CustomerOrderDetailScreen() {
               <MapPin color={palette.brand} size={20} />
               <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Contact and delivery details</Text>
             </View>
-            <InfoField label="Delivery address" value={firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? returnAddress} />
+            <InfoField label="Delivery address" value={displayLocationAddress(delivery) ?? firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? returnAddress} />
             {firstString(delivery, ["landmark"]) ? <InfoField label="Landmark" value={firstString(delivery, ["landmark"]) ?? ""} /> : null}
             {firstString(delivery, ["instructions", "deliveryInstructions", "delivery_instructions"]) ? <InfoField label="Delivery instructions" value={firstString(delivery, ["instructions", "deliveryInstructions", "delivery_instructions"]) ?? ""} /> : null}
             {customerPhone ? <InfoField label="Your contact phone" value={customerPhone} /> : <Text style={[styles.label, { color: palette.muted }]}>No phone number is saved for this delivery location. Update your contact details before the driver sets out.</Text>}

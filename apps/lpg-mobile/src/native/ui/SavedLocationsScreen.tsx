@@ -1,9 +1,10 @@
 import { router } from "expo-router";
 import { Check, MapPin, Plus, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
-import { displaySubtitle, displayTitle, recordId } from "../api/records";
+import { useSession } from "../session/SessionProvider";
+import { displayLocationAddress, displaySubtitle, displayTitle, recordId } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AiContextAction } from "./AiContextAction";
@@ -16,9 +17,29 @@ const LOCATION_PAGE_SIZE = 6;
 
 export function SavedLocationsScreen() {
   const { palette } = useAppTheme();
+  const session = useSession();
   const locations = domainQueries.locations();
   const records = locations.data ?? [];
   const [visibleCount, setVisibleCount] = useState(LOCATION_PAGE_SIZE);
+  const [savingDefaultId, setSavingDefaultId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const setPreferred = async (locationId: string) => {
+    setSavingDefaultId(locationId);
+    setNotice(null);
+    try {
+      const { error } = await session.supabase.rpc("set_lpg_customer_location_default", {
+        target_location_id: locationId,
+      });
+      if (error) throw new Error(error.message);
+      await locations.refetch();
+      setNotice("Preferred location updated. Refill and Store can use this address by default.");
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "The preferred location could not be updated.");
+    } finally {
+      setSavingDefaultId(null);
+    }
+  };
   const visibleRecords = records.slice(0, visibleCount);
   const hiddenCount = Math.max(0, records.length - visibleRecords.length);
 
@@ -51,6 +72,8 @@ export function SavedLocationsScreen() {
           <Text style={[styles.safeText, { color: palette.success }]}>Reusable</Text>
         </View>
       </View>
+
+      {notice ? <Text accessibilityRole="alert" style={[styles.notice, { color: palette.brand }]}>{notice}</Text> : null}
 
       {records.length ? (
         <AiContextAction
@@ -89,7 +112,8 @@ export function SavedLocationsScreen() {
             {visibleRecords.map((item, index) => {
               const id = recordId(item);
               const title = displayTitle(item) || "Saved place";
-              const address = displaySubtitle(item) ?? "Saved pickup and return point";
+              const address = displayLocationAddress(item) ?? displaySubtitle(item) ?? "Saved pickup and return point";
+              const isPreferred = item.is_default === true;
               return (
                 <View
                   key={id ?? String(index)}
@@ -106,9 +130,24 @@ export function SavedLocationsScreen() {
                     <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{title}</Text>
                     <Text numberOfLines={2} style={[styles.address, { color: palette.muted }]}>{address}</Text>
                   </View>
-                  <View style={[styles.savedBadge, { backgroundColor: palette.successSoft }]}>
-                    <Check color={palette.success} size={13} />
-                    <Text style={[styles.savedBadgeText, { color: palette.success }]}>Saved</Text>
+                  <View style={styles.placeActions}>
+                    {isPreferred ? (
+                      <View style={[styles.savedBadge, { backgroundColor: palette.successSoft }]}>
+                        <Check color={palette.success} size={13} />
+                        <Text style={[styles.savedBadgeText, { color: palette.success }]}>Preferred</Text>
+                      </View>
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={savingDefaultId !== null}
+                        onPress={() => { if (id) void setPreferred(id); }}
+                        style={[styles.preferredButton, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}
+                      >
+                        <Text style={[styles.preferredButtonText, { color: palette.brand }]}>
+                          {savingDefaultId === id ? "Saving…" : "Set preferred"}
+                        </Text>
+                      </Pressable>
+                    )}
                   </View>
                 </View>
               );
@@ -168,4 +207,8 @@ const styles = StyleSheet.create({
   address: { ...typography.caption, fontSize: 11, lineHeight: 16 },
   savedBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: radii.pill },
   savedBadgeText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
+  placeActions: { alignItems: "flex-end", gap: spacing.xs },
+  preferredButton: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill, paddingHorizontal: 9, paddingVertical: 7 },
+  preferredButtonText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
+  notice: { ...typography.caption, fontSize: 11, lineHeight: 16 },
 });

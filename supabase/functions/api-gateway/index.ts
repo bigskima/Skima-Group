@@ -2022,7 +2022,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_customer_locations")
           .select(
-            "id,label,formatted_address,latitude,longitude,accuracy_meters,landmark,delivery_instructions,contact_name,contact_phone,verification_status,status,provider_source,provider_place_id,metadata,created_at,updated_at",
+            "id,label,formatted_address,latitude,longitude,accuracy_meters,landmark,delivery_instructions,contact_name,contact_phone,verification_status,status,is_default,provider_source,provider_place_id,metadata,created_at,updated_at",
           )
           .eq("owner_user_id", authResult.user.id)
           .neq("status", "deleted")

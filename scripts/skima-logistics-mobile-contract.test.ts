@@ -164,8 +164,11 @@ Deno.test("Logistics address matching chooses the most specific geography and bl
   requireText(geography, "resolveMostSpecificGeography", "hierarchy-aware location resolution");
   requireText(geography, "hierarchyParts", "canonical parent/child location hierarchy");
   requireText(geography, "deepest.length === 1 ? deepest[0] : null", "ambiguous city aliases require a specific LGA choice");
-  requireText(geography, "if (specificMatches.length) return resolveMostSpecificGeography(specificMatches)", "ambiguous LGA matches cannot fall through to a broader state");
-  requireText(geography, "if (lgaMatches.length) return resolveMostSpecificGeography(lgaMatches)", "ambiguous LGA component matches stay unresolved");
+  requireText(geography, "const lgaCandidates = [", "street-address parent resolution starts from structured LGA/admin components");
+  requireText(geography, "for (const candidate of lgaCandidates)", "each LGA/admin component is resolved separately before locality");
+  requireText(geography, "for (const candidate of localityCandidates)", "city/locality candidates are considered only after LGA/admin candidates");
+  requireText(geography, "for (const candidate of stateCandidates)", "state fallback is considered only after more specific administrative components");
+  requireText(geography, 'geography_source: id ? "canonical_parent" : "pending_parent"', "a full street result remains visible while its service-area parent needs confirmation");
   requireText(geography, "geography_hierarchy_path", "selected address retains its resolved hierarchy");
   requireNotText(geography, 'normalized(asString(item, "canonical_name")) === "nigeria"', "no silent country-root fallback for an unresolved street");
   requireText(request, "hasServiceGeography(pickup)", "pickup cannot publish at country-only scope");
@@ -822,4 +825,16 @@ Deno.test("Companies opt in to offline fulfilment and customers can only select 
   requireText(detail, "disabled={busy || !canChooseOffline}", "offline choice is disabled until provider opt-in is verified");
   requireText(detail, "SKIMA collects only your booking fee", "offline fulfilment does not collect the provider delivery price from the customer wallet");
   requireText(offlineFulfilmentPaymentMigration, "accepts_offline_customer_payment boolean not null default false", "provider offline acceptance is opt-in by default");
+});
+
+Deno.test("Logistics customers can save searched street addresses and choose a preferred shared location", async () => {
+  const request = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsRequestScreen.tsx");
+  const picker = await Deno.readTextFile("apps/logistics-mobile/src/ui/GeographyPicker.tsx");
+  requireText(request, 'session.api.post("/lpg/locations"', "selected Logistics addresses are saved through the shared customer-location endpoint");
+  requireText(request, 'source: "skima.logistics.mobile"', "saved Logistics addresses retain their source application");
+  requireText(request, "Save these pickup and destination addresses to My saved locations", "customers can save both route endpoints for future use");
+  requireText(request, 'set_lpg_customer_location_default', "a saved address can be made preferred");
+  requireText(request, "displayPlaceAddress(place)", "street-level address is retained in the selected route label");
+  requireText(picker, '"/lpg/maps/geocode"', "manually typed address is geocoded before selection");
+  requireText(picker, '"/lpg/maps/reverse-geocode"', "map-pin address is reverse-geocoded before selection");
 });

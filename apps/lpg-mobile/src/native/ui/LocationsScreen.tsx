@@ -18,7 +18,7 @@ import {
   type AddressPayload,
   type MapLookup,
 } from "../domains/maps/gateway";
-import { OperationalMap } from "../maps/OperationalMap";
+import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -300,12 +300,14 @@ export function LocationsScreen() {
 
       <View style={[styles.workspace, width >= 900 && styles.workspaceWide]}>
         <View style={[styles.mapColumn, width >= 900 && styles.mapColumnWide]}>
-          <OperationalMap
+          <StreetMapPreview
+            title="Pin your saved delivery place"
+            coordinate={selected ? { latitude: selected.latitude, longitude: selected.longitude } : null}
             points={mapPoints}
             height={width < 600 ? 340 : 470}
             initialZoom={20}
-            maxZoom={21}
             onSelectPoint={(point) => void selectMapPoint(point)}
+            interactive
           />
           {resolving ? (
             <View style={styles.mapBusy}><ActivityIndicator color="white" /><Text style={styles.mapBusyText}>Resolving address…</Text></View>
@@ -441,13 +443,16 @@ function mapLookupFromPrediction(prediction: Record<string, unknown>): MapLookup
 }
 
 function normalizeAddress(value: AddressPayload | null | undefined): OperationalAddress {
+  const providerName = clean(value?.name);
   const street = clean(value?.street)
     ?? clean(value?.route)
+    ?? (isLikelyStreetName(providerName) ? providerName : null)
     ?? null;
-  const streetNumber = clean(value?.streetNumber);
+  const streetNumber = clean(value?.streetNumber) ?? clean((value as Record<string, unknown> | null | undefined)?.house_number as string | undefined);
+  const isStreetName = Boolean(providerName && street && providerName.toLocaleLowerCase() === street.toLocaleLowerCase());
   return {
-    name: clean(value?.name) ?? clean(value?.landmark) ?? clean(value?.premise),
-    street: streetNumber && street && !street.startsWith(streetNumber) ? `${streetNumber} ${street}` : street,
+    name: (isStreetName ? null : providerName) ?? clean(value?.landmark) ?? clean(value?.premise),
+    street: streetNumber && street && !street.toLocaleLowerCase().startsWith(streetNumber.toLocaleLowerCase() + " ") ? `${streetNumber} ${street}` : street,
     district: clean(value?.district) ?? clean(value?.locality) ?? clean(value?.subLocality),
     city: clean(value?.city) ?? clean(value?.town) ?? clean(value?.village),
     region: clean(value?.region) ?? clean(value?.state),
@@ -487,9 +492,25 @@ function hasAddress(address: OperationalAddress) {
 }
 
 function compactAddress(location: OperationalLocation) {
-  const parts = [location.address.district, location.address.city, location.address.region]
-    .filter((value): value is string => Boolean(value));
-  return Array.from(new Set(parts)).join(", ") || location.formattedAddress;
+  // Keep the street/house-number line visible in the main selected-location
+  // summary. The previous summary intentionally started at district/city,
+  // which made successful street autocomplete look as though it stopped there.
+  const parts = [
+    location.address.street,
+    location.address.neighbourhood,
+    location.address.district,
+    location.address.city ?? location.address.town ?? location.address.village,
+    location.address.lga,
+    location.address.region ?? location.address.state,
+    location.address.country,
+  ].filter((value): value is string => Boolean(value));
+  const seen = new Set<string>();
+  return parts.filter((part) => {
+    const key = part.trim().toLocaleLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).join(", ") || location.formattedAddress;
 }
 
 function distinctName(address: OperationalAddress) {
@@ -524,6 +545,11 @@ function validCoordinate(latitude: number, longitude: number) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isLikelyStreetName(value: string | null): boolean {
+  if (!value) return false;
+  return /(?:^|\s)(?:road|rd\.?|street|st\.?|avenue|ave\.?|lane|ln\.?|drive|dr\.?|close|crescent|cr\.?|way|boulevard|blvd\.?|highway|hwy\.?|expressway|parkway|pkwy\.?|terrace|court|ct\.?|place|pl\.?|square|sq\.?|path|bypass)\.?$/i.test(value.trim());
 }
 
 function clean(value: string | null | undefined) {

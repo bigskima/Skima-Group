@@ -25,6 +25,15 @@ import { useMapsRendererConfiguration } from "../domains/maps/useMapsRendererCon
 
 export type { MapPoint } from "../domains/maps";
 
+// Register before any Map mounts so the first OSM tile requests are identified,
+// not only requests issued after the component's first effect.
+TransformRequestManager.addHeader({
+  id: "skima-osm-native-user-agent",
+  name: "User-Agent",
+  value: "SKIMA-LPG/1.0 (+https://skima.online)",
+  match: /^https:\/\/tile\.openstreetmap\.org\//,
+});
+
 export interface OperationalMapProps {
   points: readonly MapPoint[];
   routeCoordinates?: readonly { latitude: number; longitude: number }[];
@@ -49,17 +58,6 @@ export function OperationalMap({
   const camera = useRef<CameraRef>(null);
   const mapRenderer = useMapsRendererConfiguration();
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => {
-    // OpenStreetMap's public tile service requires native clients to identify
-    // themselves. Match only the official keyless raster host.
-    TransformRequestManager.addHeader({
-      id: "skima-osm-native-user-agent",
-      name: "User-Agent",
-      value: "SKIMA-LPG/1.0",
-      match: /^https:\/\/tile\.openstreetmap\.org\//,
-    });
-  }, []);
-
   const pathCoordinates = routeCoordinates ?? (connectPoints ? points : []);
   const fitPoints: MapPoint[] = pathCoordinates.length
     ? [...points, ...pathCoordinates.map((point) => ({ ...point, label: "" }))]

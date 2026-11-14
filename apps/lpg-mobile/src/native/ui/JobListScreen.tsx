@@ -8,6 +8,7 @@ import { useManagedDriverEarnings } from "../api/managedDriverEarnings";
 import {
   cylinderPermanentIdentifier,
   cylinderRegistryReference,
+  displayLocationAddress,
   displayReference,
   displayStatus,
   firstNumber,
@@ -192,7 +193,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
               ? firstString(driver, ["publicReference", "public_reference", "driverId", "driver_id"])
               : firstString(job, ["driverReference", "driver_reference"]);
             const locationText = location
-              ? (firstString(location, ["formattedAddress", "formatted_address", "displayName", "display_name"]) ?? "Location details available in the job")
+              ? (displayLocationAddress(location) ?? firstString(location, ["formattedAddress", "formatted_address", "displayName", "display_name"]) ?? "Location details available in the job")
               : workspace === "station"
               ? (firstString(job, ["stationAddress", "stationDisplayName", "station_address", "station_display_name"]) ?? "This station")
               : "Location details available in the job";

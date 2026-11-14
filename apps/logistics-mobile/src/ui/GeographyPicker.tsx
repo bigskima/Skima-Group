@@ -8,6 +8,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { AppField } from "./AppField";
+import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview";
 
 type Place = Record<string, unknown>;
 type PickerMode = "address" | "service_area";
@@ -17,6 +18,13 @@ const AutocompleteSchema = z.object({
   provider: z.string().optional(),
   providerAttribution: z.string().optional(),
 });
+const GeocodeSchema = z.object({
+  addressComponents: z.record(z.string(), z.unknown()).nullable().optional(),
+  formattedAddress: z.string().nullable().optional(),
+  location: z.object({ latitude: z.number(), longitude: z.number() }),
+  placeId: z.string().nullable().optional(),
+  provider: z.string(),
+}).passthrough();
 
 function objectValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -66,6 +74,24 @@ function resolveByAddressComponents(geographies: readonly Place[], candidates: r
 
 function nearestGeography(prediction: Place, geographies: readonly Place[]) {
   const address = objectValue(prediction.addressComponents ?? prediction.address_components) ?? {};
+  // Resolve the service-area parent independently from the street. Try the
+  // most specific administrative components one at a time: a city name such
+  // as "Onitsha" can be shared by North/South LGAs, while county/state_district
+  // may identify the correct LGA and must still get a chance to resolve.
+  const lgaCandidates = [
+    asString(address, "lga"),
+    asString(address, "state_district"),
+    asString(address, "county"),
+    asString(address, "city_district"),
+    asString(address, "district"),
+    asString(address, "municipality"),
+    asString(address, "suburb"),
+  ].filter((value): value is string => Boolean(value));
+  for (const candidate of lgaCandidates) {
+    const resolved = resolveByAddressComponents(geographies, [candidate]);
+    if (resolved) return resolved;
+  }
+
   const localityCandidates = [
     asString(address, "village"),
     asString(address, "town"),
@@ -73,31 +99,20 @@ function nearestGeography(prediction: Place, geographies: readonly Place[]) {
     asString(address, "locality"),
     asString(address, "city"),
     asString(address, "name"),
-    asString(address, "district"),
-    asString(address, "county"),
-    asString(address, "municipality"),
-    asString(address, "lga"),
   ].filter((value): value is string => Boolean(value));
-  const lgaCandidates = [
-    asString(address, "lga"),
-    asString(address, "district"),
-    asString(address, "city_district"),
-    asString(address, "state_district"),
-    asString(address, "county"),
-    asString(address, "municipality"),
-    asString(address, "suburb"),
-  ].filter((value): value is string => Boolean(value));
+  for (const candidate of localityCandidates) {
+    const resolved = resolveByAddressComponents(geographies, [candidate]);
+    if (resolved) return resolved;
+  }
+
   const stateCandidates = [
     asString(address, "state"),
     asString(address, "region"),
   ].filter((value): value is string => Boolean(value));
-
-  const specificMatches = geographies.filter((item) => geographyMatches(item, localityCandidates));
-  if (specificMatches.length) return resolveMostSpecificGeography(specificMatches);
-  const lgaMatches = geographies.filter((item) => geographyMatches(item, lgaCandidates));
-  if (lgaMatches.length) return resolveMostSpecificGeography(lgaMatches);
-  const state = resolveByAddressComponents(geographies, stateCandidates, false);
-  if (state) return state;
+  for (const candidate of stateCandidates) {
+    const resolved = resolveByAddressComponents(geographies, [candidate], false);
+    if (resolved) return resolved;
+  }
 
   const description = asString(prediction, "description", "formattedAddress", "formatted_address");
   if (description) {
@@ -120,25 +135,38 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
   const location = objectValue(prediction.location);
   const geography = nearestGeography(prediction, geographies);
   const id = asString(geography, "id");
-  if (!description || !id) return null;
+  if (!description) return null;
   const address = objectValue(prediction.addressComponents ?? prediction.address_components) ?? {};
   const state = asString(address, "state", "region");
   const locality = asString(address, "village", "town", "subLocality", "locality", "city", "district");
-  const lga = asString(address, "lga", "city_district");
+  const lga = asString(address, "lga", "state_district", "county", "city_district", "district");
+  const houseNumber = asString(address, "houseNumber", "house_number");
+  const street = asString(address, "route", "road", "street");
+  const normalizedStreet = normalized(street);
+  const normalizedHouseNumber = normalized(houseNumber);
+  const streetLine = street
+    ? houseNumber && !normalizedStreet.startsWith(normalizedHouseNumber + " ")
+      && normalizedStreet !== normalizedHouseNumber
+      ? houseNumber + " " + street
+      : street
+    : houseNumber;
   const country = asString(address, "country") ?? "Nigeria";
   const context = [locality, lga, state, country].filter(Boolean).join(" · ");
   return {
-    id,
+    id: id ?? "",
     canonical_name: description,
     display_name: description,
     formatted_address: asString(prediction, "formattedAddress", "formatted_address") ?? description,
+    street_line: streetLine || street || null,
+    house_number: houseNumber,
+    street_name: street,
     parent_name: context || asString(geography, "canonical_name") || "Nigeria",
     country_code: "NG",
     address_components: address,
     location: location,
     place_id: asString(prediction, "placeId", "place_id"),
     location_source: "locationiq",
-    geography_source: "canonical_parent",
+    geography_source: id ? "canonical_parent" : "pending_parent",
     geography_name: asString(geography, "geography_name", "canonical_name"),
     geography_hierarchy_path: asString(geography, "hierarchy_path"),
   };
@@ -170,6 +198,8 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   const { palette } = useAppTheme();
   const { api, status } = useSession();
   const search = value.trim();
+  const [pendingStreet, setPendingStreet] = useState<Place | null>(null);
+  const [parentSearchText, setParentSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedSearch(search), 260);
@@ -203,23 +233,71 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     staleTime: 60_000,
     retry: 1,
   });
+  // A street normally has no row in the canonical geography table. Resolve
+  // its LGA/city/state parent separately; never replace the street label with
+  // that broader parent or discard the provider's full address prediction.
+  const addressContextSearch = useMemo(() => {
+    const first = autocomplete.data?.predictions?.[0];
+    const address = objectValue(first?.addressComponents ?? first?.address_components) ?? {};
+    const candidates = [
+      asString(address, "lga"),
+      asString(address, "state_district"),
+      asString(address, "county"),
+      asString(address, "city_district"),
+      asString(address, "district"),
+      asString(address, "municipality"),
+      asString(address, "suburb"),
+      asString(address, "city"),
+      asString(address, "town"),
+      asString(address, "village"),
+      asString(address, "state", "region"),
+    ].filter((candidate): candidate is string => Boolean(candidate));
+    return [...new Set(candidates)].join(" ");
+  }, [autocomplete.data]);
+  const addressContextQuery = useQuery<Place[]>({
+    queryKey: ["skima-logistics", "address-parent-geography", addressContextSearch.toLowerCase()],
+    enabled: status === "authenticated" && mode === "address" && !selected && addressContextSearch.length >= 2,
+    queryFn: ({ signal }) => api.get(
+      "/runtime/logistics/geographies?countryCode=NG&limit=50&search=" + encodeURIComponent(addressContextSearch),
+      RecordArraySchema,
+      { signal },
+    ),
+    staleTime: 5 * 60_000,
+  });
+  const parentChoicesQuery = useQuery<Place[]>({
+    queryKey: ["skima-logistics", "street-parent-search", parentSearchText.trim().toLowerCase()],
+    enabled: status === "authenticated" && mode === "address" && Boolean(pendingStreet) && parentSearchText.trim().length >= 2,
+    queryFn: ({ signal }) => api.get(
+      "/runtime/logistics/geographies?countryCode=NG&limit=50&search=" + encodeURIComponent(parentSearchText.trim()),
+      RecordArraySchema,
+      { signal },
+    ),
+    staleTime: 5 * 60_000,
+  });
+  const availableGeographies = useMemo(() => {
+    const byId = new Map<string, Place>();
+    for (const place of [...(query.data ?? []), ...(addressContextQuery.data ?? [])]) {
+      const id = asString(place, "id");
+      if (id) byId.set(id, place);
+    }
+    return [...byId.values()];
+  }, [query.data, addressContextQuery.data]);
 
   const addressPredictions = useMemo(() => {
-    const available = query.data ?? [];
     return (autocomplete.data?.predictions ?? [])
-      .map((item) => toAddressPlace(item, available))
+      .map((item) => toAddressPlace(item, availableGeographies))
       .filter((item): item is Place => item !== null);
-  }, [autocomplete.data, query.data]);
+  }, [autocomplete.data, availableGeographies]);
   const places = useMemo(() => mode === "service_area"
     ? (query.data ?? [])
     : uniquePlaces(query.data ?? [], addressPredictions), [mode, query.data, addressPredictions]);
   const selectedName = selected ? asString(selected, "canonical_name", "display_name") : null;
   const loading = query.isPending ||
-    (mode === "address" && debouncedSearch.length >= 3 && autocomplete.isPending);
-  const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error));
+    (mode === "address" && debouncedSearch.length >= 3 && (autocomplete.isPending || addressContextQuery.isPending));
+  const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error) || Boolean(addressContextQuery.error));
   const manualBase = useMemo(() => {
     const queryText = normalized(search);
-    const candidates = query.data ?? [];
+    const candidates = availableGeographies;
     const specificMatches = candidates.filter((item) => {
       const name = normalized(asString(item, "canonical_name"));
       const aliases = Array.isArray(item.aliases)
@@ -229,22 +307,141 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
         aliases.some((alias) => alias.length >= 3 && queryText.includes(alias));
     });
     return resolveMostSpecificGeography(specificMatches);
-  }, [query.data, search]);
-  const useManualAddress = () => {
+  }, [availableGeographies, search]);
+  const [manualResolving, setManualResolving] = useState(false);
+  const [manualResolutionMessage, setManualResolutionMessage] = useState<string | null>(null);
+
+  const useManualAddress = async () => {
     const id = asString(manualBase, "id");
-    if (!id || !search) return;
+    if (!id || !search || manualResolving) return;
+    setManualResolving(true);
+    setManualResolutionMessage(null);
+    try {
+      const resolved = await api.post(
+        "/lpg/maps/geocode",
+        { address: lookupText },
+        GeocodeSchema,
+      );
+      onSelect({
+        id,
+        canonical_name: search,
+        display_name: search,
+        formatted_address: resolved.formattedAddress ?? search,
+        address_components: resolved.addressComponents ?? {},
+        location: resolved.location,
+        place_id: resolved.placeId ?? null,
+        placeId: resolved.placeId ?? null,
+        location_source: "locationiq",
+        geography_source: "canonical_parent",
+        geography_name: asString(manualBase, "geography_name", "canonical_name"),
+        geography_hierarchy_path: asString(manualBase, "hierarchy_path"),
+        parent_name: asString(manualBase, "canonical_name") ?? "Nigeria",
+        country_code: "NG",
+      });
+    } catch {
+      onSelect({
+        id,
+        canonical_name: search,
+        display_name: search,
+        formatted_address: search,
+        address_components: {},
+        location: null,
+        place_id: null,
+        location_source: "manual",
+        geography_source: "canonical_parent",
+        geography_name: asString(manualBase, "geography_name", "canonical_name"),
+        geography_hierarchy_path: asString(manualBase, "hierarchy_path"),
+        parent_name: asString(manualBase, "canonical_name") ?? "Nigeria",
+        country_code: "NG",
+      });
+      setManualResolutionMessage("This address was kept as entered, but a precise map position was not returned. Add a more specific street or landmark if the driver needs a pin-level destination.");
+    } finally {
+      setManualResolving(false);
+    }
+  };
+
+  const updateFromMapPin = async (point: { latitude: number; longitude: number }) => {
+    if (!selected || manualResolving) return;
+    setManualResolving(true);
+    setManualResolutionMessage(null);
+    try {
+      const resolved = await api.post(
+        "/lpg/maps/reverse-geocode",
+        { location: point },
+        GeocodeSchema,
+      );
+      const address = resolved.addressComponents ?? {};
+      const parentSearch = asString(address, "lga", "state_district", "county", "city_district", "district", "municipality", "city", "town", "village", "state", "region");
+      if (!parentSearch) throw new Error("The selected pin could not be linked to a Nigerian service area.");
+      const parentResults = await api.get(
+        "/runtime/logistics/geographies?countryCode=NG&limit=50&search=" + encodeURIComponent(parentSearch),
+        RecordArraySchema,
+      );
+      const geography = nearestGeography({
+        description: resolved.formattedAddress ?? parentSearch,
+        addressComponents: address,
+        location: resolved.location,
+      }, [...availableGeographies, ...parentResults]);
+      const nextId = asString(geography, "id");
+      if (!nextId) throw new Error("Choose a map pin inside a recognized service area. The previous address has been kept.");
+      const display = resolved.formattedAddress ?? asString(geography, "canonical_name") ?? parentSearch;
+      onSelect({
+        ...selected,
+        id: nextId,
+        canonical_name: display,
+        display_name: display,
+        formatted_address: display,
+        address_components: address,
+        location: resolved.location,
+        place_id: resolved.placeId ?? null,
+        placeId: resolved.placeId ?? null,
+        location_source: "locationiq",
+        geography_source: "canonical_parent",
+        geography_name: asString(geography, "canonical_name"),
+        geography_hierarchy_path: asString(geography, "hierarchy_path"),
+        parent_name: [asString(address, "city", "town", "village"), asString(address, "lga", "county", "state_district"), asString(address, "state", "region"), "Nigeria"].filter(Boolean).join(" · "),
+        country_code: "NG",
+      });
+    } catch (cause) {
+      setManualResolutionMessage(cause instanceof Error ? cause.message : "The map pin could not be resolved. Your selected address remains unchanged.");
+    } finally {
+      setManualResolving(false);
+    }
+  };
+
+  const selectedLocation = objectValue(selected?.location);
+  const selectedCoordinate = selectedLocation &&
+      typeof selectedLocation.latitude === "number" &&
+      typeof selectedLocation.longitude === "number"
+    ? { latitude: selectedLocation.latitude, longitude: selectedLocation.longitude }
+    : null;
+
+  const pendingStreetLocation = objectValue(pendingStreet?.location);
+  const pendingStreetCoordinate = pendingStreetLocation &&
+      typeof pendingStreetLocation.latitude === "number" &&
+      typeof pendingStreetLocation.longitude === "number"
+    ? { latitude: pendingStreetLocation.latitude, longitude: pendingStreetLocation.longitude }
+    : null;
+  const parentOptions = parentSearchText.trim().length >= 2
+    ? (parentChoicesQuery.data ?? [])
+    : availableGeographies;
+
+  const chooseStreetParent = (parent: Place) => {
+    const parentId = asString(parent, "id");
+    if (!pendingStreet || !parentId) return;
+    const parentName = asString(parent, "canonical_name") ?? "Selected service area";
     onSelect({
-      id,
-      canonical_name: search,
-      display_name: search,
-      formatted_address: search,
-      parent_name: asString(manualBase, "canonical_name") ?? "Nigeria",
-      country_code: "NG",
-      location_source: "manual",
+      ...pendingStreet,
+      id: parentId,
       geography_source: "canonical_parent",
-      geography_name: asString(manualBase, "geography_name", "canonical_name"),
-      geography_hierarchy_path: asString(manualBase, "hierarchy_path"),
+      geography_name: parentName,
+      geography_hierarchy_path: asString(parent, "hierarchy_path"),
+      parent_name: parentName + " · Nigeria",
+      country_code: "NG",
     });
+    setPendingStreet(null);
+    setParentSearchText("");
+    setManualResolutionMessage(null);
   };
 
   return (
@@ -252,7 +449,11 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
       <AppField
         label={label}
         value={selectedName ?? value}
-        onChangeText={onChange}
+        onChangeText={(nextValue) => {
+          setPendingStreet(null);
+          setParentSearchText("");
+          onChange(nextValue);
+        }}
         onSubmitEditing={() => undefined}
         placeholder={mode === "service_area" ? "Search state, LGA or service area" : "Search town, street, landmark or house address"}
         autoCorrect={false}
@@ -261,17 +462,30 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
         error={error}
       />
       {selected ? (
+        <>
         <View style={[styles.selected, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
           <View style={[styles.selectedIcon, { backgroundColor: palette.surface }]}><Check color={palette.success} size={15} /></View>
           <View style={styles.selectedCopy}>
-            <Text style={[styles.selectedTitle, { color: palette.ink }]} numberOfLines={2}>{selectedName}</Text>
+            <Text style={[styles.selectedTitle, { color: palette.ink }]} numberOfLines={3}>{selectedName}</Text>
             <Text style={[styles.selectedMeta, { color: palette.muted }]}>
               {asString(selected, "parent_name") ?? asString(selected, "country_code") ?? "NG"}
-              {asString(selected, "location_source") === "manual" ? " · Manual address" : asString(selected, "location_source") === "locationiq" ? " · Address result" : " · Service area"}
+              {asString(selected, "location_source") === "manual" ? " · Manual address" : asString(selected, "location_source") === "locationiq" ? " · Street address" : " · Service area"}
             </Text>
+            {asString(selected, "street_line") ? <Text style={[styles.selectedStreet, { color: palette.ink }]}>{asString(selected, "street_line")}</Text> : null}
+            {manualResolutionMessage ? <Text style={[styles.hint, { color: palette.warning }]}>{manualResolutionMessage}</Text> : null}
           </View>
           <Pressable accessibilityRole="button" onPress={() => onChange("")}><Text style={[styles.change, { color: palette.brand }]}>Change</Text></Pressable>
         </View>
+        {mode === "address" && selectedCoordinate ? (
+          <StreetMapPreview
+            title={label + " · street location"}
+            coordinate={selectedCoordinate}
+            onSelectPoint={updateFromMapPin}
+            interactive
+            height={190}
+          />
+        ) : null}
+        </>
       ) : search.length < 2 ? (
         <View style={styles.hintRow}>
           <Search color={palette.muted} size={13} />
@@ -289,10 +503,19 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
           {places.slice(0, 8).map((place, index) => {
             const id = asString(place, "id");
             const name = asString(place, "canonical_name", "description") ?? "Location";
-            const parent = asString(place, "hierarchy_path", "parent_name", "state_name", "lga_name") ?? "Nigeria";
+            const parent = asString(place, "hierarchy_path", "parent_name", "state_name", "lga_name") ?? (id ? "Nigeria" : "Service area confirmation needed");
             const source = asString(place, "location_source");
+            const needsParent = mode === "address" && !id && Boolean(objectValue(place.location));
             return (
-              <Pressable key={id ? `${id}:${name}` : `${name}:${index}`} accessibilityRole="button" onPress={() => onSelect(place)}
+              <Pressable key={id ? `${id}:${name}` : `${name}:${index}`} accessibilityRole="button" onPress={() => {
+                  if (needsParent) {
+                    setPendingStreet(place);
+                    setParentSearchText("");
+                    setManualResolutionMessage(null);
+                  } else if (id) {
+                    onSelect(place);
+                  }
+                }}
                 style={({ pressed }) => [styles.resultRow, pressed && { backgroundColor: palette.brandSofter }]}>
                 <View style={[styles.resultIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={15} /></View>
                 <View style={styles.resultCopy}>
@@ -306,12 +529,48 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
             );
           })}
         </View>
+        {pendingStreet ? (
+          <View style={[styles.parentPicker, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            <Text style={[styles.manualInlineTitle, { color: palette.ink }]}>Street address found — confirm its SKIMA service area</Text>
+            <Text style={[styles.hint, { color: palette.muted }]}>{asString(pendingStreet, "formatted_address", "canonical_name") ?? "Street address"} is preserved as the delivery address. Choose the correct active service area separately.</Text>
+            {pendingStreetCoordinate ? <StreetMapPreview title="Street address location" coordinate={pendingStreetCoordinate} height={170} /> : null}
+            <AppField
+              label="Search LGA, town or service area"
+              value={parentSearchText}
+              onChangeText={setParentSearchText}
+              placeholder="e.g. Onitsha North, Awka South"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {parentChoicesQuery.isFetching ? <Text style={[styles.hint, { color: palette.muted }]}>Finding matching service areas…</Text> : null}
+            {parentOptions.length ? (
+              <View style={[styles.results, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                {parentOptions.slice(0, 8).map((parent, parentIndex) => {
+                  const parentId = asString(parent, "id");
+                  const parentName = asString(parent, "canonical_name") ?? "Service area";
+                  if (!parentId) return null;
+                  return (
+                    <Pressable key={parentId + ":" + parentIndex} accessibilityRole="button" onPress={() => chooseStreetParent(parent)}
+                      style={({ pressed }) => [styles.resultRow, pressed && { backgroundColor: palette.brandSofter }]}>
+                      <View style={[styles.resultIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={15} /></View>
+                      <View style={styles.resultCopy}>
+                        <Text style={[styles.resultTitle, { color: palette.ink }]} numberOfLines={2}>{parentName}</Text>
+                        <Text style={[styles.resultMeta, { color: palette.muted }]} numberOfLines={2}>{asString(parent, "hierarchy_path") ?? "Nigeria service area"}</Text>
+                      </View>
+                      <Check color={palette.borderStrong} size={15} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : <Text style={[styles.hint, { color: palette.muted }]}>Search by the recipient’s LGA or town. The street address will not be replaced by this service-area selection.</Text>}
+          </View>
+        ) : null}
         {mode === "address" && manualBase && search.length >= 3 ? (
-          <Pressable accessibilityRole="button" onPress={useManualAddress}
+          <Pressable accessibilityRole="button" disabled={manualResolving} onPress={() => void useManualAddress()}
             style={[styles.manualInline, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
-            <Text style={[styles.manualInlineTitle, { color: palette.brand }]}>Use typed address instead</Text>
+            <Text style={[styles.manualInlineTitle, { color: palette.brand }]}>{manualResolving ? "Resolving typed address…" : "Use typed address instead"}</Text>
             <Text style={[styles.hint, { color: palette.muted }]} numberOfLines={2}>
-              “{search}” will be saved as entered and associated with {asString(manualBase, "canonical_name")}.
+              Search the full street address and retain its coordinates when the map service can resolve it. Parent area: {asString(manualBase, "canonical_name")}.
             </Text>
           </Pressable>
         ) : null}
@@ -324,11 +583,12 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
               : "We couldn’t tie this address to a service area yet. Choose a state, LGA or town from the results so providers receive the correct region."}
           </Text>
           {mode === "address" && manualBase && search.length >= 3 ? (
-            <Pressable accessibilityRole="button" onPress={useManualAddress} style={[styles.manualButton, { borderColor: palette.borderStrong }]}>
-              <Text style={[styles.manualTitle, { color: palette.brand }]}>Use “{search}” as a manual address</Text>
-              <Text style={[styles.hint, { color: palette.muted }]}>It will be associated with {asString(manualBase, "canonical_name")}; add the street, nearby bus stop or house number in the address.</Text>
+            <Pressable accessibilityRole="button" disabled={manualResolving} onPress={() => void useManualAddress()} style={[styles.manualButton, { borderColor: palette.borderStrong }]}>
+              <Text style={[styles.manualTitle, { color: palette.brand }]}>{manualResolving ? "Resolving typed address…" : "Use “" + search + "” as a manual address"}</Text>
+              <Text style={[styles.hint, { color: palette.muted }]}>The street address will be geocoded where possible and linked to {asString(manualBase, "canonical_name")}.</Text>
             </Pressable>
           ) : null}
+          {manualResolutionMessage ? <Text style={[styles.hint, { color: palette.warning }]}>{manualResolutionMessage}</Text> : null}
         </View>
       )}
       {mode === "address" && !selected && autocomplete.data?.providerAttribution ? (
@@ -340,11 +600,13 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
 
 const styles = StyleSheet.create({
   group: { gap: 8 },
+  parentPicker: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 11, gap: 9 },
   selected: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 10 },
   selectedIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   selectedCopy: { flex: 1, gap: 2 },
   selectedTitle: { ...typography.bodyStrong, fontSize: 12 },
   selectedMeta: { ...typography.caption, fontSize: 9 },
+  selectedStreet: { ...typography.caption, fontSize: 10, fontWeight: "800" },
   change: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   hintRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 3 },
   hint: { ...typography.caption, fontSize: 10, lineHeight: 15 },

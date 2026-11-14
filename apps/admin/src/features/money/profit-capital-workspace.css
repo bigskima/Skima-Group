@@ -1,0 +1,37 @@
+.skima-profit-capital{display:grid;gap:18px;min-width:0}
+.skima-pc-panel{display:grid;gap:16px;min-width:0}
+.skima-pc-panel .sk-panel__header{align-items:flex-start}
+.skima-pc-currency{max-width:180px}
+.skima-pc-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.skima-pc-field{display:grid;gap:6px;min-width:0;color:var(--sk-text-muted,#777);font-size:12px;font-weight:650}
+.skima-pc-field input,.skima-pc-field select,.skima-pc-category input,.skima-pc-payment-fields input{width:100%;min-width:0;border:1px solid var(--sk-border,#ddd);border-radius:10px;padding:10px 11px;color:var(--sk-text,#151515);background:var(--sk-surface,#fff);font:inherit}
+.skima-pc-category-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.skima-pc-category{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding:12px;border:1px solid var(--sk-border,#ddd);border-radius:12px}
+.skima-pc-category>div{display:grid;gap:3px;min-width:0}
+.skima-pc-category strong{font-size:13px}
+.skima-pc-category small,.skima-pc-table small,.skima-pc-distribution small{display:block;margin-top:3px;color:var(--sk-text-muted,#777);font-size:11px;line-height:1.45}
+.skima-pc-category label{display:flex;align-items:center;gap:5px;width:112px;flex:0 0 112px}
+.skima-pc-category input{text-align:right;padding:8px}
+.skima-pc-total{display:flex;align-items:center;flex-wrap:wrap;gap:12px;border-top:1px solid var(--sk-border,#ddd);padding-top:12px}
+.skima-pc-total strong{font-size:20px;font-variant-numeric:tabular-nums}
+.skima-pc-total .is-valid{color:#16834b}.skima-pc-total .is-invalid{color:#b75a12}
+.skima-pc-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.skima-pc-table-wrap{width:100%;overflow-x:auto}
+.skima-pc-table{width:100%;min-width:680px;border-collapse:collapse;font-size:12px}
+.skima-pc-table th,.skima-pc-table td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--sk-border,#ddd);vertical-align:top}
+.skima-pc-table th{color:var(--sk-text-muted,#777);font-size:10px;letter-spacing:.04em;text-transform:uppercase}
+.skima-pc-status-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.skima-pc-notice{border:1px solid var(--sk-border,#ddd);border-radius:10px;padding:11px 13px;font-size:12px}
+.skima-pc-notice--success{background:rgba(20,130,75,.07)}.skima-pc-notice--warning{background:rgba(180,120,20,.07)}.skima-pc-notice--danger{background:rgba(180,30,30,.07)}
+.skima-pc-distributions{display:grid;gap:12px}
+.skima-pc-distribution{display:grid;gap:14px;border:1px solid var(--sk-border,#ddd);border-radius:14px;padding:14px}
+.skima-pc-distribution-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.skima-pc-distribution-head>div:first-child{min-width:0}.skima-pc-distribution-head strong{display:block}
+.skima-pc-allocation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.skima-pc-allocation-grid>div{display:grid;gap:4px;min-width:0;padding:10px;border-radius:10px;background:var(--sk-surface-subtle,rgba(128,128,128,.06))}
+.skima-pc-allocation-grid span{color:var(--sk-text-muted,#777);font-size:10px}
+.skima-pc-allocation-grid strong{font-size:13px;font-variant-numeric:tabular-nums}
+.skima-pc-subsection{display:grid;gap:9px}.skima-pc-subsection h3{margin:0;font-size:14px}
+.skima-pc-payment-fields{display:grid;min-width:190px;max-width:240px;gap:6px}
+.skima-pc-empty{padding:24px;border:1px dashed var(--sk-border,#ddd);border-radius:12px;color:var(--sk-text-muted,#777);text-align:center}
+@media(max-width:760px){.skima-pc-form-grid,.skima-pc-category-grid{grid-template-columns:minmax(0,1fr)}.skima-pc-distribution-head{flex-direction:column}.skima-pc-allocation-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.skima-pc-category{align-items:flex-start}}

@@ -44,7 +44,7 @@ import {
   type AddressPayload,
   type MapLookup,
 } from "../domains/maps/gateway";
-import { OperationalMap } from "../maps/OperationalMap";
+import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -475,12 +475,14 @@ export function StationLocationEditorScreen() {
 
       <View style={[styles.workspace, width >= 900 && styles.workspaceWide]}>
         <View style={[styles.mapColumn, width >= 900 && styles.mapColumnWide]}>
-          <OperationalMap
+          <StreetMapPreview
+            title="Pin the station entrance"
+            coordinate={selected ? { latitude: selected.latitude, longitude: selected.longitude } : null}
             points={mapPoints}
             height={width < 600 ? 330 : 460}
             initialZoom={18}
-            maxZoom={21}
             onSelectPoint={(point) => void selectMapPoint(point)}
+            interactive
           />
           {resolving ? (
             <View style={styles.mapBusy}><ActivityIndicator color="#FFFFFF" /><Text style={styles.mapBusyText}>Checking address…</Text></View>
@@ -617,11 +619,14 @@ function requestKindLabel(value: string | null) {
 
 function locationSummary(item: Record<string, unknown>) {
   return uniqueParts([
-    firstString(item, ["city"]),
-    firstString(item, ["lga"]),
-    firstString(item, ["state"]),
+    firstString(item, ["street", "road", "street_name"]),
+    firstString(item, ["neighbourhood", "neighborhood", "sublocality"]),
+    firstString(item, ["district", "locality"]),
+    firstString(item, ["city", "town", "village"]),
+    firstString(item, ["lga", "county"]),
+    firstString(item, ["state", "region"]),
     firstString(item, ["country"]),
-  ]).join(", ") || "Structured address needs completion";
+  ]).join(", ") || firstString(item, ["formattedAddress", "formatted_address"]) || "Structured address needs completion";
 }
 
 function coordinateSummary(item: Record<string, unknown>) {
@@ -632,8 +637,11 @@ function coordinateSummary(item: Record<string, unknown>) {
 
 function compactAddress(location: OperationalLocation) {
   return uniqueParts([
+    location.address.street,
+    location.address.neighbourhood,
+    location.address.district,
     location.address.city ?? location.address.town ?? location.address.village,
-    location.address.lga ?? location.address.district,
+    location.address.lga,
     location.address.state ?? location.address.region,
     location.address.country,
   ]).join(", ") || location.formattedAddress;

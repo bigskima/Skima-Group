@@ -1,9 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, ArrowRight, Box, Check, ChevronRight, FileText, MapPin, Package, ShieldCheck, Truck, Weight } from "lucide-react-native";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { asString, useCreateLogisticsJob, useLogisticsQuery } from "../api/logistics";
+import { asNumber, asString, IdSchema, useCreateLogisticsJob, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -19,6 +19,35 @@ import { StatePanel } from "../ui/StatePanel";
 type Place = Record<string, unknown>;
 function normalizedLocation(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+function likelyStreetName(value: string | null) {
+  return Boolean(value && /(?:^|\s)(?:road|rd\.?|street|st\.?|avenue|ave\.?|lane|ln\.?|drive|dr\.?|close|crescent|way|boulevard|blvd\.?|highway|hwy\.?|parkway|pkwy\.?|terrace|court|place|square|path|bypass)\.?$/i.test(value.trim()));
+}
+function displayPlaceAddress(place: Place | null) {
+  if (!place) return null;
+  const metadata = objectValue(place.metadata);
+  const components = objectValue(place.address_components)
+    ?? objectValue(place.addressComponents)
+    ?? objectValue(metadata?.addressComponents)
+    ?? objectValue(metadata?.address_components);
+  const formatted = asString(place, "formatted_address", "display_name", "canonical_name");
+  const componentName = asString(components, "name");
+  const street = asString(components, "street", "route", "road", "street_name")
+    ?? (likelyStreetName(componentName) ? componentName : null);
+  const number = asString(components, "houseNumber", "house_number", "streetNumber", "street_number");
+  const streetLine = street && number && !street.toLowerCase().startsWith(number.toLowerCase() + " ")
+    ? number + " " + street
+    : street;
+  if (streetLine && street && !(formatted ?? "").toLowerCase().includes(street.toLowerCase())) {
+    return [streetLine, formatted].filter(Boolean).join(", ");
+  }
+  return formatted ?? streetLine;
 }
 
 type Category = Record<string, unknown>;
@@ -47,9 +76,11 @@ const CARGO_TYPES = [
 
 export function LogisticsRequestScreen() {
   const { palette } = useAppTheme();
-  const { context } = useSession();
+  const session = useSession();
+  const { context } = session;
   const params = useLocalSearchParams<{ category?: string }>();
   const categoriesQuery = useLogisticsQuery(["categories"], "/runtime/logistics/categories");
+  const savedLocationsQuery = useLogisticsQuery(["customer-saved-locations"], "/lpg/locations");
   const createJob = useCreateLogisticsJob();
   const [jobIdempotencyKey, setJobIdempotencyKey] = useState(() => createClientIdempotencyKey("logistics.job.create"));
   const [step, setStep] = useState(1);
@@ -66,6 +97,8 @@ export function LogisticsRequestScreen() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [instructions, setInstructions] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [saveRouteLocations, setSaveRouteLocations] = useState(true);
+  const savedLocationAttempts = useRef<Record<string, { fingerprint: string; key: string }>>({});
 
   const categories = useMemo(() => (categoriesQuery.data ?? []).filter((item) => asString(item, "status") === "active"), [categoriesQuery.data]);
   const selectedCategory = categories.find((item) => asString(item, "key") === categoryKey) ?? null;
@@ -79,8 +112,8 @@ export function LogisticsRequestScreen() {
     if (!customerName.trim() && context?.profile?.display_name) setCustomerName(context.profile.display_name);
   }, [context?.profile?.display_name, customerName]);
 
-  const pickupName = pickup ? asString(pickup, "canonical_name") : null;
-  const destinationName = destination ? asString(destination, "canonical_name") : null;
+  const pickupName = pickup ? displayPlaceAddress(pickup) : null;
+  const destinationName = destination ? displayPlaceAddress(destination) : null;
   const validWeight = !weight.trim() || (Number.isFinite(Number(weight)) && Number(weight) > 0);
   const phoneValid = /^\+?[0-9][0-9 ()-]{6,22}$/.test(customerPhone.trim());
   const hasServiceGeography = (place: Place | null) => {
@@ -92,6 +125,75 @@ export function LogisticsRequestScreen() {
     selectedCategory && pickup && destination && title.trim().length >= 3 &&
     customerName.trim().length >= 2 && phoneValid && validWeight && !createJob.isPending
   );
+
+  const saveCustomerPlace = async (place: Place, role: "pickup" | "destination") => {
+    const formattedAddress = displayPlaceAddress(place);
+    const coordinates = objectValue(place.location);
+    const latitude = asNumber(coordinates, "latitude", "lat");
+    const longitude = asNumber(coordinates, "longitude", "lng", "lon");
+    if (!formattedAddress || latitude === null || longitude === null) {
+      throw new Error("A precise map position is needed to save this address. Confirm a street search result or map pin, or turn off address saving to continue.");
+    }
+
+    const components = objectValue(place.address_components) ?? objectValue(place.addressComponents) ?? {};
+    const street = asString(components, "street", "route", "road", "name");
+    const locality = asString(components, "neighbourhood", "subLocality", "district", "city", "town", "lga");
+    const label = ("Logistics " + role + " · " + (street ?? locality ?? "saved place")).slice(0, 80);
+    const fingerprint = [formattedAddress, latitude.toFixed(6), longitude.toFixed(6)].join("|");
+
+    const existing = (savedLocationsQuery.data ?? []).find((item) => {
+      const savedAddress = asString(item, "formatted_address");
+      const savedLatitude = asNumber(item, "latitude");
+      const savedLongitude = asNumber(item, "longitude");
+      const sameAddress = Boolean(savedAddress && normalizedLocation(savedAddress) === normalizedLocation(formattedAddress));
+      const samePoint = savedLatitude !== null && savedLongitude !== null
+        && Math.abs(savedLatitude - latitude) <= 0.0004
+        && Math.abs(savedLongitude - longitude) <= 0.0004;
+      return sameAddress || samePoint;
+    });
+    if (existing) return;
+
+    const previous = savedLocationAttempts.current[role];
+    const idempotencyKey = previous?.fingerprint === fingerprint
+      ? previous.key
+      : createClientIdempotencyKey("logistics.saved-location." + role);
+    savedLocationAttempts.current[role] = { fingerprint, key: idempotencyKey };
+
+    await session.api.post("/lpg/locations", {
+      label,
+      formattedAddress,
+      latitude,
+      longitude,
+      address: components,
+      providerPlaceId: asString(place, "place_id", "placeId") ?? null,
+      providerSource: "maps_adapter",
+      captureSource: "GEOCODED",
+      capturedAt: new Date().toISOString(),
+      source: "skima.logistics.mobile",
+      metadata: {
+        sourceApp: "logistics",
+        addressEntryMode: asString(place, "location_source") === "manual" ? "manual_search" : "street_search",
+        addressComponents: components,
+        geography: {
+          id: asString(place, "id"),
+          name: asString(place, "geography_name", "canonical_name"),
+          hierarchyPath: asString(place, "geography_hierarchy_path", "hierarchy_path"),
+        },
+      },
+      idempotencyKey,
+    }, IdSchema);
+  };
+
+  const setPreferredAddress = async (locationId: string) => {
+    const { error } = await session.supabase.rpc("set_lpg_customer_location_default", {
+      target_location_id: locationId,
+    });
+    if (error) {
+      setFieldError(error.message || "The preferred address could not be updated.");
+      return;
+    }
+    await savedLocationsQuery.refetch();
+  };
 
   const submit = async () => {
     setFieldError(null);
@@ -116,6 +218,11 @@ export function LogisticsRequestScreen() {
     if (weight.trim()) cargo.weight_kg = Number(weight);
 
     try {
+      if (saveRouteLocations) {
+        await saveCustomerPlace(pickup, "pickup");
+        await saveCustomerPlace(destination, "destination");
+        await savedLocationsQuery.refetch();
+      }
       const jobId = await createJob.mutateAsync({
         idempotencyKey: jobIdempotencyKey,
         payload: {
@@ -190,11 +297,56 @@ export function LogisticsRequestScreen() {
                   );
                 })}
               </View>
-              <SectionHeader title="Where should it go?" description="Choose an active pickup and destination from SKIMA’s location catalogue." />
+              <SectionHeader title="Where should it go?" description="Search a street or landmark, pin an exact place, or choose an address you have saved before." />
               <Card padding="md">
-                <GeographyPicker label="Pickup location" mode="address" value={pickupSearch} selected={pickup} onChange={(value) => { setPickupSearch(value); setPickup(null); }} onSelect={(place) => { setPickup(place); setPickupSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && !pickup ? fieldError : null} />
+                {savedLocationsQuery.data?.length ? (
+                  <View style={{ gap: 9, marginBottom: 12 }}>
+                    <View style={{ gap: 2 }}>
+                      <Text style={{ color: palette.ink, fontSize: 13, fontWeight: "800" }}>Your saved addresses</Text>
+                      <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>Choose one to search for the precise street address, then confirm the matching result.</Text>
+                    </View>
+                    {savedLocationsQuery.data.filter((location) => asString(location, "status") === "active").slice(0, 6).map((location) => {
+                      const savedId = asString(location, "id") ?? "";
+                      const label = asString(location, "label") ?? "Saved address";
+                      const address = displayPlaceAddress(location) ?? asString(location, "formatted_address") ?? "";
+                      const preferred = location.is_default === true;
+                      if (!savedId || !address) return null;
+                      return (
+                        <View key={savedId} style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 10, gap: 8, backgroundColor: palette.surfaceSubtle }}>
+                          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+                            <MapPin color={palette.brand} size={16} />
+                            <View style={{ flex: 1, gap: 2 }}>
+                              <Text style={{ color: palette.ink, fontSize: 12, fontWeight: "800" }}>{label}{preferred ? " · Preferred" : ""}</Text>
+                              <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>{address}</Text>
+                            </View>
+                          </View>
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                            <Pressable accessibilityRole="button" onPress={() => { setPickupSearch(address); setPickup(null); setFieldError(null); }}>
+                              <Text style={{ color: palette.brand, fontSize: 11, fontWeight: "800" }}>Use as pickup</Text>
+                            </Pressable>
+                            <Pressable accessibilityRole="button" onPress={() => { setDestinationSearch(address); setDestination(null); setFieldError(null); }}>
+                              <Text style={{ color: palette.brand, fontSize: 11, fontWeight: "800" }}>Use as destination</Text>
+                            </Pressable>
+                            {!preferred ? (
+                              <Pressable accessibilityRole="button" onPress={() => void setPreferredAddress(savedId)}>
+                                <Text style={{ color: palette.brand, fontSize: 11, fontWeight: "800" }}>Make preferred</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+                <GeographyPicker label="Pickup location" mode="address" value={pickupSearch} selected={pickup} onChange={(value) => { setPickupSearch(value); setPickup(null); }} onSelect={(place) => { setPickup(place); setPickupSearch(displayPlaceAddress(place) ?? asString(place, "canonical_name") ?? ""); }} error={fieldError && !pickup ? fieldError : null} />
                 <View style={[styles.routeDivider, { borderColor: palette.border }]} />
-                <GeographyPicker label="Destination" mode="address" value={destinationSearch} selected={destination} onChange={(value) => { setDestinationSearch(value); setDestination(null); }} onSelect={(place) => { setDestination(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && pickup && !destination ? fieldError : null} />
+                <GeographyPicker label="Destination" mode="address" value={destinationSearch} selected={destination} onChange={(value) => { setDestinationSearch(value); setDestination(null); }} onSelect={(place) => { setDestination(place); setDestinationSearch(displayPlaceAddress(place) ?? asString(place, "canonical_name") ?? ""); }} error={fieldError && pickup && !destination ? fieldError : null} />
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: saveRouteLocations }} onPress={() => setSaveRouteLocations((value) => !value)} style={{ flexDirection: "row", alignItems: "center", gap: 9, marginTop: 12, paddingVertical: 7 }}>
+                  <View style={{ width: 19, height: 19, borderWidth: 1, borderRadius: 5, borderColor: saveRouteLocations ? palette.brand : palette.border, backgroundColor: saveRouteLocations ? palette.brand : "transparent", alignItems: "center", justifyContent: "center" }}>
+                    {saveRouteLocations ? <Check color="#FFFFFF" size={13} strokeWidth={3} /> : null}
+                  </View>
+                  <Text style={{ color: palette.muted, fontSize: 11, flex: 1 }}>Save these pickup and destination addresses to My saved locations for future Refill, Store and Logistics requests</Text>
+                </Pressable>
               </Card>
             </>
           ) : step === 2 ? (

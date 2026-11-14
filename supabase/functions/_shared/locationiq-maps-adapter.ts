@@ -339,11 +339,22 @@ function normalizeLookup(
   const location = readCoordinate(result);
   if (!location) throw invalidResponseError();
   const address = optionalRecord(result.address) ?? {};
-  const route = firstText(address, ["road", "pedestrian", "footway", "path"]);
+  const addressName = firstText(address, ["name"]);
+  const displayPlace = optionalText(result.display_place);
+  const locationType = optionalText(result.type)?.toLowerCase();
+  const locationClass = optionalText(result.class)?.toLowerCase();
+  const isRoadFeature = locationType === "road" || locationClass === "highway";
+  const route = firstText(address, ["road", "pedestrian", "footway", "path"]) ??
+    (isRoadFeature || isLikelyStreetName(addressName) ? addressName : null) ??
+    (isLikelyStreetName(displayPlace) ? displayPlace : null);
   const streetNumber = firstText(address, ["house_number"]);
   const premise = firstText(address, ["building", "amenity", "shop", "office"]);
-  const name = firstText(address, ["name", "attraction", "tourism"]) ??
-    optionalText(result.display_place) ?? premise;
+  const name = [
+    firstText(address, ["attraction", "tourism"]),
+    displayPlace,
+    premise,
+    addressName,
+  ].find((candidate) => candidate && candidate.toLocaleLowerCase() !== route?.toLocaleLowerCase()) ?? null;
   const district = firstText(address, [
     "city_district",
     "district",
@@ -564,6 +575,11 @@ function optionalRecord(value: unknown): Readonly<Record<string, unknown>> | nul
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>>
     : null;
+}
+
+function isLikelyStreetName(value: string | null): boolean {
+  if (!value) return false;
+  return /(?:^|\s)(?:road|rd\.?|street|st\.?|avenue|ave\.?|lane|ln\.?|drive|dr\.?|close|crescent|cr\.?|way|boulevard|blvd\.?|highway|hwy\.?|expressway|parkway|pkwy\.?|terrace|court|ct\.?|place|pl\.?|square|sq\.?|path|bypass)\.?$/i.test(value.trim());
 }
 
 function optionalText(value: unknown): string | null {
