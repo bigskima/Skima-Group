@@ -324,3 +324,19 @@ Deno.test("Refill web boot resolves public Supabase settings from the Expo manif
   assertStringIncludes(refillProviders, "<AppProvidersContent>{children}</AppProvidersContent>");
   assertStringIncludes(refillProviders, "function AppProvidersContent");
 });
+
+
+Deno.test("Refill web exposes a direct QueryClientProvider around the persisted provider and global query listener", () => {
+  assertStringIncludes(refillProviders, "  QueryClientProvider,");
+  const directProvider = refillProviders.indexOf("<QueryClientProvider client={client}>");
+  const persistedProvider = refillProviders.indexOf("<PersistQueryClientProvider", directProvider);
+  const globalListener = refillProviders.indexOf("<GlobalQueryFailure />", persistedProvider);
+  const directProviderClose = refillProviders.indexOf("</QueryClientProvider>", persistedProvider);
+  assert(
+    directProvider >= 0 &&
+      persistedProvider > directProvider &&
+      globalListener > persistedProvider &&
+      directProviderClose > globalListener,
+    "The direct QueryClientProvider must enclose the persisted provider and GlobalQueryFailure",
+  );
+});
