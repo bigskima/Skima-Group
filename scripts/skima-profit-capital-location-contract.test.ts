@@ -298,3 +298,16 @@ Deno.test("Keyless map preview renders OSM tiles in all customer address workflo
   assertStringIncludes(mapsRuntime, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertStringIncludes(mapsRuntime, "function selectKeylessRaster");
 });
+
+Deno.test("Profit allocation percentage edits capture the input value before the React state updater runs", () => {
+  const start = adminWorkspace.indexOf('aria-label={category.label + " percentage"}');
+  assert(start >= 0, "Profit allocation percentage input must exist");
+  const input = adminWorkspace.slice(start, adminWorkspace.indexOf("</label>", start));
+  assertStringIncludes(input, "const nextValue = event.currentTarget.value;");
+  assertStringIncludes(input, "setPercentages((current) => ({ ...current, [category.key]: nextValue }))");
+  assertNotMatch(
+    input,
+    /setPercentages\(\(current\).*event\.currentTarget\.value/s,
+    "The functional state updater must not read the expired event currentTarget",
+  );
+});
