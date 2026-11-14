@@ -555,7 +555,10 @@ export function AdminProfitCapitalWorkspace() {
           {CATEGORIES.map((category) => <div className="skima-pc-category" key={category.key}>
             <div><strong>{category.label}</strong><small>{category.description}</small></div>
             <label><input aria-label={category.label + " percentage"} type="number" min="0" max="100" step="0.01"
-              value={percentages[category.key]} onChange={(event) => setPercentages((current) => ({ ...current, [category.key]: event.currentTarget.value }))} /><span>%</span></label>
+              value={percentages[category.key]} onChange={(event) => {
+                const nextValue = event.currentTarget.value;
+                setPercentages((current) => ({ ...current, [category.key]: nextValue }));
+              }} /><span>%</span></label>
           </div>)}
         </div>
         <div className="skima-pc-total"><span>Allocation total</span><strong className={Math.abs(allocationTotal - 100) < 0.000001 ? "is-valid" : "is-invalid"}>{allocationTotal.toFixed(2)}%</strong><span>{Math.abs(allocationTotal - 100) < 0.000001 ? "Ready to save" : "Must total 100%"}</span></div>

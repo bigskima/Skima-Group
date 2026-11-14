@@ -1,4 +1,5 @@
 import "react-native-url-polyfill/auto";
+import Constants from "expo-constants";
 import {
   createClient,
   type Session,
@@ -397,9 +398,18 @@ export function useSession() {
 }
 
 function readConfig() {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
-  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
-  const configuredGateway = process.env.EXPO_PUBLIC_API_GATEWAY_URL?.trim();
+  // Expo embeds app.config.ts "extra" values in the exported web/native manifest.
+  // Prefer the compile-time public env variables, but fall back to that manifest
+  // so a production web bundle does not fail before the app can render.
+  const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
+  const extraString = (key: string): string =>
+    typeof extra[key] === "string" ? (extra[key] as string).trim() : "";
+  const url =
+    process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || extraString("supabaseUrl");
+  const anonKey =
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || extraString("supabaseAnonKey");
+  const configuredGateway =
+    process.env.EXPO_PUBLIC_API_GATEWAY_URL?.trim() || extraString("apiGatewayUrl");
 
   if (!url || !anonKey)
     throw new Error(

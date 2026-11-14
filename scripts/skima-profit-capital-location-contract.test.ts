@@ -17,6 +17,8 @@ const mapsRuntime = await Deno.readTextFile("apps/lpg-mobile/src/native/domains/
 const stationLocations = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationLocationScreens.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const adminWorkspace = await Deno.readTextFile("apps/admin/src/admin-profit-capital-workspace.tsx");
+const refillSession = await Deno.readTextFile("apps/lpg-mobile/src/native/session/SessionProvider.tsx");
+const refillProviders = await Deno.readTextFile("apps/lpg-mobile/src/native/providers/AppProviders.tsx");
 const moneyRouter = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
 const moneyNavigation = await Deno.readTextFile("apps/admin/src/app/admin-v2-navigation.ts");
 const savedLocations = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/SavedLocationsScreen.tsx");
@@ -297,4 +299,28 @@ Deno.test("Keyless map preview renders OSM tiles in all customer address workflo
   assertStringIncludes(rendererConfiguration, "return query.data ?? fallback");
   assertStringIncludes(mapsRuntime, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertStringIncludes(mapsRuntime, "function selectKeylessRaster");
+});
+
+Deno.test("Profit allocation percentage edits capture the input value before the React state updater runs", () => {
+  const start = adminWorkspace.indexOf('aria-label={category.label + " percentage"}');
+  assert(start >= 0, "Profit allocation percentage input must exist");
+  const input = adminWorkspace.slice(start, adminWorkspace.indexOf("</label>", start));
+  assertStringIncludes(input, "const nextValue = event.currentTarget.value;");
+  assertStringIncludes(input, "setPercentages((current) => ({ ...current, [category.key]: nextValue }))");
+  assertNotMatch(
+    input,
+    /setPercentages\(\(current\).*event\.currentTarget\.value/s,
+    "The functional state updater must not read the expired event currentTarget",
+  );
+});
+
+
+Deno.test("Refill web boot resolves public Supabase settings from the Expo manifest and catches provider startup failures", () => {
+  assertStringIncludes(refillSession, 'import Constants from "expo-constants"');
+  assertStringIncludes(refillSession, 'extraString("supabaseUrl")');
+  assertStringIncludes(refillSession, 'extraString("supabaseAnonKey")');
+  assertStringIncludes(refillSession, 'extraString("apiGatewayUrl")');
+  assertStringIncludes(refillProviders, "<AppErrorBoundary>");
+  assertStringIncludes(refillProviders, "<AppProvidersContent>{children}</AppProvidersContent>");
+  assertStringIncludes(refillProviders, "function AppProvidersContent");
 });
