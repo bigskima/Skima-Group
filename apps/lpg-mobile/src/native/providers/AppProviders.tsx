@@ -23,6 +23,14 @@ import { InAppGuideProvider } from "../onboarding/InAppGuideProvider";
 import { RefillPushRegistration } from "../notifications/PushRegistration";
 
 export function AppProviders({ children }: PropsWithChildren) {
+  return (
+    <AppErrorBoundary>
+      <AppProvidersContent>{children}</AppProvidersContent>
+    </AppErrorBoundary>
+  );
+}
+
+function AppProvidersContent({ children }: PropsWithChildren) {
   useNotificationLifecycle();
   const [client] = useState(
     () =>
@@ -69,7 +77,7 @@ export function AppProviders({ children }: PropsWithChildren) {
               <RefillPushRegistration />
               <InAppGuideProvider>
                 <BackendNotificationBridge />
-                <AppErrorBoundary><StartupBrandingGate>{children}</StartupBrandingGate></AppErrorBoundary>
+                <StartupBrandingGate>{children}</StartupBrandingGate>
               </InAppGuideProvider>
             </SessionProvider>
           </PersistQueryClientProvider>
