@@ -65,24 +65,24 @@ function AppProvidersContent({ children }: PropsWithChildren) {
           {/* Keep app query hooks on the same React Query context as their direct import. */}
           <QueryClientProvider client={client}>
             <PersistQueryClientProvider
-            client={client}
-            persistOptions={{
-              persister,
-              buster: "lpg-expo-v2",
-              dehydrateOptions: {
-                shouldDehydrateQuery: (query) => query.meta?.persist === true,
-              },
-            }}
-          >
-            <GlobalQueryFailure />
-            <ConnectivityNotice />
-            <SessionProvider>
-              <RefillPushRegistration />
-              <InAppGuideProvider>
-                <BackendNotificationBridge />
-                <StartupBrandingGate>{children}</StartupBrandingGate>
-              </InAppGuideProvider>
-            </SessionProvider>
+              client={client}
+              persistOptions={{
+                persister,
+                buster: "lpg-expo-v2",
+                dehydrateOptions: {
+                  shouldDehydrateQuery: (query) => query.meta?.persist === true,
+                },
+              }}
+            >
+              <GlobalQueryFailure />
+              <ConnectivityNotice />
+              <SessionProvider>
+                <RefillPushRegistration />
+                <InAppGuideProvider>
+                  <BackendNotificationBridge />
+                  <StartupBrandingGate>{children}</StartupBrandingGate>
+                </InAppGuideProvider>
+              </SessionProvider>
             </PersistQueryClientProvider>
           </QueryClientProvider>
         </ThemeProvider>
