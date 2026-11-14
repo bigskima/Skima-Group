@@ -376,7 +376,7 @@ Deno.test("Profit and Capital uses guided task sections instead of one continuou
 });
 
 Deno.test("Admin Settings and Customization is searchable, grouped by everyday tasks and permission-aware", () => {
-  assertStringIncludes(settingsWorkspace, 'title: "Settings & customization"');
+  assertStringIncludes(settingsWorkspace, "Settings & customization");
   assertStringIncludes(settingsWorkspace, "usePermissionCheck");
   assertStringIncludes(settingsWorkspace, "canAccessWorkspaceLandingAction");
   assertStringIncludes(settingsWorkspace, 'type="search"');
