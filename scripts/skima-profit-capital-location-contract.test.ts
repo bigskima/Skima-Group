@@ -397,7 +397,7 @@ Deno.test("Admin Settings and Customization is searchable, grouped by everyday t
     "/money/profit-capital",
     "/money/pricing/logistics",
     "/platform/integrations/location",
-    "/platform/configuration/advanced",
+    "CONFIG_BASE}/advanced",
   ]) assertStringIncludes(settingsWorkspace, route);
   assertStringIncludes(platformWorkspaceRouter, 'title: "Settings & customization"');
   assertStringIncludes(moneyNavigation, 'label: "Settings & customization"');
