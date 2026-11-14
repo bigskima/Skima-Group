@@ -17,6 +17,10 @@ const mapsRuntime = await Deno.readTextFile("apps/lpg-mobile/src/native/domains/
 const stationLocations = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationLocationScreens.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const adminWorkspace = await Deno.readTextFile("apps/admin/src/admin-profit-capital-workspace.tsx");
+
+const settingsWorkspace = await Deno.readTextFile("apps/admin/src/features/platform/PlatformConfigurationWorkspaceV2.tsx");
+const platformWorkspaceRouter = await Deno.readTextFile("apps/admin/src/features/platform/PlatformWorkspaceRouter.tsx");
+
 const refillSession = await Deno.readTextFile("apps/lpg-mobile/src/native/session/SessionProvider.tsx");
 const refillProviders = await Deno.readTextFile("apps/lpg-mobile/src/native/providers/AppProviders.tsx");
 const moneyRouter = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
@@ -339,4 +343,62 @@ Deno.test("Refill web exposes a direct QueryClientProvider around the persisted 
       directProviderClose > globalListener,
     "The direct QueryClientProvider must enclose the persisted provider and GlobalQueryFailure",
   );
+});
+
+
+Deno.test("Profit and Capital uses guided task sections instead of one continuous administration form", () => {
+  assertStringIncludes(adminWorkspace, "Guided finance setup");
+  assertStringIncludes(adminWorkspace, "AdminWorkspaceSections");
+  for (const section of [
+    'key: "allocation", label: "1. Profit allocation"',
+    'key: "period", label: "2. Close a period"',
+    'key: "people", label: "3. Beneficiaries & vehicles"',
+    'key: "distribution", label: "4. Distribute & pay"',
+  ]) assertStringIncludes(adminWorkspace, section);
+  for (const panel of [
+    "Profit allocation templates",
+    "Financial period close & reconciliation",
+    "Recurring distribution schedule",
+    "Segregated profit category wallets",
+    "Profit participation register",
+    "Vehicle capital agreements",
+    "Create a distribution from an approved close",
+    "Distribution history and payment records",
+  ]) assertStringIncludes(adminWorkspace, panel);
+  assertStringIncludes(adminWorkspace, "Reporting period");
+  assertStringIncludes(adminWorkspace, "Costs and reserves");
+  assertStringIncludes(adminWorkspace, "Funds excluded from profit");
+  assertStringIncludes(adminWorkspace, "Reconciliation evidence");
+  assertStringIncludes(adminWorkspace, "Beneficiary and entitlement");
+  assertStringIncludes(adminWorkspace, "Contact and payment destination");
+  assertStringIncludes(adminWorkspace, "Provider and vehicle");
+  assertStringIncludes(adminWorkspace, "Principal and supporting notes");
+});
+
+Deno.test("Admin Settings and Customization is searchable, grouped by everyday tasks and permission-aware", () => {
+  assertStringIncludes(settingsWorkspace, 'title: "Settings & customization"');
+  assertStringIncludes(settingsWorkspace, "usePermissionCheck");
+  assertStringIncludes(settingsWorkspace, "canAccessWorkspaceLandingAction");
+  assertStringIncludes(settingsWorkspace, 'type="search"');
+  for (const group of [
+    "What customers see",
+    "Services & ordering",
+    "Money, profit & pricing",
+    "Connected services",
+    "Platform setup & specialist tools",
+  ]) assertStringIncludes(settingsWorkspace, group);
+  for (const route of [
+    "/experience/content",
+    "/experience/branding",
+    "/experience/policies",
+    "/services/catalog",
+    "/services/availability",
+    "/services/fuel",
+    "/money/profit-capital",
+    "/money/pricing/logistics",
+    "/platform/integrations/location",
+    "/platform/configuration/advanced",
+  ]) assertStringIncludes(settingsWorkspace, route);
+  assertStringIncludes(platformWorkspaceRouter, 'title: "Settings & customization"');
+  assertStringIncludes(moneyNavigation, 'label: "Settings & customization"');
 });
