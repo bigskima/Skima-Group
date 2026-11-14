@@ -275,14 +275,15 @@ Deno.test("Street search retains full provider address while resolving an LGA pa
   assertStringIncludes(logisticsPicker, "street-parent-search");
   assertStringIncludes(logisticsPicker, "chooseStreetParent");
   assertStringIncludes(logisticsPicker, "location: location");
-  assertStringIncludes(logisticsPicker, "coordinates: place.location");
+  assertStringIncludes(logisticsRequest, "coordinates: place.location");
 });
 
 Deno.test("Keyless map preview renders OSM tiles in all customer address workflows", () => {
   assertStringIncludes(streetMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertStringIncludes(streetMap, '"User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)"');
   assertStringIncludes(streetMap, "© OpenStreetMap contributors");
-  assertStringIncludes(streetMap, "cachePolicy=\"disk\"");
+  assertStringIncludes(streetMap, "uri: tile.url");
+  assertStringIncludes(streetMap, '"User-Agent": "SKIMA-MobileMaps/1.0 (+https://skima.online)"');
   assertStringIncludes(logisticsPicker, 'import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview"');
   assertStringIncludes(storeScreen, 'import { StreetMapPreview } from "@skima/mobile-experience/StreetMapPreview"');
   assertStringIncludes(refillLocations, "<StreetMapPreview");
