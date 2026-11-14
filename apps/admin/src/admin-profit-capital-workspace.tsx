@@ -727,7 +727,7 @@ export function AdminProfitCapitalWorkspace() {
             <h3>Contact and payment destination</h3>
             <p>Link a SKIMA profile to enable internal wallet payouts. Contact details and agreement notes are optional.</p>
             <div className="skima-pc-form-grid">
-              <Field label="SKIMA profile UUID (optional)" value={participantProfileId} onChange={setParticipantProfileId} placeholder="Paste the beneficiary's SKIMA profile UUID" />
+              <Field label="Linked SKIMA profile UUID (optional)" value={participantProfileId} onChange={setParticipantProfileId} placeholder="Paste the beneficiary's SKIMA profile UUID" />
               <Field label="Email (optional)" value={participantEmail} onChange={setParticipantEmail} type="email" placeholder="beneficiary@example.com" />
               <Field label="Phone (optional)" value={participantPhone} onChange={setParticipantPhone} placeholder="Phone number" />
               <Field label="Agreement note (optional)" value={participantNotes} onChange={setParticipantNotes} placeholder="Signed agreement reference" />
