@@ -302,7 +302,7 @@ const experienceScreenLabels: Readonly<Record<string, string>> = {
 const platformScreenLabels: Readonly<Record<string, string>> = {
   "/platform": "Platform overview",
   "/platform/people-access": "People & access",
-  "/platform/configuration": "Configuration",
+  "/platform/configuration": "Settings & customization",
   "/platform/integrations": "Integrations",
   "/platform/system": "System health",
   "/platform/guide": "Admin guide",
@@ -699,7 +699,7 @@ function buildPlatformWorkspaceNavigation(items: readonly NavigationItem[]): rea
     },
     ...visibleItems.map((item) => {
       if (item.key === "access") return { ...item, label: "People & access" };
-      if (item.key === "governance") return { ...item, label: "Configuration" };
+      if (item.key === "governance") return { ...item, label: "Settings & customization" };
       if (item.key === "providers") return { ...item, label: "Integrations" };
       if (item.key === "system") return { ...item, label: "System health" };
       if (item.key === "guide") return { ...item, label: "Admin guide" };
