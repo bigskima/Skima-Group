@@ -77,7 +77,7 @@ Deno.test("LocationIQ reverse geocoding preserves structured Nigerian geography"
 
 Deno.test("LocationIQ recognizes a street returned in the address name field", async () => {
   const adapter = testAdapter(() =>
-    Promise.resolve(jsonResponse({
+    Promise.resolve(jsonResponse([{
       address: {
         city: "Onitsha",
         country: "Nigeria",
@@ -92,7 +92,7 @@ Deno.test("LocationIQ recognizes a street returned in the address name field", a
       lon: "6.7900",
       place_id: "road-name-fallback",
       type: "road",
-    }))
+    }]))
   );
 
   const result = await adapter.geocode("Awka Road, Fegge, Onitsha");
@@ -104,7 +104,7 @@ Deno.test("LocationIQ recognizes a street returned in the address name field", a
 
 Deno.test("LocationIQ keeps named buildings as landmarks instead of misclassifying them as streets", async () => {
   const adapter = testAdapter(() =>
-    Promise.resolve(jsonResponse({
+    Promise.resolve(jsonResponse([{
       address: {
         city: "Awka",
         country: "Nigeria",
@@ -119,7 +119,7 @@ Deno.test("LocationIQ keeps named buildings as landmarks instead of misclassifyi
       lon: "7.0700",
       place_id: "named-building",
       type: "commercial",
-    }))
+    }]))
   );
 
   const result = await adapter.geocode("St Mark Centre, Ifite, Awka");
@@ -362,7 +362,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
 
   // Admin rendering must not require an env-only basemap to be usable.
   assertIncludes(adminGeometry, 'supabase.rpc("read_maps_renderer_configuration")');
-  assertIncludes(adminGeometry, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
+  assertIncludes(adminGeometry, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertNotIncludes(
     adminGeometry,
     "Configure VITE_MAP_TILE_URL_TEMPLATE for the provider basemap",
@@ -490,6 +490,7 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   const webMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
   const nativeMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
   const environment = await readRepositoryFile(".env.example");
+  const streetMapPreview = await readRepositoryFile("packages/mobile-experience/src/StreetMapPreview.tsx");
 
   assertIncludes(runtime, "KEYLESS_OSM_TILE_TEMPLATE");
   assertIncludes(runtime, 'readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "openstreetmap")');
@@ -513,7 +514,8 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   assertIncludes(webMap, "mapRenderer.tileTemplate");
   assertIncludes(webMap, "mapRenderer.defaultCenter");
   assertIncludes(webMap, "mapRenderer.defaultZoom");
-  assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertIncludes(streetMapPreview, 'const TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";');
+  assertIncludes(streetMapPreview, "© OpenStreetMap contributors");
   assertNotIncludes(webMap, "basemaps.cartocdn.com");
   assertIncludes(webMap, "PanResponder.create");
   assertIncludes(webMap, "Drag to pan");
